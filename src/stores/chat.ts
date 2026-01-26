@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 // type 关键字 ：明确告诉编译器， ChatMessage 只是一个 类型定义 （比如接口 Interface），
 // 而不是一个具体的实现类或实例。
 import { type ChatMessage, sendChatRequest } from '../api/ai'
@@ -12,9 +12,24 @@ import { type ChatMessage, sendChatRequest } from '../api/ai'
 // 第二个参数：一个函数，返回一个对象，包含该模块的状态、操作（actions）和获取器（getters）
 export const useChatStore = defineStore('chat', () => {
   // 定义响应式状态 messages，用于存储对话历史
-  const messages = ref<ChatMessage[]>([
+  // 1. 优先从 localStorage 读取历史记录
+  const savedMessages = localStorage.getItem('chat_history')
+  const defaultMessages: ChatMessage[] = [
     { role: 'assistant', content: '你好！我是你的 AI 助手，有什么可以帮你的吗？' }
-  ])    
+  ]
+
+  const messages = ref<ChatMessage[]>(
+    savedMessages ? JSON.parse(savedMessages) : defaultMessages
+  )
+
+  // 2. 监听消息变化，实时保存到 localStorage
+  watch(
+    messages,
+    (newVal) => {
+      localStorage.setItem('chat_history', JSON.stringify(newVal))
+    },
+    { deep: true }
+  )    
   // isLoading 状态用于控制加载动画和防止重复提交
   const isLoading = ref(false)
   // abortController 用于中止正在进行的请求
