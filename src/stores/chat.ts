@@ -84,7 +84,10 @@ export const useChatStore = defineStore('chat', () => {
   // 负责清空聊天历史记录、重置加载状态、取消任何正在进行的请求
   function clearChat() {
     stopGeneration() // 清空前先停止正在进行的生成
-    messages.value = []
+    // 重置为默认欢迎语，而不是完全清空
+    messages.value = [
+      { role: 'assistant', content: '你好！我是你的 AI 助手，有什么可以帮你的吗？' }
+    ]
   }
 
   return {
