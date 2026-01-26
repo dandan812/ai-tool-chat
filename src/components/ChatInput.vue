@@ -1,27 +1,38 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
+// 定义 Props：接收父组件传来的数据
 const props = defineProps<{
-  loading?: boolean
+  loading?: boolean // 是否正在生成中（用于控制按钮状态和禁用输入框）
 }>()
 
+// 定义 Emits：向父组件发送的事件
 const emit = defineEmits<{
-  (e: 'send', content: string): void
-  (e: 'stop'): void
+  (e: 'send', content: string): void // 发送消息事件，携带消息内容
+  (e: 'stop'): void                  // 停止生成事件
 }>()
 
+// 响应式变量：绑定输入框的内容
 const input = ref('')
 
+// 处理发送逻辑
 function handleSend() {
+  // 如果内容为空（去除首尾空格后）或正在加载中，则不发送
   if (!input.value.trim() || props.loading) return
+  
+  // 触发 'send' 事件，把内容传给父组件
   emit('send', input.value)
+  
+  // 发送后清空输入框
   input.value = ''
 }
 
+// 处理键盘按键事件
 function handleKeydown(e: KeyboardEvent) {
+  // 如果按下了 Enter 键，且没有按 Shift 键（Shift+Enter 用于换行）
   if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    handleSend()
+    e.preventDefault() // 阻止默认的回车换行行为
+    handleSend()       // 执行发送
   }
 }
 </script>
@@ -29,6 +40,7 @@ function handleKeydown(e: KeyboardEvent) {
 <template>
   <div class="input-container">
     <div class="input-wrapper">
+      <!-- 文本输入区域 -->
       <textarea
         v-model="input"
         @keydown="handleKeydown"
@@ -37,6 +49,8 @@ function handleKeydown(e: KeyboardEvent) {
         :disabled="loading"
         class="chat-textarea"
       ></textarea>
+
+      <!-- 发送按钮：非加载状态显示 -->
       <button 
         v-if="!loading"
         @click="handleSend" 
@@ -45,6 +59,8 @@ function handleKeydown(e: KeyboardEvent) {
       >
         发送
       </button>
+
+      <!-- 停止按钮：加载状态显示 -->
       <button 
         v-else 
         @click="$emit('stop')"

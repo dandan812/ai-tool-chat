@@ -1,32 +1,46 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+// 引入 markdown-it 库，用于将 Markdown 文本转换为 HTML
 import MarkdownIt from 'markdown-it'
 
+// 定义组件接收的 Props
+// role: 消息发送者角色 (用户/AI/系统)
+// content: 消息文本内容
 const props = defineProps<{
   role: 'user' | 'assistant' | 'system'
   content: string
 }>()
 
+// 初始化 Markdown 解析器配置
 const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  breaks: true,
+  html: false,    // 禁用 HTML 标签，防止 XSS 攻击
+  linkify: true,  // 自动识别并转换 URL 为链接
+  breaks: true,   // 将换行符转换为 <br>
 })
 
+// 计算属性：将 Markdown 文本转换为 HTML
+// 仅当 content 变化时重新计算，提高性能
 const htmlContent = computed(() => {
   return md.render(props.content)
 })
 
+// 计算属性：判断当前是否为用户消息
+// 用于动态控制样式和头像显示
 const isUser = computed(() => props.role === 'user')
 </script>
 
 <template>
+  <!-- 消息容器：根据 isUser 动态添加 message-user 或 message-ai 类名 -->
   <div class="message-container" :class="{ 'message-user': isUser, 'message-ai': !isUser }">
+    <!-- 头像区域 -->
     <div class="avatar">
       {{ isUser ? '👤' : '🤖' }}
     </div>
+    <!-- 消息内容区域 -->
     <div class="message-content">
+      <!-- AI 消息：使用 v-html 渲染 Markdown 转换后的 HTML -->
       <div v-if="!isUser" class="markdown-body" v-html="htmlContent"></div>
+      <!-- 用户消息：直接显示纯文本 -->
       <div v-else>{{ content }}</div>
     </div>
   </div>
