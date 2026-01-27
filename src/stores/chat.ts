@@ -1,84 +1,238 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
-// type 关键字 ：明确告诉编译器， ChatMessage 只是一个 类型定义 （比如接口 Interface），
-// 而不是一个具体的实现类或实例。
+import { ref, watch, computed } from 'vue'
 import { type ChatMessage, sendChatRequest } from '../api/ai'
 
-// 定义聊天存储模块
-// 用于管理聊天对话历史、加载状态、取消请求等
-// 命名规范（ use + Store名称 + Store ）
-// defineStore 函数：用于创建一个 Pinia 存储模块
-// 第一个参数：存储模块的唯一标识符（ID），用于在应用中引用该模块
-// 第二个参数：一个函数，返回一个对象，包含该模块的状态、操作（actions）和获取器（getters）
+// 定义会话接口结构
+export interface ChatSession {
+  id: string          // 会话唯一标识
+  title: string       // 会话标题（自动生成或默认）
+  messages: ChatMessage[] // 会话包含的消息列表
+  createdAt: number   // 创建时间戳
+}
+
+// 定义 Chat Store，使用 Setup Store 风格 (类似 Vue Composition API)
 export const useChatStore = defineStore('chat', () => {
-  // 定义响应式状态 messages，用于存储对话历史
-  // 1. 优先从 localStorage 读取历史记录
-  const savedMessages = localStorage.getItem('chat_history')
-  const defaultMessages: ChatMessage[] = [
-    { role: 'assistant', content: '你好！我是你的 AI 助手，有什么可以帮你的吗？' }
-  ]
+  
+  // ==========================================
+  // 1. 状态定义 (State)
+  // ==========================================
+  
+  // 存储所有会话的列表
+  const sessions = ref<ChatSession[]>([])
+  
+  // 当前激活的会话 ID
+  const currentSessionId = ref<string>('')
 
-  const messages = ref<ChatMessage[]>(
-    savedMessages ? JSON.parse(savedMessages) : defaultMessages
-  )
-
-  // 2. 监听消息变化，实时保存到 localStorage
-  watch(
-    messages,
-    (newVal) => {
-      localStorage.setItem('chat_history', JSON.stringify(newVal))
-    },
-    { deep: true }
-  )    
-  // isLoading 状态用于控制加载动画和防止重复提交
+  // UI 状态：是否正在等待 AI 响应
   const isLoading = ref(false)
-  // abortController 用于中止正在进行的请求
+  
+  // 用于中断请求的控制器 (AbortController)
   const abortController = ref<AbortController | null>(null)
 
-  // 发送消息的核心方法
-  // 负责处理用户输入、更新状态、调用 API 层发送请求、处理流式响应等逻辑
-  async function sendMessage(content: string) {
-    // 1. 检查是否正在加载，防止重复点击
-    if (isLoading.value) return
-    // 2. 检查内容是否为空或仅包含空格
-    if (!content.trim()) return
+  // ==========================================
+  // 2. 初始化逻辑 (Init & Migration)
+  // ==========================================
+  function init() {
+    // 尝试从 localStorage 读取多会话数据
+    const savedSessions = localStorage.getItem('chat_sessions')
+    const savedCurrentId = localStorage.getItem('chat_current_session_id')
 
-    // 1. 添加用户发送的消息到列表中
-    messages.value.push({ role: 'user', content })
+    if (savedSessions) {
+      // 如果有新版数据，直接加载
+      sessions.value = JSON.parse(savedSessions)
+      // 恢复上次选中的会话，如果不存在则默认选第一个
+      currentSessionId.value = savedCurrentId || sessions.value[0]?.id || ''
+    } else {
+      // 如果没有多会话数据，检查是否有旧版本的单会话数据 (兼容性处理)
+      const oldHistory = localStorage.getItem('chat_history')
+      if (oldHistory) {
+        // 迁移旧数据：将旧的单会话历史转换为一个新的会话
+        const oldMessages = JSON.parse(oldHistory)
+        createSession('历史对话', oldMessages)
+        // 注意：这里保留旧数据不删除，防止意外丢失
+      } else {
+        // 全新用户，创建一个默认的新会话
+        createSession()
+      }
+    }
+  }
+
+  // ==========================================
+  // 3. 计算属性 (Getters)
+  // ==========================================
+
+  // 获取当前选中的会话对象
+  const currentSession = computed(() => 
+    sessions.value.find(s => s.id === currentSessionId.value)
+  )
+
+  // 获取当前会话的消息列表
+  // (主要为了兼容原有 Chat.vue 代码，使其不需要大幅修改即可直接使用 messages)
+  const messages = computed(() => currentSession.value?.messages || [])
+
+  // ==========================================
+  // 4. 核心动作 (Actions)
+  // ==========================================
+
+  /**
+   * 创建新会话
+   * @param title 可选标题
+   * @param initialMessages 可选初始消息
+   */
+  function createSession(title?: string, initialMessages?: ChatMessage[]) {
+    // 生成唯一 ID (简单实现：时间戳 + 随机数)
+    const id = Date.now().toString() + Math.random().toString(36).slice(2)
     
-    // 2. 预先添加一条空的助手消息占位，后续流式更新其内容
-    // push(...) ：把空消息塞进去，并告诉我“现在一共有多少条消息了”
-    const assistantMessageIndex = messages.value.push({ role: 'assistant', content: '' }) - 1
+    const newSession: ChatSession = {
+      id,
+      title: title || '新对话', // 默认标题
+      messages: initialMessages || [
+        // 默认的第一条系统/欢迎消息
+        { role: 'assistant', content: '你好！我是你的 AI 助手，有什么可以帮你的吗？' }
+      ],
+      createdAt: Date.now()
+    }
     
-    // 3. 设置加载状态并创建 AbortController 实例
+    // 将新会话添加到列表开头
+    sessions.value.unshift(newSession)
+    // 自动切换到新创建的会话
+    currentSessionId.value = id
+  }
+
+  // 切换当前会话
+  function switchSession(id: string) {
+    // 确保 ID 存在于列表中才切换
+    if (sessions.value.find(s => s.id === id)) {
+      currentSessionId.value = id
+    }
+  }
+
+  // 删除会话
+  function deleteSession(id: string) {
+    const index = sessions.value.findIndex(s => s.id === id)
+    if (index === -1) return
+
+    // 从列表中移除
+    sessions.value.splice(index, 1)
+
+    // 如果删除的是当前正在查看的会话，需要处理选中状态的迁移
+    if (id === currentSessionId.value) {
+      if (sessions.value.length > 0) {
+        // 尝试切换到原来位置的会话（即删除项的后一项），如果是最后一项则切换到前一项
+        const newIndex = Math.min(index, sessions.value.length - 1)
+        const target = sessions.value[newIndex]
+        if (target) {
+          currentSessionId.value = target.id
+        }
+      } else {
+        // 如果删光了所有会话，自动创建一个新的，保证 UI 不会空白
+        createSession() 
+      }
+    }
+  }
+
+  // 更新特定会话的标题
+  function updateSessionTitle(id: string, title: string) {
+    const session = sessions.value.find(s => s.id === id)
+    if (session) {
+      session.title = title
+    }
+  }
+
+  /**
+   * 智能生成标题
+   * 在后台调用 AI 根据对话内容生成简短标题
+   */
+  async function generateSmartTitle(sessionId: string, userMsg: string, aiMsg: string) {
+    if (!userMsg.trim() || !aiMsg.trim()) return
+
+    // 构造 Prompt：截取前 300 字符以节省 Token，要求生成 10 字以内的标题
+    const prompt = `请根据以下对话生成一个简短的标题（10字以内），直接返回标题内容，不要包含标点符号和引号：\n\n用户：${userMsg.slice(0, 300)}\nAI：${aiMsg.slice(0, 300)}`
+    
+    let titleBuffer = ''
+    try {
+      // 发送独立的请求生成标题
+      // 注意：这里不需要 abortSignal，因为这是后台任务，不应被用户停止生成的动作中断
+      await sendChatRequest(
+        [{ role: 'user', content: prompt }],
+        (chunk) => {
+          titleBuffer += chunk
+        },
+        (error) => {
+          console.warn('Auto title generation failed:', error)
+        },
+        () => {
+          // 处理生成的标题：去除首尾空格、引号和句号
+          const finalTitle = titleBuffer.trim().replace(/^["']|["']$/g, '').replace(/[。，.]$/, '')
+          if (finalTitle) {
+            updateSessionTitle(sessionId, finalTitle)
+          }
+        }
+      )
+    } catch (e) {
+      // 标题生成失败不影响主流程，仅打印警告
+      console.warn('Auto title generation exception:', e)
+    }
+  }
+
+  /**
+   * 发送消息的核心逻辑
+   */
+  async function sendMessage(content: string) {
+    // 校验：如果正在加载或内容为空，则忽略
+    if (isLoading.value || !content.trim()) return
+    // 校验：如果没有选中会话，则忽略
+    if (!currentSession.value) return
+
+    const session = currentSession.value
+
+    // 1. 将用户消息添加到 UI
+    session.messages.push({ role: 'user', content })
+    
+    // 2. 预先添加一条空的 AI 消息占位，用于流式显示
+    // push 返回新数组长度，减 1 得到索引
+    const assistantMessageIndex = session.messages.push({ role: 'assistant', content: '' }) - 1
+    
+    // 设置加载状态和中断控制器
     isLoading.value = true
-    // 3. 创建 AbortController 实例，用于取消请求
     abortController.value = new AbortController()
 
     try {
-      // 4. 调用 API 层发送请求
+      // 发送请求
       await sendChatRequest(
-        // slice(0, -1) 的意思就是“从头取到倒数第二个”。
-        messages.value.slice(0, -1), // 发送除了刚才添加的空消息之外的所有消息作为上下文
+        // 发送给 AI 的上下文不包含最后那条空的占位消息
+        session.messages.slice(0, -1),
+        // onChunk: 收到流式数据片段
         (chunk) => {
-          // 收到数据块时的回调：追加到最后一条助手消息中
-          if (messages.value[assistantMessageIndex]) {
-            messages.value[assistantMessageIndex].content += chunk
+          if (session.messages[assistantMessageIndex]) {
+            session.messages[assistantMessageIndex].content += chunk
           }
         },
+        // onError: 发生错误
         (error) => {
-          // 错误处理回调
           console.error('Chat error:', error)
-          if (messages.value[assistantMessageIndex]) {
-            messages.value[assistantMessageIndex].content += '\n\n[出错了，请重试]'
+          if (session.messages[assistantMessageIndex]) {
+            session.messages[assistantMessageIndex].content += '\n\n[出错了，请重试]'
           }
         },
+        // onFinish: 完成
         () => {
-          // 完成时的回调：重置状态
           isLoading.value = false
           abortController.value = null
+
+          // 3. 触发智能标题生成逻辑
+          // 仅当这是会话的第 3 条消息时触发 (System? + AI初始 + User + AI回复)
+          // 这里的逻辑是：初始是1条AI消息，用户发1条变成2条，AI回1条变成3条
+          // 等等，初始消息是1条。用户发完是2条。AI占位是3条。
+          // 所以当 AI 完成回复时，session.messages.length 确实是 3。
+          if (session.messages.length === 3) { 
+            const userMsg = content
+            const aiMsg = session.messages[assistantMessageIndex]?.content || ''
+            // 异步执行，不阻塞 UI
+            generateSmartTitle(session.id, userMsg, aiMsg)
+          }
         },
-        abortController.value.signal // 传入 signal 以支持取消
+        abortController.value.signal
       )
     } catch (err) {
       console.error(err)
@@ -86,28 +240,60 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // 停止生成的方法
+  // 停止生成
   function stopGeneration() {
     if (abortController.value) {
-      abortController.value.abort() // 中止 fetch 请求
+      abortController.value.abort() // 发送中断信号
       abortController.value = null
       isLoading.value = false
     }
   }
 
-  // 清空对话历史
-  // 负责清空聊天历史记录、重置加载状态、取消任何正在进行的请求
+  // 清空当前会话的消息（保留会话本身）
   function clearChat() {
-    stopGeneration() // 清空前先停止正在进行的生成
-    // 重置为默认欢迎语，而不是完全清空
-    messages.value = [
-      { role: 'assistant', content: '你好！我是你的 AI 助手，有什么可以帮你的吗？' }
-    ]
+    stopGeneration()
+    if (currentSession.value) {
+        // 重置为仅剩初始欢迎语
+        currentSession.value.messages = [
+            { role: 'assistant', content: '你好！我是你的 AI 助手，有什么可以帮你的吗？' }
+        ]
+    }
   }
 
+  // ==========================================
+  // 5. 持久化监听 (Persistence)
+  // ==========================================
+  
+  // 监听 sessions 变化，自动保存到 localStorage
+  watch(
+    sessions,
+    (newVal) => {
+      localStorage.setItem('chat_sessions', JSON.stringify(newVal))
+    },
+    { deep: true } // 深度监听，因为是数组且内部对象会变
+  )
+
+  // 监听 currentSessionId 变化，记住用户上次选中的会话
+  watch(
+    currentSessionId,
+    (newVal) => {
+      localStorage.setItem('chat_current_session_id', newVal)
+    }
+  )
+
+  // 执行初始化
+  init()
+
+  // 导出 Store API
   return {
-    messages,
+    sessions,
+    currentSessionId,
+    currentSession, // 供组件获取当前会话详情
+    messages,       // 供组件获取当前消息列表
     isLoading,
+    createSession,
+    switchSession,
+    deleteSession,
     sendMessage,
     stopGeneration,
     clearChat
