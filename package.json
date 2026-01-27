@@ -4,7 +4,9 @@
   "scripts": {
     "lint": "pnpm -r run lint",
     "format": "pnpm -r run format",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build:frontend": "pnpm --filter @ai-tool-chat/frontend build",
+    "deploy:worker": "pnpm --filter @ai-tool-chat/worker deploy"
   },
   "devDependencies": {
     "husky": "^9.0.11",
