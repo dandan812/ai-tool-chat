@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 // 引入 markdown-it 库，用于将 Markdown 文本转换为 HTML
 import MarkdownIt from 'markdown-it'
 
