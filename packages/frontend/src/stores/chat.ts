@@ -219,7 +219,7 @@ export const useChatStore = defineStore('chat', () => {
       // 如果是重新生成，需要排除掉最后一条（即正在被重新生成的）AI 消息
       // 注意：此时最后一条是占位符，倒数第二条是旧的 AI 消息
       const sliceEnd = isReGenerate ? -2 : -1
-      let apiMessages = session.messages
+      const apiMessages = session.messages
         .slice(0, sliceEnd)
         .filter(m => m.role !== 'system')
         .map(m => ({ ...m })) // 简单的深度克隆

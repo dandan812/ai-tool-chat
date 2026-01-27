@@ -1,6 +1,0 @@
-name = "ai-tool-chat-worker"
-main = "src/index.ts"
-compatibility_date = "2023-10-25"
-
-[vars]
-# OPENAI_API_KEY = "your-api-key-here" # 建议使用 wrangler secret put 设置
