@@ -2,6 +2,7 @@ export interface Env {
   DEEPSEEK_API_KEY: string;
 }
 
+// Worker Entry Point
 export default {
   async fetch(request: Request, env: Env, ctx?: any): Promise<Response> {
     // 处理 CORS
