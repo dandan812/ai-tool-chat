@@ -6,7 +6,7 @@
     "format": "pnpm -r run format",
     "prepare": "husky",
     "build:frontend": "pnpm --filter @ai-tool-chat/frontend build",
-    "deploy:worker": "pnpm --filter @ai-tool-chat/worker deploy"
+    "deploy:worker": "pnpm --filter @ai-tool-chat/worker run deploy"
   },
   "devDependencies": {
     "husky": "^9.0.11",
