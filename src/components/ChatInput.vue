@@ -75,8 +75,8 @@ function handleKeydown(e: KeyboardEvent) {
 <style scoped>
 .input-container {
   padding: 20px;
-  background: white;
-  border-top: 1px solid #eaeaea;
+  background: var(--bg-color);
+  border-top: 1px solid var(--border-color);
 }
 
 .input-wrapper {
@@ -86,17 +86,17 @@ function handleKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  background: #f4f4f4;
+  background: var(--input-wrapper-bg);
   padding: 10px;
   border-radius: 12px;
   border: 1px solid transparent;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
 }
 
 .input-wrapper:focus-within {
   border-color: #007bff;
-  background: white;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  background: var(--input-bg);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
 .chat-textarea {
@@ -111,6 +111,7 @@ function handleKeydown(e: KeyboardEvent) {
   outline: none;
   max-height: 200px;
   min-height: 24px;
+  color: var(--text-color);
 }
 
 .send-btn, .stop-btn {

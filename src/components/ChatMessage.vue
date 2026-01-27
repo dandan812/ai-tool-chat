@@ -23,11 +23,55 @@ const md = new MarkdownIt({
   breaks: true,   // 将换行符转换为 <br>
 })
 
+// 自定义代码块渲染逻辑，添加复制按钮
+const defaultRender = md.renderer.rules.fence || function (tokens, idx, options, _env, self) {
+  return self.renderToken(tokens, idx, options)
+}
+
+md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  const token = tokens[idx]
+  if (!token) return ''
+  
+  const code = token.content.replace(/"/g, '&quot;')
+  const info = token.info ? token.info.trim() : ''
+  const lang = info.split(/\s+/g)[0]
+  
+  const rawCode = defaultRender(tokens, idx, options, env, self)
+  return `
+    <div class="code-block-wrapper">
+      <div class="code-block-header">
+        <span class="code-lang">${lang || 'code'}</span>
+        <button class="copy-code-btn" data-code="${code}">Copy</button>
+      </div>
+      ${rawCode}
+    </div>
+  `
+}
+
 // 计算属性：将 Markdown 文本转换为 HTML
 // 仅当 content 变化时重新计算，提高性能
 const htmlContent = computed(() => {
   return md.render(props.content)
 })
+
+// 处理点击事件，委托处理复制按钮
+function handleContentClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  if (target.classList.contains('copy-code-btn')) {
+    const code = target.getAttribute('data-code')
+    if (code) {
+      navigator.clipboard.writeText(code).then(() => {
+        const originalText = target.innerText
+        target.innerText = 'Copied!'
+        target.classList.add('copied')
+        setTimeout(() => {
+          target.innerText = originalText
+          target.classList.remove('copied')
+        }, 2000)
+      })
+    }
+  }
+}
 
 // 计算属性：判断当前是否为用户消息
 // 用于动态控制样式和头像显示
@@ -44,7 +88,12 @@ const isUser = computed(() => props.role === 'user')
     <!-- 消息内容区域 -->
     <div class="message-content">
       <!-- AI 消息：使用 v-html 渲染 Markdown 转换后的 HTML -->
-      <div v-if="!isUser" class="markdown-body" v-html="htmlContent"></div>
+      <div 
+        v-if="!isUser" 
+        class="markdown-body" 
+        v-html="htmlContent"
+        @click="handleContentClick"
+      ></div>
       <!-- 用户消息：直接显示纯文本 -->
       <div v-else>{{ content }}</div>
 
@@ -74,7 +123,7 @@ const isUser = computed(() => props.role === 'user')
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #eee;
+  background: var(--btn-secondary-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -83,7 +132,8 @@ const isUser = computed(() => props.role === 'user')
 }
 
 .message-content {
-  background: #f4f4f4;
+  background: var(--message-ai-bg);
+  color: var(--text-color);
   padding: 12px 16px;
   border-radius: 12px;
   max-width: 80%;
@@ -113,8 +163,9 @@ const isUser = computed(() => props.role === 'user')
 }
 
 .action-btn {
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 14px;
@@ -123,31 +174,73 @@ const isUser = computed(() => props.role === 'user')
 }
 
 .action-btn:hover {
-  background: #f0f0f0;
+  background: var(--btn-secondary-hover);
 }
 
 .message-user .message-content {
-  background: #007bff;
-  color: white;
+  background: var(--message-user-bg);
+  color: var(--message-user-text);
   border-radius: 12px 0 12px 12px;
 }
 
 .message-ai .message-content {
-  background: #f0f0f0;
+  background: var(--message-ai-bg);
+  color: var(--text-color);
   border-radius: 0 12px 12px 12px;
 }
 
 /* 简单的 markdown 样式补充 */
 :deep(.markdown-body pre) {
-  background: #2d2d2d;
-  color: #ccc;
+  background: #1e1e1e; /* 代码块背景保持深色 */
+  color: #d4d4d4;
   padding: 12px;
-  border-radius: 6px;
+  border-radius: 0 0 6px 6px; /* 顶部圆角留给 header */
   overflow-x: auto;
+  margin: 0;
+}
+
+:deep(.code-block-wrapper) {
+  margin: 12px 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+:deep(.code-block-header) {
+  background: #2d2d2d;
+  color: #aaa;
+  padding: 4px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-family: sans-serif;
+}
+
+:deep(.copy-code-btn) {
+  background: transparent;
+  border: 1px solid #555;
+  color: #aaa;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+:deep(.copy-code-btn:hover) {
+  background: #444;
+  color: #fff;
+  border-color: #777;
+}
+
+:deep(.copy-code-btn.copied) {
+  color: #4cd964;
+  border-color: #4cd964;
 }
 
 :deep(.markdown-body code) {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--btn-secondary-bg);
+  color: var(--text-color);
   padding: 2px 4px;
   border-radius: 4px;
 }

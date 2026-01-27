@@ -2,7 +2,7 @@
 import { useChatStore } from '../stores/chat'
 import ChatMessage from '../components/ChatMessage.vue'
 import ChatInput from '../components/ChatInput.vue'
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, ref, watch, onMounted } from 'vue'
 
 // 初始化 Pinia Store
 const store = useChatStore()
@@ -11,9 +11,38 @@ const store = useChatStore()
 const showSystemPrompt = ref(false)
 const systemPromptInput = ref('')
 
-// 当切换会话时，同步系统提示词到输入框
+// --- 主题管理 (Dark Mode) ---
+const theme = ref<'light' | 'dark'>('light')
+
+const toggleTheme = () => {
+  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  document.documentElement.setAttribute('data-theme', theme.value)
+  localStorage.setItem('chat_theme', theme.value)
+}
+
+// 初始化主题
+onMounted(() => {
+  const savedTheme = localStorage.getItem('chat_theme') as 'light' | 'dark' | null
+  if (savedTheme) {
+    theme.value = savedTheme
+  } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    theme.value = 'dark'
+  }
+  document.documentElement.setAttribute('data-theme', theme.value)
+})
+
+// --- 移动端适配 (Sidebar Drawer) ---
+const isSidebarOpen = ref(false)
+const toggleSidebar = () => {
+  isSidebarOpen.value = !isSidebarOpen.value
+}
+
+// 当切换会话时，如果是移动端，自动关闭侧边栏
 watch(() => store.currentSessionId, () => {
   systemPromptInput.value = store.currentSession?.systemPrompt || ''
+  if (window.innerWidth <= 768) {
+    isSidebarOpen.value = false
+  }
 }, { immediate: true })
 
 const saveSystemPrompt = () => {
@@ -57,8 +86,15 @@ watch(
 
 <template>
   <div class="app-layout">
+    <!-- 移动端遮罩层 -->
+    <div 
+      v-if="isSidebarOpen" 
+      class="sidebar-overlay" 
+      @click="isSidebarOpen = false"
+    ></div>
+
     <!-- 侧边栏：会话列表 -->
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ 'sidebar-open': isSidebarOpen }">
       <div class="sidebar-header">
         <button class="new-chat-btn" @click="store.createSession()">
           + 新建对话
@@ -97,13 +133,23 @@ watch(
           </button>
         </div>
       </div>
+
+      <!-- 侧边栏底部：主题切换 -->
+      <div class="sidebar-footer">
+        <button class="theme-toggle-btn" @click="toggleTheme">
+          {{ theme === 'light' ? '🌙 深色模式' : '☀️ 浅色模式' }}
+        </button>
+      </div>
     </aside>
 
     <!-- 主聊天区域 -->
     <div class="chat-layout">
       <!-- 顶部标题栏 -->
       <header class="chat-header">
-        <h1>{{ store.currentSession?.title || 'AI 助手' }}</h1>
+        <div class="header-left">
+          <button class="menu-btn" @click="toggleSidebar">☰</button>
+          <h1>{{ store.currentSession?.title || 'AI 助手' }}</h1>
+        </div>
         <!-- 清空对话按钮 -->
         <button @click="store.clearChat" class="clear-btn" title="清空对话">🗑️</button>
       </header>
@@ -150,11 +196,13 @@ watch(
 /* 侧边栏样式 */
 .sidebar {
   width: 260px;
-  background-color: #f7f7f8;
-  border-right: 1px solid #eaeaea;
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  transition: transform 0.3s ease, background-color 0.3s;
+  z-index: 100;
 }
 
 .sidebar-header {
@@ -163,18 +211,18 @@ watch(
 
 .system-prompt-section {
   padding: 10px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .prompt-toggle-btn {
   width: 100%;
   padding: 6px;
-  background: #f0f0f0;
-  border: 1px solid #ddd;
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .prompt-editor {
@@ -188,7 +236,9 @@ watch(
   width: 100%;
   height: 80px;
   padding: 8px;
-  border: 1px solid #ddd;
+  background: var(--input-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 12px;
   resize: none;
@@ -207,19 +257,20 @@ watch(
 .new-chat-btn {
   width: 100%;
   padding: 10px;
-  background-color: white;
-  border: 1px solid #ddd;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
   border-radius: 5px;
   cursor: pointer;
   text-align: left;
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
 }
 
 .new-chat-btn:hover {
-  background-color: #f0f0f0;
+  background-color: var(--btn-secondary-hover);
 }
 
 .session-list {
@@ -236,16 +287,32 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #333;
+  color: var(--text-color);
   transition: background-color 0.2s;
 }
 
 .session-item:hover {
-  background-color: #e5e5e5;
+  background-color: var(--btn-secondary-hover);
 }
 
 .session-item.active {
-  background-color: #e0e0e0;
+  background-color: var(--active-session-bg);
+}
+
+.sidebar-footer {
+  padding: 15px;
+  border-top: 1px solid var(--border-color);
+}
+
+.theme-toggle-btn {
+  width: 100%;
+  padding: 8px;
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
 }
 
 .session-title {
@@ -259,7 +326,7 @@ watch(
 .delete-btn {
   background: none;
   border: none;
-  color: #999;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 16px;
   padding: 0 5px;
@@ -281,25 +348,43 @@ watch(
   display: flex;
   flex-direction: column;
   height: 100%; 
-  background: #fff;
+  background: var(--bg-color);
   min-width: 0; /* 防止 flex 子项溢出 */
+  transition: background-color 0.3s;
 }
 
 .chat-header {
   height: 60px;
-  border-bottom: 1px solid #eaeaea;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  background: white;
+  background: var(--bg-color);
   z-index: 10;
+  transition: background-color 0.3s;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.menu-btn {
+  display: none; /* 默认隐藏，仅移动端显示 */
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-color);
+  cursor: pointer;
 }
 
 .chat-header h1 {
   font-size: 18px;
   font-weight: 600;
   margin: 0;
+  color: var(--text-color);
 }
 
 .chat-messages {
@@ -314,18 +399,19 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #999;
+  color: var(--text-secondary);
 }
 
 .chat-footer {
-  border-top: 1px solid #eaeaea;
+  border-top: 1px solid var(--border-color);
   padding: 20px;
-  background: white;
+  background: var(--bg-color);
 }
 
 .clear-btn {
   background: none;
   border: none;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 1.2rem;
   padding: 5px;
@@ -334,6 +420,47 @@ watch(
 }
 
 .clear-btn:hover {
-  background: #f0f0f0;
+  background: var(--btn-secondary-hover);
+}
+
+/* 移动端适配样式 */
+@media (max-width: 768px) {
+  .menu-btn {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+  }
+
+  .sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 90;
+  }
+
+  .chat-header {
+    padding: 0 15px;
+  }
+
+  .chat-messages {
+    padding: 15px;
+  }
+
+  .chat-footer {
+    padding: 10px;
+  }
 }
 </style>

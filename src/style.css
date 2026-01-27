@@ -2,11 +2,42 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* 基础颜色变量 (Light Mode) */
+  --bg-color: #ffffff;
+  --sidebar-bg: #f7f7f8;
+  --text-color: #333333;
+  --text-secondary: #666666;
+  --border-color: #eaeaea;
+  --message-user-bg: #007bff;
+  --message-user-text: #ffffff;
+  --message-ai-bg: #f4f4f4;
+  --input-bg: #ffffff;
+  --input-wrapper-bg: #f4f4f4;
+  --btn-secondary-bg: #f0f0f0;
+  --btn-secondary-hover: #e5e5e5;
+  --active-session-bg: #e0e0e0;
+}
+
+/* Dark Mode 变量覆盖 */
+[data-theme='dark'] {
+  --bg-color: #212121;
+  --sidebar-bg: #171717;
+  --text-color: #ececec;
+  --text-secondary: #b4b4b4;
+  --border-color: #333333;
+  --message-user-bg: #2f6fd1;
+  --message-user-text: #ffffff;
+  --message-ai-bg: #2f2f2f;
+  --input-bg: #212121;
+  --input-wrapper-bg: #2f2f2f;
+  --btn-secondary-bg: #2f2f2f;
+  --btn-secondary-hover: #3f3f3f;
+  --active-session-bg: #333333;
 }
 
 html, body {
@@ -14,7 +45,10 @@ html, body {
   padding: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden; /* 禁止 Body 滚动 */
+  overflow: hidden;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s, color 0.3s;
 }
 
 #app {
@@ -33,10 +67,10 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #ccc;
+  background: var(--border-color);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #bbb;
+  background: var(--text-secondary);
 }
