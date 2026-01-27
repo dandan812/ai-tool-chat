@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 // 引入 markdown-it 库，用于将 Markdown 文本转换为 HTML
 import MarkdownIt from 'markdown-it'
 
@@ -9,6 +9,11 @@ import MarkdownIt from 'markdown-it'
 const props = defineProps<{
   role: 'user' | 'assistant' | 'system'
   content: string
+  index: number
+}>()
+
+const emit = defineEmits<{
+  (e: 'delete', index: number): void
 }>()
 
 // 初始化 Markdown 解析器配置
@@ -42,6 +47,11 @@ const isUser = computed(() => props.role === 'user')
       <div v-if="!isUser" class="markdown-body" v-html="htmlContent"></div>
       <!-- 用户消息：直接显示纯文本 -->
       <div v-else>{{ content }}</div>
+
+      <!-- 悬浮操作按钮 -->
+      <div class="message-actions">
+        <button @click="emit('delete', index)" class="action-btn" title="删除消息">🗑️</button>
+      </div>
     </div>
   </div>
 </template>
@@ -79,6 +89,41 @@ const isUser = computed(() => props.role === 'user')
   max-width: 80%;
   line-height: 1.6;
   word-wrap: break-word;
+  position: relative; /* 为操作按钮定位 */
+}
+
+/* 悬浮操作按钮样式 */
+.message-actions {
+  position: absolute;
+  bottom: -30px;
+  left: 0;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.message-user .message-actions {
+  left: auto;
+  right: 0;
+}
+
+.message-container:hover .message-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.action-btn:hover {
+  background: #f0f0f0;
 }
 
 .message-user .message-content {

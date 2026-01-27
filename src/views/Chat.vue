@@ -7,6 +7,23 @@ import { nextTick, ref, watch } from 'vue'
 // 初始化 Pinia Store
 const store = useChatStore()
 
+// 控制系统提示词面板显示
+const showSystemPrompt = ref(false)
+const systemPromptInput = ref('')
+
+// 当切换会话时，同步系统提示词到输入框
+watch(() => store.currentSessionId, () => {
+  systemPromptInput.value = store.currentSession?.systemPrompt || ''
+}, { immediate: true })
+
+const saveSystemPrompt = () => {
+  if (store.currentSessionId) {
+    store.updateSystemPrompt(store.currentSessionId, systemPromptInput.value)
+    showSystemPrompt.value = false
+    alert('人设设置成功！下次发送消息时生效。')
+  }
+}
+
 // 获取消息容器的 DOM 引用，用于控制滚动
 // ref 绑定到模板中的 <main class="chat-messages" ref="messagesContainer">
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -46,6 +63,20 @@ watch(
         <button class="new-chat-btn" @click="store.createSession()">
           + 新建对话
         </button>
+      </div>
+
+      <!-- 系统提示词设置 -->
+      <div class="system-prompt-section">
+        <button class="prompt-toggle-btn" @click="showSystemPrompt = !showSystemPrompt">
+          {{ showSystemPrompt ? '收起人设设置' : '⚙️ 设置助手人设' }}
+        </button>
+        <div v-if="showSystemPrompt" class="prompt-editor">
+          <textarea 
+            v-model="systemPromptInput" 
+            placeholder="例如：你是一个资深的程序员，说话简洁专业..."
+          ></textarea>
+          <button @click="saveSystemPrompt" class="save-prompt-btn">保存设置</button>
+        </div>
       </div>
       
       <div class="session-list">
@@ -89,8 +120,10 @@ watch(
         <ChatMessage
           v-for="(msg, index) in store.messages"
           :key="index"
+          :index="index"
           :role="msg.role"
           :content="msg.content"
+          @delete="store.deleteMessage"
         />
       </main>
 
@@ -126,6 +159,49 @@ watch(
 
 .sidebar-header {
   padding: 10px;
+}
+
+.system-prompt-section {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.prompt-toggle-btn {
+  width: 100%;
+  padding: 6px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+}
+
+.prompt-editor {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prompt-editor textarea {
+  width: 100%;
+  height: 80px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  resize: none;
+}
+
+.save-prompt-btn {
+  padding: 4px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .new-chat-btn {

@@ -8,6 +8,7 @@ export interface ChatSession {
   title: string       // 会话标题（自动生成或默认）
   messages: ChatMessage[] // 会话包含的消息列表
   createdAt: number   // 创建时间戳
+  systemPrompt?: string // 系统提示词（人设）
 }
 
 // 定义 Chat Store，使用 Setup Store 风格 (类似 Vue Composition API)
@@ -139,6 +140,21 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // 更新系统提示词
+  function updateSystemPrompt(id: string, prompt: string) {
+    const session = sessions.value.find(s => s.id === id)
+    if (session) {
+      session.systemPrompt = prompt
+    }
+  }
+
+  // 删除单条消息
+  function deleteMessage(index: number) {
+    if (currentSession.value) {
+      currentSession.value.messages.splice(index, 1)
+    }
+  }
+
   /**
    * 智能生成标题
    * 在后台调用 AI 根据对话内容生成简短标题
@@ -178,30 +194,68 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 发送消息的核心逻辑
    */
-  async function sendMessage(content: string) {
-    // 校验：如果正在加载或内容为空，则忽略
-    if (isLoading.value || !content.trim()) return
+  async function sendMessage(content: string, isReGenerate = false) {
+    // 校验：如果正在加载且不是重新生成，或者内容为空且不是重新生成，则忽略
+    if (isLoading.value || (!content.trim() && !isReGenerate)) return
     // 校验：如果没有选中会话，则忽略
     if (!currentSession.value) return
 
     const session = currentSession.value
 
-    // 1. 将用户消息添加到 UI
-    session.messages.push({ role: 'user', content })
+    if (!isReGenerate) {
+      // 1. 将用户消息添加到 UI
+      session.messages.push({ role: 'user', content })
+    }
     
     // 2. 预先添加一条空的 AI 消息占位，用于流式显示
-    // push 返回新数组长度，减 1 得到索引
     const assistantMessageIndex = session.messages.push({ role: 'assistant', content: '' }) - 1
     
-    // 设置加载状态和中断控制器
     isLoading.value = true
     abortController.value = new AbortController()
 
     try {
+      // 准备发送的消息列表
+      // 1. 获取上下文消息
+      // 如果是重新生成，需要排除掉最后一条（即正在被重新生成的）AI 消息
+      // 注意：此时最后一条是占位符，倒数第二条是旧的 AI 消息
+      const sliceEnd = isReGenerate ? -2 : -1
+      let apiMessages = session.messages
+        .slice(0, sliceEnd)
+        .filter(m => m.role !== 'system')
+        .map(m => ({ ...m })) // 简单的深度克隆
+      
+      // 如果第一条消息是助手消息（通常是欢迎语），则移除它
+      if (apiMessages?.length > 0 && apiMessages[0]?.role === 'assistant') {
+        apiMessages.shift()
+      }
+      
+      // 如果有系统提示词，插入到最前面
+      if (session.systemPrompt?.trim()) {
+        // 1. 在最前面插入系统消息
+        apiMessages.unshift({ 
+          role: 'system', 
+          content: `You must strictly follow this persona: ${session.systemPrompt}` 
+        })
+        
+        // 2. 在最后一条用户消息中再次强化指令（这是对抗长对话惯性的最强手段）
+        const lastMsg = apiMessages[apiMessages.length - 1]
+        if (lastMsg && lastMsg.role === 'user') {
+          lastMsg.content = `[IMPORTANT: Remember to speak as ${session.systemPrompt}]\n\n${lastMsg.content}`
+        }
+      }
+
+      // 调试：在控制台打印发送给 AI 的完整消息列表
+      console.log('Sending to AI:', apiMessages)
+
+      // 如果过滤后没有任何消息（这不应该发生，因为刚 push 了一个 user 消息），则直接返回
+      if (apiMessages.length === 0) {
+        isLoading.value = false
+        return
+      }
+
       // 发送请求
       await sendChatRequest(
-        // 发送给 AI 的上下文不包含最后那条空的占位消息
-        session.messages.slice(0, -1),
+        apiMessages,
         // onChunk: 收到流式数据片段
         (chunk) => {
           if (session.messages[assistantMessageIndex]) {
@@ -221,18 +275,20 @@ export const useChatStore = defineStore('chat', () => {
           abortController.value = null
 
           // 3. 触发智能标题生成逻辑
-          // 仅当这是会话的第 3 条消息时触发 (System? + AI初始 + User + AI回复)
-          // 这里的逻辑是：初始是1条AI消息，用户发1条变成2条，AI回1条变成3条
-          // 等等，初始消息是1条。用户发完是2条。AI占位是3条。
-          // 所以当 AI 完成回复时，session.messages.length 确实是 3。
+          // 仅当这是会话的第一轮完整对话后触发（通常是第 3 条消息：1.欢迎语 2.用户 3.AI）
           if (session.messages.length === 3) { 
-            const userMsg = content
+            // 如果是重新生成，用户消息在当前占位符的前两项 (Index - 2)
+            // 如果是新发送，用户消息就在当前占位符的前一项 (Index - 1)
+            const userMsgIndex = isReGenerate ? assistantMessageIndex - 2 : assistantMessageIndex - 1
+            const userMsg = session.messages[userMsgIndex]?.content || content
             const aiMsg = session.messages[assistantMessageIndex]?.content || ''
             // 异步执行，不阻塞 UI
-            generateSmartTitle(session.id, userMsg, aiMsg)
+            if (userMsg && aiMsg) {
+              generateSmartTitle(session.id, userMsg, aiMsg)
+            }
           }
         },
-        abortController.value.signal
+        abortController.value?.signal
       )
     } catch (err) {
       console.error(err)
@@ -294,6 +350,8 @@ export const useChatStore = defineStore('chat', () => {
     createSession,
     switchSession,
     deleteSession,
+    updateSystemPrompt,
+    deleteMessage,
     sendMessage,
     stopGeneration,
     clearChat
