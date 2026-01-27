@@ -390,6 +390,7 @@ watch(
 .chat-messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden; /* 防止水平滚动 */
   padding: 20px;
   scroll-behavior: smooth;
 }

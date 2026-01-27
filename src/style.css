@@ -23,6 +23,10 @@
   --active-session-bg: #e0e0e0;
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 /* Dark Mode 变量覆盖 */
 [data-theme='dark'] {
   --bg-color: #212121;
@@ -73,4 +77,25 @@ html, body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+/* 移动端隐藏滚动条但保留滚动功能 */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  
+  /* 兼容 Firefox 和其他浏览器 */
+  * {
+    scrollbar-width: none !important; /* Firefox */
+    -ms-overflow-style: none !important; /* IE 10+ */
+  }
+  
+  /* 防止页面回弹/橡皮筋效果 */
+  html, body {
+    overscroll-behavior: none;
+    touch-action: pan-y; /* 允许垂直滚动，禁止水平手势 */
+  }
 }
