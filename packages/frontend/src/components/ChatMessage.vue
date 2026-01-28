@@ -18,24 +18,26 @@ const emit = defineEmits<{
 
 // 初始化 Markdown 解析器配置
 const md = new MarkdownIt({
-  html: false,    // 禁用 HTML 标签，防止 XSS 攻击
-  linkify: true,  // 自动识别并转换 URL 为链接
-  breaks: true,   // 将换行符转换为 <br>
+  html: false, // 禁用 HTML 标签，防止 XSS 攻击
+  linkify: true, // 自动识别并转换 URL 为链接
+  breaks: true // 将换行符转换为 <br>
 })
 
 // 自定义代码块渲染逻辑，添加复制按钮
-const defaultRender = md.renderer.rules.fence || function (tokens, idx, options, _env, self) {
-  return self.renderToken(tokens, idx, options)
-}
+const defaultRender =
+  md.renderer.rules.fence ||
+  function (tokens, idx, options, _env, self) {
+    return self.renderToken(tokens, idx, options)
+  }
 
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx]
   if (!token) return ''
-  
+
   const code = token.content.replace(/"/g, '&quot;')
   const info = token.info ? token.info.trim() : ''
   const lang = info.split(/\s+/g)[0]
-  
+
   const rawCode = defaultRender(tokens, idx, options, env, self)
   return `
     <div class="code-block-wrapper">
@@ -88,9 +90,9 @@ const isUser = computed(() => props.role === 'user')
     <!-- 消息内容区域 -->
     <div class="message-content">
       <!-- AI 消息：使用 v-html 渲染 Markdown 转换后的 HTML -->
-      <div 
-        v-if="!isUser" 
-        class="markdown-body" 
+      <div
+        v-if="!isUser"
+        class="markdown-body"
         v-html="htmlContent"
         @click="handleContentClick"
       ></div>
@@ -170,7 +172,7 @@ const isUser = computed(() => props.role === 'user')
   padding: 2px 6px;
   font-size: 14px;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .action-btn:hover {
@@ -191,55 +193,62 @@ const isUser = computed(() => props.role === 'user')
 
 /* 简单的 markdown 样式补充 */
 :deep(.markdown-body pre) {
-  background: #1e1e1e; /* 代码块背景保持深色 */
-  color: #d4d4d4;
+  background: #f7f7f8;
+  color: #333;
   padding: 12px;
-  border-radius: 0 0 6px 6px; /* 顶部圆角留给 header */
+  border-radius: 6px;
   overflow-x: auto;
   margin: 0;
-  font-family: Consolas, Menlo, Monaco, "Courier New", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   white-space: pre;
   line-height: 1.5;
+  border: 1px solid #e5e5e5;
 }
 
 :deep(.code-block-wrapper) {
   margin: 12px 0;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid var(--border-color);
+  border: 1px solid #e5e5e5;
 }
 
 :deep(.code-block-header) {
-  background: #2d2d2d;
-  color: #aaa;
-  padding: 4px 12px;
+  background: #f7f7f8;
+  color: #666;
+  padding: 6px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  font-family: sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  border-bottom: 1px solid #e5e5e5;
 }
 
 :deep(.copy-code-btn) {
   background: transparent;
-  border: 1px solid #555;
-  color: #aaa;
-  padding: 2px 8px;
+  border: 1px solid #d1d5db;
+  color: #666;
+  padding: 4px 10px;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
-  min-width: 64px;
+  min-width: 60px;
+  font-size: 11px;
 }
 
 :deep(.copy-code-btn:hover) {
-  background: #444;
-  color: #fff;
-  border-color: #777;
+  background: #e5e7eb;
+  color: #333;
+  border-color: #9ca3af;
 }
 
 :deep(.copy-code-btn.copied) {
-  color: #4cd964;
-  border-color: #4cd964;
+  color: #10b981;
+  border-color: #10b981;
 }
 
 :deep(.markdown-body code) {
