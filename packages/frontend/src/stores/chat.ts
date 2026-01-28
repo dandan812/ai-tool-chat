@@ -58,7 +58,7 @@ export const useChatStore = defineStore('chat', () => {
         const newSessionList: ChatSession[] = []
         const newMessagesMap: Record<string, ChatMessage[]> = {}
         
-        oldData.forEach((session: any) => {
+        oldData.forEach((session: { id: string; title: string; createdAt: number; systemPrompt?: string; messages?: ChatMessage[] }) => {
           newSessionList.push({
             id: session.id,
             title: session.title,
