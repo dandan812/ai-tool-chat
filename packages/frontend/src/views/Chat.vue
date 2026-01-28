@@ -56,16 +56,20 @@ const saveSystemPrompt = () => {
 // 获取消息容器的 DOM 引用，用于控制滚动
 // ref 绑定到模板中的 <main class="chat-messages" ref="messagesContainer">
 const messagesContainer = ref<HTMLElement | null>(null)
+let scrollingScheduled = false
 
 // 自动滚动到底部的函数
 const scrollToBottom = async () => {
-  // await nextTick()：等待 Vue 完成 DOM 更新
-  // 必须等待，否则滚动高度还是旧的（未添加新消息前的高度）
-  await nextTick() 
-  if (messagesContainer.value) {
-    // 设置 scrollTop 为 scrollHeight，即滚动到最底部
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-  }
+  if (scrollingScheduled) return
+  scrollingScheduled = true
+  requestAnimationFrame(async () => {
+    await nextTick()
+    const el = messagesContainer.value
+    if (el) {
+      el.scrollTop = el.scrollHeight
+    }
+    scrollingScheduled = false
+  })
 }
 
 // 1. 监听消息列表长度变化
@@ -404,7 +408,6 @@ watch(
   overflow-y: auto;
   overflow-x: hidden; /* 防止水平滚动 */
   padding: 20px;
-  scroll-behavior: smooth;
 }
 
 .empty-state {

@@ -197,6 +197,9 @@ const isUser = computed(() => props.role === 'user')
   border-radius: 0 0 6px 6px; /* 顶部圆角留给 header */
   overflow-x: auto;
   margin: 0;
+  font-family: Consolas, Menlo, Monaco, "Courier New", monospace;
+  white-space: pre;
+  line-height: 1.5;
 }
 
 :deep(.code-block-wrapper) {
@@ -225,6 +228,7 @@ const isUser = computed(() => props.role === 'user')
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
+  min-width: 64px;
 }
 
 :deep(.copy-code-btn:hover) {
