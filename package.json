@@ -5,6 +5,7 @@
     "lint": "pnpm -r run lint",
     "format": "pnpm -r run format",
     "prepare": "husky",
+    "build": "pnpm run build:frontend",
     "build:frontend": "pnpm --filter @ai-tool-chat/frontend build",
     "deploy:worker": "pnpm --filter @ai-tool-chat/worker run deploy"
   },
