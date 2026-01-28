@@ -193,55 +193,66 @@ const isUser = computed(() => props.role === 'user')
 
 /* 简单的 markdown 样式补充 */
 :deep(.markdown-body pre) {
-  background: #1e1e1e; /* 代码块背景保持深色 */
-  color: #d4d4d4;
-  padding: 12px;
-  border-radius: 0 0 6px 6px; /* 顶部圆角留给 header */
+  background: #1f2937; /* GPT 风格：深蓝色背景 */
+  color: #e5e7eb;
+  padding: 16px;
+  border-radius: 0 0 8px 8px; /* 顶部圆角留给 header */
   overflow-x: auto;
   margin: 0;
   font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
   white-space: pre;
   line-height: 1.5;
+  font-size: 14px;
 }
 
 :deep(.code-block-wrapper) {
-  margin: 12px 0;
-  border-radius: 6px;
+  margin: 16px 0;
+  border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--border-color);
+  border: 1px solid #374151;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 :deep(.code-block-header) {
-  background: #2d2d2d;
-  color: #aaa;
-  padding: 4px 12px;
+  background: #1f2937;
+  color: #9ca3af;
+  padding: 8px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
   font-family: sans-serif;
+  border-bottom: 1px solid #374151;
+}
+
+:deep(.code-lang) {
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 :deep(.copy-code-btn) {
-  background: transparent;
-  border: 1px solid #555;
-  color: #aaa;
-  padding: 2px 8px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  color: #e5e7eb;
+  padding: 4px 12px;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
-  min-width: 64px;
+  font-size: 11px;
+  min-width: 70px;
 }
 
 :deep(.copy-code-btn:hover) {
-  background: #444;
-  color: #fff;
-  border-color: #777;
+  background: #4b5563;
+  color: #ffffff;
+  border-color: #6b7280;
 }
 
 :deep(.copy-code-btn.copied) {
-  color: #4cd964;
-  border-color: #4cd964;
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
 }
 
 :deep(.markdown-body code) {
