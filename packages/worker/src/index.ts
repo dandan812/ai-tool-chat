@@ -39,6 +39,17 @@ export default {
         }),
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        return new Response(JSON.stringify({ error: `DeepSeek API Error: ${response.status} - ${errorText}` }), {
+          status: response.status,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
       // 创建流式响应
       const { readable, writable } = new TransformStream();
       response.body?.pipeTo(writable);
