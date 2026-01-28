@@ -114,7 +114,7 @@ export async function sendChatRequest(
 
         try {
           // 解析 JSON
-          const json = JSON.parse(data)
+          const json=JSON.parse(data)
           
           // 提取核心内容
           // 不同的 AI 厂商字段结构可能略有不同，但通常都在 choices[0].delta.content

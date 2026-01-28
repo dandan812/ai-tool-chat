@@ -79,7 +79,8 @@ watch(
 // 场景：当 AI 正在流式输出（打字机效果）时，内容不断变长，需要实时跟随滚动
 watch(
   () => store.messages[store.messages.length - 1]?.content, 
-  (newContent) => {
+  () => {
+    // 你好
     // 只有当用户没有向上滚动查看历史消息时，才自动滚动到底部
     // 判断逻辑：如果距离底部小于 100px，则认为用户在底部，可以自动滚动
     if (messagesContainer.value) {
