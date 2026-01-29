@@ -4,33 +4,32 @@ import { type ChatMessage, sendChatRequest } from '../api/ai'
 
 // 定义会话接口结构（重构后）
 export interface ChatSession {
-  id: string          // 会话唯一标识
-  title: string       // 会话标题（自动生成或默认）
-  createdAt: number   // 创建时间戳
-  updatedAt: number   // 更新时间戳
+  id: string // 会话唯一标识
+  title: string // 会话标题（自动生成或默认）
+  createdAt: number // 创建时间戳
+  updatedAt: number // 更新时间戳
   systemPrompt?: string // 系统提示词（人设）
   unreadCount?: number // 未读消息数
 }
 
 // 定义 Chat Store，使用 Setup Store 风格 (类似 Vue Composition API)
 export const useChatStore = defineStore('chat', () => {
-  
   // ==========================================
   // 1. 状态定义 (State) - 重构后
   // ==========================================
-  
+
   // 会话列表：用于 UI 展示、排序等
   const sessionList = ref<ChatSession[]>([])
-  
+
   // 消息映射：按 sessionId 存储消息，支持 O(1) 查找
   const messagesMap = ref<Record<string, ChatMessage[]>>({})
-  
+
   // 当前激活的会话 ID
   const currentSessionId = ref<string>('')
 
   // UI 状态：是否正在等待 AI 响应
   const isLoading = ref(false)
-  
+
   // 用于中断请求的控制器 (AbortController)
   const abortController = ref<AbortController | null>(null)
 
@@ -57,18 +56,26 @@ export const useChatStore = defineStore('chat', () => {
         const oldData = JSON.parse(oldSessions)
         const newSessionList: ChatSession[] = []
         const newMessagesMap: Record<string, ChatMessage[]> = {}
-        
-        oldData.forEach((session: { id: string; title: string; createdAt: number; systemPrompt?: string; messages?: ChatMessage[] }) => {
-          newSessionList.push({
-            id: session.id,
-            title: session.title,
-            createdAt: session.createdAt,
-            updatedAt: session.createdAt,
-            systemPrompt: session.systemPrompt
-          })
-          newMessagesMap[session.id] = session.messages || []
-        })
-        
+
+        oldData.forEach(
+          (session: {
+            id: string
+            title: string
+            createdAt: number
+            systemPrompt?: string
+            messages?: ChatMessage[]
+          }) => {
+            newSessionList.push({
+              id: session.id,
+              title: session.title,
+              createdAt: session.createdAt,
+              updatedAt: session.createdAt,
+              systemPrompt: session.systemPrompt
+            })
+            newMessagesMap[session.id] = session.messages || []
+          }
+        )
+
         sessionList.value = newSessionList
         messagesMap.value = newMessagesMap
         currentSessionId.value = savedCurrentId || newSessionList[0]?.id || ''
@@ -84,8 +91,8 @@ export const useChatStore = defineStore('chat', () => {
   // ==========================================
 
   // 获取当前选中的会话对象
-  const currentSession = computed(() => 
-    sessionList.value.find(s => s.id === currentSessionId.value)
+  const currentSession = computed(() =>
+    sessionList.value.find((s) => s.id === currentSessionId.value)
   )
 
   // 获取当前会话的消息列表
@@ -106,36 +113,33 @@ export const useChatStore = defineStore('chat', () => {
   function createSession(title?: string, initialMessages?: ChatMessage[]) {
     // 生成唯一 ID (简单实现：时间戳 + 随机数)
     const id = Date.now().toString() + Math.random().toString(36).slice(2)
-    
+
     const newSession: ChatSession = {
       id,
       title: title || '新对话', // 默认标题
       createdAt: Date.now(),
       updatedAt: Date.now()
     }
-    
+
     // 添加到会话列表开头
     sessionList.value.unshift(newSession)
-    
+
     // 初始化消息数组
-    messagesMap.value[id] = initialMessages || [
-      // 默认的第一条系统/欢迎消息
-      { role: 'assistant', content: '你好！我是你的 AI 助手，有什么可以帮你的吗？' }
-    ]
-    
+    messagesMap.value[id] = initialMessages || []
+
     // 自动切换到新创建的会话
     currentSessionId.value = id
-    
+
     return id
   }
 
   // 切换当前会话
   function switchSession(id: string) {
     // 确保 ID 存在于会话列表中
-    if (sessionList.value.some(s => s.id === id)) {
+    if (sessionList.value.some((s) => s.id === id)) {
       currentSessionId.value = id
       // 切换时重置未读计数
-      const session = sessionList.value.find(s => s.id === id)
+      const session = sessionList.value.find((s) => s.id === id)
       if (session) {
         session.unreadCount = 0
       }
@@ -144,7 +148,7 @@ export const useChatStore = defineStore('chat', () => {
 
   // 删除会话
   function deleteSession(id: string) {
-    const index = sessionList.value.findIndex(s => s.id === id)
+    const index = sessionList.value.findIndex((s) => s.id === id)
     if (index === -1) return
 
     // 从会话列表中移除
@@ -163,14 +167,14 @@ export const useChatStore = defineStore('chat', () => {
         }
       } else {
         // 如果删光了所有会话，自动创建一个新的
-        createSession() 
+        createSession()
       }
     }
   }
 
   // 更新特定会话的标题
   function updateSessionTitle(id: string, title: string) {
-    const session = sessionList.value.find(s => s.id === id)
+    const session = sessionList.value.find((s) => s.id === id)
     if (session) {
       session.title = title
     }
@@ -178,7 +182,7 @@ export const useChatStore = defineStore('chat', () => {
 
   // 更新系统提示词
   function updateSystemPrompt(id: string, prompt: string) {
-    const session = sessionList.value.find(s => s.id === id)
+    const session = sessionList.value.find((s) => s.id === id)
     if (session) {
       session.systemPrompt = prompt
     }
@@ -187,7 +191,7 @@ export const useChatStore = defineStore('chat', () => {
   // 删除单条消息
   function deleteMessage(index: number) {
     if (!currentSessionId.value) return
-    
+
     const messages = messagesMap.value[currentSessionId.value]
     if (messages) {
       messages.splice(index, 1)
@@ -203,7 +207,7 @@ export const useChatStore = defineStore('chat', () => {
 
     // 构造 Prompt：截取前 300 字符以节省 Token，要求生成 10 字以内的标题
     const prompt = `请根据以下对话生成一个简短的标题（10字以内），直接返回标题内容，不要包含标点符号和引号：\n\n用户：${userMsg.slice(0, 300)}\nAI：${aiMsg.slice(0, 300)}`
-    
+
     let titleBuffer = ''
     try {
       // 发送独立的请求生成标题
@@ -217,7 +221,10 @@ export const useChatStore = defineStore('chat', () => {
         },
         () => {
           // 处理生成的标题：去除首尾空格、引号和句号
-          const finalTitle = titleBuffer.trim().replace(/^["']|["']$/g, '').replace(/[。，.]$/, '')
+          const finalTitle = titleBuffer
+            .trim()
+            .replace(/^["']|["']$/g, '')
+            .replace(/[。，.]$/, '')
           if (finalTitle) {
             updateSessionTitle(sessionId, finalTitle)
           }
@@ -243,17 +250,17 @@ export const useChatStore = defineStore('chat', () => {
     if (!isReGenerate) {
       // 1. 将用户消息添加到 UI
       messages.push({ role: 'user', content })
-      
+
       // 更新会话的更新时间
-      const session = sessionList.value.find(s => s.id === sessionId)
+      const session = sessionList.value.find((s) => s.id === sessionId)
       if (session) {
         session.updatedAt = Date.now()
       }
     }
-    
+
     // 2. 预先添加一条空的 AI 消息占位，用于流式显示
     const assistantMessageIndex = messages.push({ role: 'assistant', content: '' }) - 1
-    
+
     isLoading.value = true
     abortController.value = new AbortController()
 
@@ -262,23 +269,23 @@ export const useChatStore = defineStore('chat', () => {
       const sliceEnd = isReGenerate ? -2 : -1
       const apiMessages = messages
         .slice(0, sliceEnd)
-        .filter(m => m.role !== 'system')
-        .map(m => ({ ...m })) // 简单的深度克隆
-      
+        .filter((m) => m.role !== 'system')
+        .map((m) => ({ ...m })) // 简单的深度克隆
+
       // 如果第一条消息是助手消息（通常是欢迎语），则移除它
       if (apiMessages?.length > 0 && apiMessages[0]?.role === 'assistant') {
         apiMessages.shift()
       }
-      
+
       // 如果有系统提示词，插入到最前面
-      const session = sessionList.value.find(s => s.id === sessionId)
+      const session = sessionList.value.find((s) => s.id === sessionId)
       if (session?.systemPrompt?.trim()) {
         // 1. 在最前面插入系统消息
-        apiMessages.unshift({ 
-          role: 'system', 
-          content: `You must strictly follow this persona: ${session.systemPrompt}` 
+        apiMessages.unshift({
+          role: 'system',
+          content: `You must strictly follow this persona: ${session.systemPrompt}`
         })
-        
+
         // 2. 在最后一条用户消息中再次强化指令
         const lastMsg = apiMessages[apiMessages.length - 1]
         if (lastMsg && lastMsg.role === 'user') {
@@ -317,8 +324,10 @@ export const useChatStore = defineStore('chat', () => {
           abortController.value = null
 
           // 3. 触发智能标题生成逻辑
-          if (messages.length === 3) { 
-            const userMsgIndex = isReGenerate ? assistantMessageIndex - 2 : assistantMessageIndex - 1
+          if (messages.length === 3) {
+            const userMsgIndex = isReGenerate
+              ? assistantMessageIndex - 2
+              : assistantMessageIndex - 1
             const userMsg = messages[userMsgIndex]?.content || content
             const aiMsg = messages[assistantMessageIndex]?.content || ''
             if (userMsg && aiMsg) {
@@ -347,17 +356,15 @@ export const useChatStore = defineStore('chat', () => {
   function clearChat() {
     stopGeneration()
     if (!currentSessionId.value) return
-    
-    // 重置为仅剩初始欢迎语
-    messagesMap.value[currentSessionId.value] = [
-      { role: 'assistant', content: '你好！我是你的 AI 助手，有什么可以帮你的吗？' }
-    ]
+
+    // 重置为空数组
+    messagesMap.value[currentSessionId.value] = []
   }
 
   // ==========================================
   // 5. 持久化监听 (Persistence)
   // ==========================================
-  
+
   // 监听 sessionList 变化，自动保存到 localStorage
   watch(
     sessionList,
@@ -377,12 +384,9 @@ export const useChatStore = defineStore('chat', () => {
   )
 
   // 监听 currentSessionId 变化，记住用户上次选中的会话
-  watch(
-    currentSessionId,
-    (newVal) => {
-      localStorage.setItem('chat_current_session_id', newVal)
-    }
-  )
+  watch(currentSessionId, (newVal) => {
+    localStorage.setItem('chat_current_session_id', newVal)
+  })
 
   // 执行初始化
   init()
@@ -392,14 +396,14 @@ export const useChatStore = defineStore('chat', () => {
     // 重构后的数据结构
     sessionList,
     messagesMap,
-    
+
     // 兼容原有 API
     sessions: computed(() => sessionList.value),
     currentSessionId,
     currentSession,
     messages,
     isLoading,
-    
+
     // 核心方法
     createSession,
     switchSession,

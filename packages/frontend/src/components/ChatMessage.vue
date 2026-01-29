@@ -83,10 +83,6 @@ const isUser = computed(() => props.role === 'user')
 <template>
   <!-- 消息容器：根据 isUser 动态添加 message-user 或 message-ai 类名 -->
   <div class="message-container" :class="{ 'message-user': isUser, 'message-ai': !isUser }">
-    <!-- 头像区域 -->
-    <div class="avatar">
-      {{ isUser ? '👤' : '🤖' }}
-    </div>
     <!-- 消息内容区域 -->
     <div class="message-content">
       <!-- AI 消息：使用 v-html 渲染 Markdown 转换后的 HTML -->

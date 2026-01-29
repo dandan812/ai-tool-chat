@@ -9,7 +9,7 @@ const props = defineProps<{
 // 定义 Emits：向父组件发送的事件
 const emit = defineEmits<{
   (e: 'send', content: string): void // 发送消息事件，携带消息内容
-  (e: 'stop'): void                  // 停止生成事件
+  (e: 'stop'): void // 停止生成事件
 }>()
 
 // 响应式变量：绑定输入框的内容
@@ -19,10 +19,10 @@ const input = ref('')
 function handleSend() {
   // 如果内容为空（去除首尾空格后）或正在加载中，则不发送
   if (!input.value.trim() || props.loading) return
-  
+
   // 触发 'send' 事件，把内容传给父组件
   emit('send', input.value)
-  
+
   // 发送后清空输入框
   input.value = ''
 }
@@ -32,7 +32,7 @@ function handleKeydown(e: KeyboardEvent) {
   // 如果按下了 Enter 键，且没有按 Shift 键（Shift+Enter 用于换行）
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault() // 阻止默认的回车换行行为
-    handleSend()       // 执行发送
+    handleSend() // 执行发送
   }
 }
 </script>
@@ -44,30 +44,19 @@ function handleKeydown(e: KeyboardEvent) {
       <textarea
         v-model="input"
         @keydown="handleKeydown"
-        placeholder="输入消息，Shift + Enter 换行..."
+        placeholder="输入消息..."
         rows="1"
         :disabled="loading"
         class="chat-textarea"
       ></textarea>
 
       <!-- 发送按钮：非加载状态显示 -->
-      <button 
-        v-if="!loading"
-        @click="handleSend" 
-        class="send-btn"
-        :disabled="!input.trim()"
-      >
+      <button v-if="!loading" @click="handleSend" class="send-btn" :disabled="!input.trim()">
         发送
       </button>
 
       <!-- 停止按钮：加载状态显示 -->
-      <button 
-        v-else 
-        @click="$emit('stop')"
-        class="stop-btn"
-      >
-        停止
-      </button>
+      <button v-else @click="$emit('stop')" class="stop-btn">停止</button>
     </div>
   </div>
 </template>
@@ -80,15 +69,16 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .input-wrapper {
-  max-width: 800px;
+  width: 100%;
+  max-width: 1000px;
   margin: 0 auto;
   position: relative;
   display: flex;
   align-items: flex-end;
   gap: 10px;
   background: var(--input-wrapper-bg);
-  padding: 10px;
-  border-radius: 12px;
+  padding: 12px;
+  border-radius: 20px;
   border: 1px solid transparent;
   transition: all 0.2s;
 }
@@ -96,7 +86,7 @@ function handleKeydown(e: KeyboardEvent) {
 .input-wrapper:focus-within {
   border-color: #007bff;
   background: var(--input-bg);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
 .chat-textarea {
@@ -104,28 +94,36 @@ function handleKeydown(e: KeyboardEvent) {
   border: none;
   background: transparent;
   resize: none;
-  padding: 8px;
+  padding: 10px 12px;
   font-family: inherit;
   font-size: 16px;
   line-height: 1.5;
   outline: none;
   max-height: 200px;
-  min-height: 24px;
+  min-height: 36px;
   color: var(--text-color);
 }
 
-.send-btn, .stop-btn {
+.send-btn,
+.stop-btn {
   border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
+  padding: 10px 20px;
+  border-radius: 16px;
   cursor: pointer;
   font-weight: 500;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  font-size: 14px;
 }
 
 .send-btn {
   background: #007bff;
   color: white;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: #0069d9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
 }
 
 .send-btn:disabled {
@@ -140,5 +138,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 .stop-btn:hover {
   background: #c82333;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
 }
 </style>

@@ -7,41 +7,53 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* 基础颜色变量 (Light Mode) */
+  /* AI 助手风格颜色变量 (Light Mode) */
   --bg-color: #ffffff;
-  --sidebar-bg: #f7f7f8;
-  --text-color: #333333;
-  --text-secondary: #666666;
-  --border-color: #eaeaea;
-  --message-user-bg: #007bff;
+  --sidebar-bg: #f8fafc;
+  --text-color: #1e293b;
+  --text-secondary: #64748b;
+  --border-color: #e2e8f0;
+  --message-user-bg: #3b82f6;
   --message-user-text: #ffffff;
-  --message-ai-bg: #f4f4f4;
+  --message-ai-bg: #f1f5f9;
   --input-bg: #ffffff;
-  --input-wrapper-bg: #f4f4f4;
-  --btn-secondary-bg: #f0f0f0;
-  --btn-secondary-hover: #e5e5e5;
-  --active-session-bg: #e0e0e0;
+  --input-wrapper-bg: #f1f5f9;
+  --btn-secondary-bg: #f1f5f9;
+  --btn-secondary-hover: #e2e8f0;
+  --active-session-bg: #e2e8f0;
+  --accent-color: #3b82f6;
+  --accent-hover: #2563eb;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --error-color: #ef4444;
+  --gradient-primary: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
-/* Dark Mode 变量覆盖 */
+/* Dark Mode 变量覆盖 - AI 助手风格 */
 [data-theme='dark'] {
-  --bg-color: #212121;
-  --sidebar-bg: #171717;
-  --text-color: #ececec;
-  --text-secondary: #b4b4b4;
-  --border-color: #333333;
-  --message-user-bg: #2f6fd1;
+  --bg-color: #0f172a;
+  --sidebar-bg: #1e293b;
+  --text-color: #f8fafc;
+  --text-secondary: #94a3b8;
+  --border-color: #334155;
+  --message-user-bg: #3b82f6;
   --message-user-text: #ffffff;
-  --message-ai-bg: #2f2f2f;
-  --input-bg: #212121;
-  --input-wrapper-bg: #2f2f2f;
-  --btn-secondary-bg: #2f2f2f;
-  --btn-secondary-hover: #3f3f3f;
-  --active-session-bg: #333333;
+  --message-ai-bg: #334155;
+  --input-bg: #0f172a;
+  --input-wrapper-bg: #334155;
+  --btn-secondary-bg: #334155;
+  --btn-secondary-hover: #475569;
+  --active-session-bg: #475569;
+  --accent-color: #60a5fa;
+  --accent-hover: #3b82f6;
+  --gradient-primary: linear-gradient(135deg, #60a5fa, #a78bfa);
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px 0 rgba(0, 0, 0, 0.2);
 }
 
 html, body {
