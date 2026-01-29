@@ -315,7 +315,10 @@ export const useChatStore = defineStore('chat', () => {
         (error) => {
           console.error('Chat error:', error)
           let errorMessage = '[出错了，请重试]'
-          if (error.message.includes('Failed to fetch') || error.message.includes('network error')) {
+          if (
+            error.message.includes('Failed to fetch') ||
+            error.message.includes('network error')
+          ) {
             errorMessage = '[后端服务未部署，请检查 Cloudflare Worker 配置]'
           }
           if (messages[assistantMessageIndex]) {

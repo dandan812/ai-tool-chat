@@ -7,20 +7,20 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* AI 助手风格颜色变量 (Light Mode) */
+  /* GPT 风格颜色变量 (Light Mode) */
   --bg-color: #ffffff;
-  --sidebar-bg: #f8fafc;
-  --text-color: #1e293b;
-  --text-secondary: #64748b;
-  --border-color: #e2e8f0;
+  --sidebar-bg: #f9fafb;
+  --text-color: #1f2937;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
   --message-user-bg: #3b82f6;
   --message-user-text: #ffffff;
-  --message-ai-bg: #f1f5f9;
+  --message-ai-bg: #f3f4f6;
   --input-bg: #ffffff;
-  --input-wrapper-bg: #f1f5f9;
-  --btn-secondary-bg: #f1f5f9;
-  --btn-secondary-hover: #e2e8f0;
-  --active-session-bg: #e2e8f0;
+  --input-wrapper-bg: #f3f4f6;
+  --btn-secondary-bg: #f3f4f6;
+  --btn-secondary-hover: #e5e7eb;
+  --active-session-bg: #e5e7eb;
   --accent-color: #3b82f6;
   --accent-hover: #2563eb;
   --success-color: #10b981;
@@ -35,21 +35,21 @@
   box-sizing: border-box;
 }
 
-/* Dark Mode 变量覆盖 - AI 助手风格 */
+/* Dark Mode 变量覆盖 - GPT 风格 */
 [data-theme='dark'] {
-  --bg-color: #0f172a;
-  --sidebar-bg: #1e293b;
-  --text-color: #f8fafc;
-  --text-secondary: #94a3b8;
-  --border-color: #334155;
+  --bg-color: #111827;
+  --sidebar-bg: #1f2937;
+  --text-color: #f9fafb;
+  --text-secondary: #d1d5db;
+  --border-color: #374151;
   --message-user-bg: #3b82f6;
   --message-user-text: #ffffff;
-  --message-ai-bg: #334155;
-  --input-bg: #0f172a;
-  --input-wrapper-bg: #334155;
-  --btn-secondary-bg: #334155;
-  --btn-secondary-hover: #475569;
-  --active-session-bg: #475569;
+  --message-ai-bg: #374151;
+  --input-bg: #111827;
+  --input-wrapper-bg: #374151;
+  --btn-secondary-bg: #374151;
+  --btn-secondary-hover: #4b5563;
+  --active-session-bg: #4b5563;
   --accent-color: #60a5fa;
   --accent-hover: #3b82f6;
   --gradient-primary: linear-gradient(135deg, #60a5fa, #a78bfa);

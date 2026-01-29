@@ -76,17 +76,16 @@ function handleKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  background: var(--input-wrapper-bg);
+  background: rgb(245, 245, 245);
   padding: 12px;
   border-radius: 20px;
-  border: 1px solid transparent;
+  border: 1px solid #e5e7eb;
   transition: all 0.2s;
 }
 
 .input-wrapper:focus-within {
   border-color: #007bff;
-  background: var(--input-bg);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 10px rgba(0, 123, 255, 0.1);
 }
 
 .chat-textarea {
@@ -116,14 +115,14 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .send-btn {
-  background: #007bff;
+  background: #3b82f6;
   color: white;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #0069d9;
+  background: #2563eb;
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
 }
 
 .send-btn:disabled {

@@ -189,9 +189,15 @@ const isUser = computed(() => props.role === 'user')
 }
 
 /* 简单的 markdown 样式补充 */
+:deep(.markdown-body) {
+  will-change: transform; /* 优化滚动性能 */
+  backface-visibility: hidden; /* 防止抖动 */
+  transform: translateZ(0); /* 启用硬件加速 */
+}
+
 :deep(.markdown-body pre) {
-  background: #1f2937; /* GPT 风格：深蓝色背景 */
-  color: #e5e7eb;
+  background: #f3f4f6; /* 浅灰色背景，更美观 */
+  color: #1f2937;
   padding: 16px;
   border-radius: 0 0 8px 8px; /* 顶部圆角留给 header */
   overflow-x: auto;
@@ -200,26 +206,30 @@ const isUser = computed(() => props.role === 'user')
   white-space: pre;
   line-height: 1.5;
   font-size: 14px;
+  will-change: transform; /* 优化滚动性能 */
 }
 
 :deep(.code-block-wrapper) {
   margin: 16px 0;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #374151;
+  border: 1px solid #e5e7eb;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  will-change: transform; /* 优化滚动性能 */
+  backface-visibility: hidden; /* 防止抖动 */
+  transform: translateZ(0); /* 启用硬件加速 */
 }
 
 :deep(.code-block-header) {
-  background: #1f2937;
-  color: #9ca3af;
+  background: #e5e7eb;
+  color: #6b7280;
   padding: 8px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
   font-family: sans-serif;
-  border-bottom: 1px solid #374151;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 :deep(.code-lang) {
