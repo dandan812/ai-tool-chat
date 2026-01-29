@@ -8,7 +8,7 @@ import { useScroll } from '../composables/useScroll'
 const store = useChatStore()
 
 // 使用滚动 composable
-const { container: messagesContainer, scrollToBottom, shouldAutoScroll } = useScroll()
+const { scrollToBottom, shouldAutoScroll } = useScroll()
 
 // 1. 监听消息列表长度变化
 // 场景：当用户发送消息或开始新对话时，自动滚动到底部
