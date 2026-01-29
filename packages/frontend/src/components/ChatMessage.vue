@@ -215,9 +215,9 @@ const isUser = computed(() => props.role === 'user')
   overflow: hidden;
   border: 1px solid #e5e7eb;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  will-change: transform; /* 优化滚动性能 */
-  backface-visibility: hidden; /* 防止抖动 */
-  transform: translateZ(0); /* 启用硬件加速 */
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 :deep(.code-block-header) {
@@ -230,6 +230,25 @@ const isUser = computed(() => props.role === 'user')
   font-size: 12px;
   font-family: sans-serif;
   border-bottom: 1px solid #e5e7eb;
+}
+
+/* 深色模式代码块样式优化 */
+[data-theme='dark'] :deep(.markdown-body pre),
+[data-theme='dark'] :deep(.markdown-body pre *) {
+  background: #000000 !important;
+  color: #d4d4d4 !important;
+}
+
+[data-theme='dark'] :deep(.code-block-wrapper) {
+  border: 1px solid #333333 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='dark'] :deep(.code-block-header),
+[data-theme='dark'] :deep(.code-block-header *) {
+  background: #1a1a1a !important;
+  color: #cccccc !important;
+  border-bottom: 1px solid #333333 !important;
 }
 
 :deep(.code-lang) {

@@ -7,26 +7,35 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* GPT 风格颜色变量 (Light Mode) */
+  /* 科技蓝系颜色变量 (Light Mode) */
   --bg-color: #ffffff;
   --sidebar-bg: #f9fafb;
   --text-color: #1f2937;
   --text-secondary: #6b7280;
   --border-color: #e5e7eb;
-  --message-user-bg: #3b82f6;
+  --message-user-bg: #165DFF;
   --message-user-text: #ffffff;
   --message-ai-bg: #f3f4f6;
   --input-bg: #ffffff;
   --input-wrapper-bg: #f3f4f6;
+  --btn-primary-bg: #165DFF;
+  --btn-primary-hover: #2563EB;
   --btn-secondary-bg: #f3f4f6;
+  --btn-secondary-text: #374151;
+  --btn-secondary-border: #e5e7eb;
   --btn-secondary-hover: #e5e7eb;
   --active-session-bg: #e5e7eb;
-  --accent-color: #3b82f6;
-  --accent-hover: #2563eb;
+  --accent-color: #165DFF;
+  --accent-hover: #2563EB;
   --success-color: #10b981;
+  --success-hover: #34D399;
   --warning-color: #f59e0b;
-  --error-color: #ef4444;
-  --gradient-primary: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  --warning-hover: #FBBF24;
+  --error-color: #EF4444;
+  --error-hover: #F87171;
+  --info-color: #8B5CF6;
+  --info-hover: #A78BFA;
+  --gradient-primary: linear-gradient(135deg, #165DFF, #2563EB);
   --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -35,25 +44,37 @@
   box-sizing: border-box;
 }
 
-/* Dark Mode 变量覆盖 - GPT 风格 */
+/* Dark Mode 变量覆盖 - 科技蓝系风格 */
 [data-theme='dark'] {
-  --bg-color: #111827;
-  --sidebar-bg: #1f2937;
-  --text-color: #f9fafb;
-  --text-secondary: #d1d5db;
-  --border-color: #374151;
-  --message-user-bg: #3b82f6;
+  --bg-color: #0a0a0a;
+  --sidebar-bg: #1a1a1a;
+  --text-color: #ffffff;
+  --text-secondary: #b0b0b0;
+  --border-color: #333333;
+  --message-user-bg: #3B82F6;
   --message-user-text: #ffffff;
-  --message-ai-bg: #374151;
-  --input-bg: #111827;
-  --input-wrapper-bg: #374151;
-  --btn-secondary-bg: #374151;
-  --btn-secondary-hover: #4b5563;
-  --active-session-bg: #4b5563;
-  --accent-color: #60a5fa;
-  --accent-hover: #3b82f6;
-  --gradient-primary: linear-gradient(135deg, #60a5fa, #a78bfa);
-  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  --message-ai-bg: #2a2a2a;
+  --input-bg: #0a0a0a;
+  --input-wrapper-bg: #2a2a2a;
+  --btn-primary-bg: #3B82F6;
+  --btn-primary-hover: #60A5FA;
+  --btn-secondary-bg: #1F2937;
+  --btn-secondary-text: #F9FAFB;
+  --btn-secondary-border: #374151;
+  --btn-secondary-hover: #374151;
+  --active-session-bg: #3a3a3a;
+  --accent-color: #60A5FA;
+  --accent-hover: #3B82F6;
+  --success-color: #10b981;
+  --success-hover: #34D399;
+  --warning-color: #f59e0b;
+  --warning-hover: #FBBF24;
+  --error-color: #EF4444;
+  --error-hover: #F87171;
+  --info-color: #8B5CF6;
+  --info-hover: #A78BFA;
+  --gradient-primary: linear-gradient(135deg, #3B82F6, #60A5FA);
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.5), 0 1px 2px 0 rgba(0, 0, 0, 0.4);
 }
 
 html, body {
@@ -70,6 +91,25 @@ html, body {
 #app {
   width: 100%;
   height: 100%;
+}
+
+/* 深色模式代码块样式 */
+[data-theme='dark'] .markdown-body pre,
+[data-theme='dark'] .markdown-body pre * {
+  background: #000000 !important;
+  color: #d4d4d4 !important;
+}
+
+[data-theme='dark'] .code-block-wrapper {
+  border: 1px solid #333333 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='dark'] .code-block-header,
+[data-theme='dark'] .code-block-header * {
+  background: #1a1a1a !important;
+  color: #cccccc !important;
+  border-bottom: 1px solid #333333 !important;
 }
 
 /* 自定义滚动条样式 */

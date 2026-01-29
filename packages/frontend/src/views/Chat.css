@@ -41,13 +41,13 @@
   font-size: 18px;
   font-weight: 600;
   margin: 0;
-  color: #000000; /* 纯黑色标题 */
+  color: var(--text-color); /* 使用主题文本颜色变量 */
 }
 
 .new-chat-btn {
   width: 100%;
   padding: 12px 16px;
-  background: var(--gradient-primary);
+  background: var(--btn-primary-bg);
   color: white;
   border: none;
   border-radius: 10px;
@@ -61,6 +61,7 @@
 }
 
 .new-chat-btn:hover {
+  background: var(--btn-primary-hover);
   transform: translateY(-1px);
   box-shadow: var(--card-shadow);
 }
@@ -79,11 +80,11 @@
   width: 100%;
   padding: 10px 12px;
   background: var(--btn-secondary-bg);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--btn-secondary-border);
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-  color: var(--text-color);
+  color: var(--btn-secondary-text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -123,7 +124,7 @@
 
 .save-prompt-btn {
   padding: 10px 12px;
-  background: var(--accent-color);
+  background: var(--btn-primary-bg);
   color: white;
   border: none;
   border-radius: 8px;
@@ -137,7 +138,7 @@
 }
 
 .save-prompt-btn:hover {
-  background: var(--accent-hover);
+  background: var(--btn-primary-hover);
   transform: translateY(-1px);
 }
 
