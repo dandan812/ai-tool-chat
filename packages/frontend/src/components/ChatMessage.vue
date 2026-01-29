@@ -78,6 +78,7 @@ function handleContentClick(e: MouseEvent) {
 // 计算属性：判断当前是否为用户消息
 // 用于动态控制样式和头像显示
 const isUser = computed(() => props.role === 'user')
+// Fix: Remove avatars and default system message
 </script>
 
 <template>
