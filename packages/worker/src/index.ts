@@ -21,33 +21,41 @@ export default {
     }
 
     try {
-      const body = await request.json() as any;
+      const body = (await request.json()) as any;
       const messages = body.messages || [];
 
       // 调用 DeepSeek API
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${env.DEEPSEEK_API_KEY}`,
+      const response = await fetch(
+        "https://api.deepseek.com/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "deepseek-chat",
+            messages: messages,
+            stream: true,
+            temperature: body.temperature || 0.7,
+          }),
         },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: messages,
-          stream: true,
-          temperature: body.temperature || 0.7,
-        }),
-      });
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        return new Response(JSON.stringify({ error: `DeepSeek API Error: ${response.status} - ${errorText}` }), {
-          status: response.status,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
+        return new Response(
+          JSON.stringify({
+            error: `DeepSeek API Error: ${response.status} - ${errorText}`,
+          }),
+          {
+            status: response.status,
+            headers: {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*",
+            },
           },
-        });
+        );
       }
 
       // 创建流式响应
@@ -59,7 +67,7 @@ export default {
           "Content-Type": "text/event-stream",
           "Access-Control-Allow-Origin": "*",
           "Cache-Control": "no-cache",
-          "Connection": "keep-alive",
+          Connection: "keep-alive",
         },
       });
     } catch (error) {
