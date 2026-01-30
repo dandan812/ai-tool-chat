@@ -88,10 +88,7 @@ function formatTime(timestamp: number): string {
 
     <!-- 系统提示词设置 -->
     <div class="system-prompt-section">
-      <button
-        class="prompt-toggle-btn"
-        @click="showSystemPrompt = !showSystemPrompt"
-      >
+      <button class="prompt-toggle-btn" @click="showSystemPrompt = !showSystemPrompt">
         <span class="btn-icon">⚙️</span>
         <span>{{ showSystemPrompt ? '收起人设设置' : '设置助手人设' }}</span>
       </button>
@@ -130,11 +127,7 @@ function formatTime(timestamp: number): string {
           </span>
           <span class="session-time">{{ formatTime(session.updatedAt) }}</span>
         </div>
-        <button
-          class="delete-btn"
-          title="删除会话"
-          @click.stop="store.deleteSession(session.id)"
-        >
+        <button class="delete-btn" title="删除会话" @click.stop="store.deleteSession(session.id)">
           ×
         </button>
       </div>
@@ -159,11 +152,7 @@ function formatTime(timestamp: number): string {
           >
             ☀️ 浅色
           </button>
-          <button
-            class="theme-btn"
-            :class="{ active: theme === 'dark' }"
-            @click="setTheme('dark')"
-          >
+          <button class="theme-btn" :class="{ active: theme === 'dark' }" @click="setTheme('dark')">
             🌙 深色
           </button>
         </div>
