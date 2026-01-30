@@ -4,28 +4,38 @@ AI 对话与工具平台，基于 Vue 3 构建的现代化前端应用。
 
 ## 功能特性
 
-
 - 🤖 **AI 智能对话**：与 AI 助手进行实时对话，获取智能回答
 - 💬 **对话历史管理**：查看、切换和删除对话历史
 - 💾 **本地持久化**：对话数据存储在本地，确保数据安全
 - 🌙 **主题切换**：支持浅色和深色主题，适应不同使用场景
 - 📱 **响应式设计**：适配不同屏幕尺寸，在手机和电脑上都有良好表现
 - ⚙️ **助手人设设置**：自定义 AI 助手的系统提示词，调整助手行为
+- 🖼️ **多模态支持**：支持图片上传和处理，与 AI 进行图文交互
+- 📝 **Markdown 渲染**：支持 Markdown 格式的消息内容，包括代码块高亮
+- 📋 **代码复制**：一键复制代码块内容，方便使用
+- 🔥 **热门提问**：提供热门问题推荐，快速开始对话
+- 📊 **步骤指示器**：显示 AI 处理过程的详细步骤
+- 🔄 **自动滚动**：智能自动滚动到最新消息，提升阅读体验
 
 ## 技术栈
 
 ### 前端
+
 - **框架**：Vue 3 + TypeScript
 - **状态管理**：Pinia
 - **路由**：Vue Router
 - **构建工具**：Vite
 - **代码规范**：ESLint + Prettier
-- **样式**：原生 CSS + SASS
+- **样式**：原生 CSS + CSS 变量
+- **Markdown 渲染**：Markdown-It
+- **多模态支持**：FileReader API + Canvas API
 
 ### 后端
+
 - **Cloudflare Workers**：无服务器后端，处理 API 请求
 
 ### 开发工具
+
 - **包管理**：pnpm
 - **Git 钩子**：Husky
 - **CI/CD**：GitHub Actions
@@ -39,18 +49,37 @@ ai-tool-chat/
 │   │   ├── src/
 │   │   │   ├── api/      # API 调用
 │   │   │   ├── components/  # Vue 组件
+│   │   │   │   ├── ChatHeader.vue        # 聊天头部
+│   │   │   │   ├── ChatInput.vue         # 聊天输入
+│   │   │   │   ├── ChatMessage.vue       # 单条消息
+│   │   │   │   ├── ChatMessages.vue      # 消息列表
+│   │   │   │   ├── ImageUploader.vue     # 图片上传
+│   │   │   │   ├── Sidebar.vue           # 侧边栏
+│   │   │   │   └── StepIndicator.vue     # 步骤指示器
 │   │   │   ├── composables/ # 组合式函数
+│   │   │   │   ├── useScroll.ts          # 滚动管理
+│   │   │   │   └── useTheme.ts          # 主题管理
 │   │   │   ├── router/   # 路由配置
 │   │   │   ├── stores/   # Pinia 存储
+│   │   │   │   └── chat.ts               # 聊天状态
+│   │   │   ├── types/    # TypeScript 类型
 │   │   │   ├── views/    # 页面视图
 │   │   │   ├── App.vue   # 根组件
-│   │   │   └── main.ts   # 入口文件
+│   │   │   ├── main.ts   # 入口文件
+│   │   │   └── style.css # 全局样式
 │   │   └── vite.config.ts # Vite 配置
 │   └── worker/           # Cloudflare Worker 后端
 │       ├── src/
+│       │   ├── core/     # 核心功能
+│       │   ├── mcp/       # 模型调用协议
+│       │   ├── skills/    # 技能模块
+│       │   ├── types/     # 类型定义
+│       │   ├── utils/     # 工具函数
 │       │   └── index.ts  # Worker 入口
 │       └── wrangler.toml # Worker 配置
 ├── .github/workflows/    # GitHub Actions 工作流
+├── ERROR_LOG.md          # 错误记录文档
+├── README.md             # 项目说明文档
 ├── package.json          # 根项目配置
 └── pnpm-workspace.yaml   # pnpm 工作区配置
 ```
