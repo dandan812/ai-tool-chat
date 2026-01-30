@@ -181,7 +181,7 @@ MIT License
 如有问题或建议，欢迎通过以下方式联系：
 
 - GitHub Issues：在本仓库创建 Issue
-- Email：your-email@example.com
+- Email：hu_liang2027@163.com
 
 ---
 
