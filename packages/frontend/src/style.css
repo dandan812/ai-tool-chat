@@ -1,90 +1,111 @@
-:root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/**
+ * 全局样式
+ * 包含 CSS 变量定义、基础样式、滚动条样式
+ */
 
-  /* 科技蓝系颜色变量 (Light Mode) */
+/* ==================== CSS 变量 ==================== */
+
+:root {
+  /* 字体 */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+
+  /* 浅色模式 - 科技蓝系 */
   --bg-color: #ffffff;
   --sidebar-bg: #f9fafb;
   --text-color: #1f2937;
   --text-secondary: #6b7280;
   --border-color: #e5e7eb;
-  --message-user-bg: #165DFF;
+
+  /* 消息 */
+  --message-user-bg: #165dff;
   --message-user-text: #ffffff;
   --message-ai-bg: #f3f4f6;
+
+  /* 输入框 */
   --input-bg: #ffffff;
   --input-wrapper-bg: #f3f4f6;
-  --btn-primary-bg: #165DFF;
-  --btn-primary-hover: #2563EB;
+
+  /* 按钮 */
+  --btn-primary-bg: #165dff;
+  --btn-primary-hover: #2563eb;
   --btn-secondary-bg: #f3f4f6;
   --btn-secondary-text: #374151;
   --btn-secondary-border: #e5e7eb;
   --btn-secondary-hover: #e5e7eb;
+
+  /* 状态 */
   --active-session-bg: #e5e7eb;
-  --accent-color: #165DFF;
-  --accent-hover: #2563EB;
+  --accent-color: #165dff;
+  --accent-hover: #2563eb;
   --success-color: #10b981;
-  --success-hover: #34D399;
+  --success-hover: #34d399;
   --warning-color: #f59e0b;
-  --warning-hover: #FBBF24;
-  --error-color: #EF4444;
-  --error-hover: #F87171;
-  --info-color: #8B5CF6;
-  --info-hover: #A78BFA;
-  --gradient-primary: linear-gradient(135deg, #165DFF, #2563EB);
-  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --warning-hover: #fbbf24;
+  --error-color: #ef4444;
+  --error-hover: #f87171;
+  --info-color: #8b5cf6;
+  --info-hover: #a78bfa;
+
+  /* 效果 */
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1),
+    0 1px 2px 0 rgba(0, 0, 0, 0.06);
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+/* ==================== 深色模式 ==================== */
 
-/* Dark Mode 变量覆盖 - 科技蓝系风格 */
 [data-theme='dark'] {
   --bg-color: #0a0a0a;
   --sidebar-bg: #1a1a1a;
   --text-color: #ffffff;
   --text-secondary: #b0b0b0;
   --border-color: #333333;
-  --message-user-bg: #3B82F6;
+
+  --message-user-bg: #3b82f6;
   --message-user-text: #ffffff;
   --message-ai-bg: #2a2a2a;
+
   --input-bg: #0a0a0a;
   --input-wrapper-bg: #2a2a2a;
-  --btn-primary-bg: #3B82F6;
-  --btn-primary-hover: #60A5FA;
-  --btn-secondary-bg: #1F2937;
-  --btn-secondary-text: #F9FAFB;
+
+  --btn-primary-bg: #3b82f6;
+  --btn-primary-hover: #60a5fa;
+  --btn-secondary-bg: #1f2937;
+  --btn-secondary-text: #f9fafb;
   --btn-secondary-border: #374151;
   --btn-secondary-hover: #374151;
+
   --active-session-bg: #3a3a3a;
-  --accent-color: #60A5FA;
-  --accent-hover: #3B82F6;
-  --success-color: #10b981;
-  --success-hover: #34D399;
-  --warning-color: #f59e0b;
-  --warning-hover: #FBBF24;
-  --error-color: #EF4444;
-  --error-hover: #F87171;
-  --info-color: #8B5CF6;
-  --info-hover: #A78BFA;
-  --gradient-primary: linear-gradient(135deg, #3B82F6, #60A5FA);
-  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.5), 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --accent-color: #60a5fa;
+  --accent-hover: #3b82f6;
+
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.5),
+    0 1px 2px 0 rgba(0, 0, 0, 0.4);
 }
 
-html, body {
+/* ==================== 基础样式 ==================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: var(--bg-color);
+  font-family: var(--font-family);
+  font-size: 16px;
+  line-height: 1.5;
   color: var(--text-color);
+  background-color: var(--bg-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.3s, color 0.3s;
 }
 
@@ -93,29 +114,11 @@ html, body {
   height: 100%;
 }
 
-/* 深色模式代码块样式 */
-[data-theme='dark'] .markdown-body pre,
-[data-theme='dark'] .markdown-body pre * {
-  background: #000000 !important;
-  color: #d4d4d4 !important;
-}
+/* ==================== 滚动条 ==================== */
 
-[data-theme='dark'] .code-block-wrapper {
-  border: 1px solid #333333 !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-}
-
-[data-theme='dark'] .code-block-header,
-[data-theme='dark'] .code-block-header * {
-  background: #1a1a1a !important;
-  color: #cccccc !important;
-  border-bottom: 1px solid #333333 !important;
-}
-
-/* 自定义滚动条样式 */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -124,30 +127,59 @@ html, body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border-color);
-  border-radius: 5px;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
 
-/* 移动端隐藏滚动条但保留滚动功能 */
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+/* ==================== 移动端适配 ==================== */
+
 @media (max-width: 768px) {
   ::-webkit-scrollbar {
     display: none;
-    width: 0;
-    height: 0;
   }
-  
-  /* 兼容 Firefox 和其他浏览器 */
+
   * {
-    scrollbar-width: none !important; /* Firefox */
-    -ms-overflow-style: none !important; /* IE 10+ */
+    scrollbar-width: none;
   }
-  
-  /* 防止页面回弹/橡皮筋效果 */
-  html, body {
+
+  html,
+  body {
     overscroll-behavior: none;
-    touch-action: pan-y; /* 允许垂直滚动，禁止水平手势 */
+    touch-action: pan-y;
   }
+}
+
+/* ==================== 工具类 ==================== */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==================== 深色模式代码块样式 ==================== */
+
+[data-theme='dark'] .markdown-body pre {
+  background: #0d0d0d !important;
+}
+
+[data-theme='dark'] .markdown-body pre code,
+[data-theme='dark'] .markdown-body pre span,
+[data-theme='dark'] .markdown-body pre * {
+  background-color: transparent !important;
 }
