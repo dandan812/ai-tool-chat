@@ -248,13 +248,13 @@ function toggleExpand() {
 
 .step-item.running {
   background: var(--accent-color);
-  background-opacity: 0.1;
+ opacity: 0.1; /* ✅ 正确：设置元素整体透明度 */
   box-shadow: 0 0 0 1px var(--accent-color);
 }
 
 .step-item.failed {
   background: var(--error-color);
-  background-opacity: 0.1;
+  opacity: 0.1; /* ✅ 正确：设置元素整体透明度 */
   box-shadow: 0 0 0 1px var(--error-color);
 }
 
