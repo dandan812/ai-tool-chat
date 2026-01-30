@@ -497,7 +497,7 @@
 
 .chat-footer {
   border-top: 1px solid var(--border-color);
-  padding: 20px 24px;
+  padding: 20px 4px;
   background: var(--bg-color);
   transition: all 0.3s;
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.05);

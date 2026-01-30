@@ -1,279 +1,341 @@
 <script setup lang="ts">
 /**
- * Step 进度指示器组件
- * 可视化展示 Task 的执行步骤
+ * Step 进度指示器组件（底部折叠版）
+ * 显示在输入框上方，展示模型调用信息
  */
-import type { Step, Task } from '../types/task';
+import { ref, computed } from 'vue'
+import type { Step, Task } from '../types/task'
 
 interface Props {
-  task: Task | null;
-  steps: Step[];
+  task: Task | null
+  steps: Step[]
 }
 
-defineProps<Props>();
+const props = defineProps<Props>()
 
-// Step 类型图标映射
-const stepIcons: Record<string, string> = {
-  plan: '📋',
-  skill: '⚡',
-  mcp: '🔧',
-  think: '💭',
-  respond: '💬',
-};
+const isExpanded = ref(false)
 
-// Step 状态样式映射
-const statusClasses: Record<string, string> = {
-  pending: 'step-pending',
-  running: 'step-running',
-  completed: 'step-completed',
-  failed: 'step-failed',
-};
+// Step 类型中文映射
+const stepTypeNames: Record<string, string> = {
+  plan: '分析',
+  skill: '执行',
+  mcp: '工具',
+  think: '思考',
+  respond: '生成'
+}
 
-function formatDuration(startedAt?: number, completedAt?: number): string {
-  if (!startedAt) return '';
-  const end = completedAt || Date.now();
-  const duration = end - startedAt;
-  if (duration < 1000) return `${duration}ms`;
-  return `${(duration / 1000).toFixed(1)}s`;
+// 模型名称映射
+const modelNames: Record<string, string> = {
+  'deepseek-chat': 'DeepSeek',
+  'qwen-vl-plus': 'Qwen-VL',
+  'qwen3-vl-flash': 'Qwen3-VL'
+}
+
+// 当前调用的模型
+const currentModel = computed(() => {
+  const skillStep = props.steps.find((s) => s.type === 'skill')
+  if (skillStep?.output && typeof skillStep.output === 'object') {
+    const output = skillStep.output as Record<string, unknown>
+    const model = output.model as string
+    return modelNames[model] || model || 'AI 模型'
+  }
+  return 'AI 模型'
+})
+
+// 当前状态文本
+const statusText = computed(() => {
+  if (!props.task) return ''
+  if (props.task.status === 'completed') return '已完成'
+  if (props.task.status === 'failed') return '已失败'
+
+  const runningStep = props.steps.find((s) => s.status === 'running')
+  if (runningStep) {
+    return stepTypeNames[runningStep.type] || '处理中'
+  }
+  return '处理中'
+})
+
+// 是否已完成
+const isCompleted = computed(() => props.task?.status === 'completed')
+
+// 是否失败
+const isFailed = computed(() => props.task?.status === 'failed')
+
+// 总耗时
+const totalDuration = computed(() => {
+  if (!props.steps.length) return 0
+  const firstStep = props.steps[0]
+  const lastStep = props.steps[props.steps.length - 1]
+  const start = firstStep?.startedAt || 0
+  const end = lastStep?.completedAt || Date.now()
+  return Math.round((end - start) / 1000)
+})
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}秒`
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}分${secs}秒`
+}
+
+function toggleExpand() {
+  isExpanded.value = !isExpanded.value
 }
 </script>
 
 <template>
-  <div v-if="task && steps.length > 0" class="step-indicator">
-    <div class="step-header">
-      <span class="task-type">{{ task.type.toUpperCase() }}</span>
-      <span class="task-status" :class="statusClasses[task.status]">
-        {{ task.status }}
-      </span>
+  <div v-if="task && steps.length > 0" class="step-panel" :class="{ expanded: isExpanded }">
+    <!-- 折叠头部 -->
+    <div class="step-header" @click="toggleExpand">
+      <div class="header-left">
+        <span class="model-badge">{{ currentModel }}</span>
+        <span class="status-text" :class="{ completed: isCompleted, failed: isFailed }">
+          {{ statusText }}
+        </span>
+        <span v-if="isCompleted || isFailed" class="duration">
+          {{ formatDuration(totalDuration) }}
+        </span>
+      </div>
+      <div class="header-right">
+        <span class="step-count">{{ steps.length }} 个步骤</span>
+        <span class="expand-icon" :class="{ rotated: isExpanded }">▼</span>
+      </div>
     </div>
 
-    <div class="steps-list">
-      <div
-        v-for="(step, index) in steps"
-        :key="step.id"
-        class="step-item"
-        :class="[
-          statusClasses[step.status],
-          { 'step-active': step.status === 'running' }
-        ]"
-      >
-        <!-- 步骤序号和图标 -->
-        <div class="step-left">
-          <span class="step-number">{{ index + 1 }}</span>
-          <span class="step-icon">{{ stepIcons[step.type] || '🔹' }}</span>
-        </div>
-
-        <!-- 步骤信息 -->
-        <div class="step-content">
-          <div class="step-name">{{ step.name }}</div>
-          <div v-if="step.description" class="step-description">
-            {{ step.description }}
+    <!-- 展开内容 -->
+    <div v-show="isExpanded" class="step-content">
+      <div class="steps-list">
+        <div v-for="(step, index) in steps" :key="step.id" class="step-item" :class="step.status">
+          <div class="step-left">
+            <span class="step-number">{{ index + 1 }}</span>
+            <span class="step-type">{{ stepTypeNames[step.type] || step.name }}</span>
+            <span v-if="step.description" class="step-desc">{{ step.description }}</span>
           </div>
-          <div v-if="step.error" class="step-error">
-            {{ step.error }}
+          <div class="step-right">
+            <span v-if="step.error" class="error-badge">失败</span>
+            <span v-else-if="step.status === 'completed'" class="success-badge">✓</span>
+            <span v-else-if="step.status === 'running'" class="running-badge">
+              <span class="dot"></span>
+            </span>
           </div>
         </div>
-
-        <!-- 步骤状态和时间 -->
-        <div class="step-right">
-          <span class="step-status-badge" :class="statusClasses[step.status]">
-            {{ step.status }}
-          </span>
-          <span v-if="step.startedAt" class="step-duration">
-            {{ formatDuration(step.startedAt, step.completedAt) }}
-          </span>
-        </div>
-
-        <!-- 连接线 -->
-        <div
-          v-if="index < steps.length - 1"
-          class="step-connector"
-          :class="{ 'connector-active': step.status === 'completed' }"
-        />
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.step-indicator {
-  background: var(--message-ai-bg);
+.step-panel {
+  background: var(--input-wrapper-bg);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
+.step-panel.expanded {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 头部样式 */
 .step-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  user-select: none;
 }
 
-.task-type {
+.step-header:hover {
+  background: var(--btn-secondary-hover);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.model-badge {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent-color);
-  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  background: var(--accent-color);
+  color: white;
+  border-radius: 12px;
 }
 
-.task-status {
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  text-transform: uppercase;
+.status-text {
+  font-size: 13px;
+  color: var(--text-color);
   font-weight: 500;
+}
+
+.status-text.completed {
+  color: var(--success-color);
+}
+
+.status-text.failed {
+  color: var(--error-color);
+}
+
+.duration {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.expand-icon {
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.3s ease;
+}
+
+.expand-icon.rotated {
+  transform: rotate(180deg);
+}
+
+/* 内容区域 */
+.step-content {
+  border-top: 1px solid var(--border-color);
+  padding: 12px 14px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .steps-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .step-item {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
   border-radius: 8px;
   background: var(--bg-color);
-  position: relative;
-  transition: all 0.3s ease;
+  transition: all 0.2s;
 }
 
-.step-item.step-running {
+.step-item.running {
   background: var(--accent-color);
   background-opacity: 0.1;
-  box-shadow: 0 0 0 2px var(--accent-color);
+  box-shadow: 0 0 0 1px var(--accent-color);
 }
 
-.step-item.step-completed {
-  opacity: 0.8;
-}
-
-.step-item.step-failed {
+.step-item.failed {
   background: var(--error-color);
   background-opacity: 0.1;
-  box-shadow: 0 0 0 2px var(--error-color);
+  box-shadow: 0 0 0 1px var(--error-color);
 }
 
 .step-left {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  gap: 10px;
 }
 
 .step-number {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--btn-secondary-bg);
   border-radius: 50%;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-color);
 }
 
-.step-icon {
-  font-size: 16px;
-}
-
-.step-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.step-name {
-  font-weight: 500;
+.step-type {
+  font-size: 13px;
   color: var(--text-color);
-  margin-bottom: 2px;
+  font-weight: 500;
 }
 
-.step-description {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.step-error {
-  font-size: 12px;
-  color: var(--error-color);
-  margin-top: 4px;
-}
-
-.step-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.step-status-badge {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  text-transform: uppercase;
-}
-
-.step-duration {
+.step-desc {
   font-size: 11px;
   color: var(--text-secondary);
 }
 
-/* 状态样式 */
-.step-pending {
-  background: var(--btn-secondary-bg);
-  color: var(--text-secondary);
+.step-right {
+  display: flex;
+  align-items: center;
 }
 
-.step-running {
-  background: var(--accent-color);
-  color: white;
-}
-
-.step-completed {
+.success-badge {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--success-color);
   color: white;
+  border-radius: 50%;
+  font-size: 12px;
 }
 
-.step-failed {
+.error-badge {
+  font-size: 11px;
+  padding: 2px 8px;
   background: var(--error-color);
   color: white;
+  border-radius: 4px;
 }
 
-/* 连接线 */
-.step-connector {
-  position: absolute;
-  left: 28px;
-  top: 100%;
-  width: 2px;
-  height: 12px;
-  background: var(--border-color);
-  transition: background 0.3s ease;
+.running-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.connector-active {
-  background: var(--success-color);
+.dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-color);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
-/* 动画 */
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
+    transform: scale(1);
   }
   50% {
-    opacity: 0.6;
+    opacity: 0.5;
+    transform: scale(0.8);
   }
-}
-
-.step-running .step-number {
-  animation: pulse 1.5s ease-in-out infinite;
 }
 </style>

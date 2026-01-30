@@ -18,7 +18,7 @@
   --border-color: #e5e7eb;
 
   /* 消息 */
-  --message-user-bg: #165dff;
+  --message-user-bg: #60a5fa;
   --message-user-text: #ffffff;
   --message-ai-bg: #f3f4f6;
 
@@ -27,7 +27,7 @@
   --input-wrapper-bg: #f3f4f6;
 
   /* 按钮 */
-  --btn-primary-bg: #165dff;
+  --btn-primary-bg: #60a5fa;
   --btn-primary-hover: #2563eb;
   --btn-secondary-bg: #f3f4f6;
   --btn-secondary-text: #374151;
@@ -36,8 +36,8 @@
 
   /* 状态 */
   --active-session-bg: #e5e7eb;
-  --accent-color: #165dff;
-  --accent-hover: #2563eb;
+  --accent-color: #60a5fa;
+  --accent-hover: #93c5fd;
   --success-color: #10b981;
   --success-hover: #34d399;
   --warning-color: #f59e0b;
@@ -69,7 +69,7 @@
   --input-bg: #0a0a0a;
   --input-wrapper-bg: #2a2a2a;
 
-  --btn-primary-bg: #3b82f6;
+  --btn-primary-bg: #3b83f6c5;
   --btn-primary-hover: #60a5fa;
   --btn-secondary-bg: #1f2937;
   --btn-secondary-text: #f9fafb;

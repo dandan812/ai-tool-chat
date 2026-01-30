@@ -1,69 +1,106 @@
 <script setup lang="ts">
 /**
  * 消息列表组件（Task/Step 版）
- * 展示消息、Step 进度、图片
+ * 展示消息、图片
  */
-import { watch } from 'vue';
-import { useChatStore } from '../stores/chat';
-import { useScroll } from '../composables/useScroll';
-import ChatMessage from './ChatMessage.vue';
-import StepIndicator from './StepIndicator.vue';
-import type { Task, Step,  } from '../types/task';
+import { watch, ref } from 'vue'
+import { useChatStore } from '../stores/chat'
+import { useScroll } from '../composables/useScroll'
+import ChatMessage from './ChatMessage.vue'
+import type { Task, Step } from '../types/task'
 
-// ==================== Props ====================
+// ==================== Props & Emits ====================
 
 interface Props {
-  currentTask: Task | null;
-  currentSteps: Step[];
+  currentTask: Task | null
+  currentSteps: Step[]
 }
 
-defineProps<Props>();
+defineProps<Props>()
+
+const emit = defineEmits<{
+  send: [content: string]
+}>()
 
 // ==================== Store & Composables ====================
 
-const store = useChatStore();
-const { container, scrollToBottom, shouldAutoScroll } = useScroll();
+const store = useChatStore()
+const { container, scrollToBottom, shouldAutoScroll } = useScroll()
 
 // ==================== 自动滚动 ====================
 
-watch(() => store.messages.length, scrollToBottom);
+watch(() => store.messages.length, scrollToBottom)
 
 watch(
   () => store.messages[store.messages.length - 1]?.content,
   () => {
     if (shouldAutoScroll()) {
-      scrollToBottom();
+      scrollToBottom()
     }
   }
-);
+)
 
-// ==================== 快捷提问 ====================
+// ==================== 热门提问（随机生成）====================
 
-const SUGGESTIONS = [
+const allSuggestions = [
+  // 编程开发
   '给我一个简单的 JavaScript 代码示例',
   '解释一下什么是 Vue 3',
+  'React 和 Vue 有什么区别？',
+  '如何学习 TypeScript？',
+  '写一个 Python 爬虫示例',
+  '解释一下什么是闭包',
+  '前端性能优化有哪些方法？',
+  '什么是响应式编程？',
+  // AI 技术
+  'GPT 和 DeepSeek 有什么区别？',
+  '如何写好 Prompt？',
+  '解释一下大语言模型原理',
+  'AI 会取代程序员吗？',
+  // 实用工具
   '帮我写一个前端简历模板',
-] as const;
+  '生成一个待办事项清单',
+  '写一封求职邮件',
+  '帮我制定一周健身计划',
+  // 知识科普
+  '解释一下量子计算',
+  '什么是区块链？',
+  '如何投资股票？',
+  '推荐几本好书',
+  // 创意写作
+  '写一个科幻故事开头',
+  '帮我写一首诗',
+  '生成 10 个创业点子',
+  '写一段产品文案'
+]
 
-// ==================== 图片展示 ====================
+// 当前显示的提问
+const suggestions = ref<string[]>([])
 
-// 该函数已废弃，后续如需展示消息图片可在此扩展
-// function getMessageImages(index: number): ImageData[] {
-//   // 从消息中提取图片信息（如果有的话）
-//   // 这里可以根据实际需求调整
-//   return [];
-// }
+// 随机选择 3 个提问
+function generateSuggestions() {
+  const shuffled = [...allSuggestions].sort(() => 0.5 - Math.random())
+  suggestions.value = shuffled.slice(0, 3)
+}
+
+// 初始化
+generateSuggestions()
+
+// 监听会话切换，重新生成提问
+watch(
+  () => store.currentSessionId,
+  () => {
+    generateSuggestions()
+  }
+)
+
+function handleSuggestionClick(suggestion: string) {
+  emit('send', suggestion)
+}
 </script>
 
 <template>
   <main ref="container" class="chat-messages">
-    <!-- Step 进度指示器 -->
-    <StepIndicator
-      v-if="currentTask && currentSteps.length > 0"
-      :task="currentTask"
-      :steps="currentSteps"
-    />
-
     <!-- 空状态 -->
     <div v-if="store.messages.length === 0 && !currentTask" class="empty-state">
       <h2>你好！我是你的 AI 助手</h2>
@@ -71,10 +108,10 @@ const SUGGESTIONS = [
 
       <div class="suggestions">
         <button
-          v-for="suggestion in SUGGESTIONS"
+          v-for="suggestion in suggestions"
           :key="suggestion"
           class="suggestion-btn"
-          @click="store.sendMessage(suggestion)"
+          @click="handleSuggestionClick(suggestion)"
         >
           {{ suggestion }}
         </button>
@@ -90,12 +127,6 @@ const SUGGESTIONS = [
       :content="msg.content"
       @delete="store.deleteMessage"
     />
-
-    <!-- 加载状态 -->
-    <div v-if="store.isLoading && !currentTask" class="loading-state">
-      <div class="loading-spinner" />
-      <p>AI 正在思考...</p>
-    </div>
   </main>
 </template>
 
@@ -107,42 +138,54 @@ const SUGGESTIONS = [
 }
 
 .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
   text-align: center;
-  padding: 60px 20px;
   color: var(--text-color);
 }
 
 .empty-state h2 {
-  font-size: 24px;
+  font-size: 28px;
+  font-weight: 600;
   margin-bottom: 12px;
 }
 
 .empty-state p {
+  font-size: 16px;
   color: var(--text-secondary);
-  margin-bottom: 32px;
+  margin-bottom: 40px;
 }
 
 .suggestions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   gap: 12px;
+  width: 100%;
+  max-width: 480px;
 }
 
 .suggestion-btn {
-  padding: 12px 20px;
-  font-size: 14px;
+  width: 100%;
+  padding: 14px 24px;
+  font-size: 15px;
   color: var(--text-color);
   background: var(--message-ai-bg);
   border: 1px solid var(--border-color);
-  border-radius: 20px;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  text-align: left;
 }
 
 .suggestion-btn:hover {
   background: var(--btn-secondary-hover);
   border-color: var(--accent-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .loading-state {

@@ -160,7 +160,7 @@ function formatTime(timestamp: number): string {
 
       <div class="footer-section">
         <h4>关于</h4>
-        <p class="version-info">版本 1.0.0</p>
+        <p class="version-info">版本 1.3.0</p>
       </div>
     </div>
   </aside>

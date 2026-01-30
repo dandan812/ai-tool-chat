@@ -3,104 +3,114 @@
  * 聊天主页面（Task/Step 版）
  * 整合侧边栏、消息列表、Step 进度、多模态输入
  */
-import { ref } from 'vue';
-import { useChatStore } from '../stores/chat';
-import { sendTaskRequest } from '../api/task';
-import type { Task, Step, ImageData } from '../types/task';
-import Sidebar from '../components/Sidebar.vue';
-import ChatHeader from '../components/ChatHeader.vue';
-import ChatMessages from '../components/ChatMessages.vue';
-import ChatInput from '../components/ChatInput.vue';
-import './Chat.css';
+import { ref, watch } from 'vue'
+import { useChatStore } from '../stores/chat'
+import { sendTaskRequest } from '../api/task'
+import type { Task, Step, ImageData } from '../types/task'
+import Sidebar from '../components/Sidebar.vue'
+import ChatHeader from '../components/ChatHeader.vue'
+import ChatMessages from '../components/ChatMessages.vue'
+import ChatInput from '../components/ChatInput.vue'
+import StepIndicator from '../components/StepIndicator.vue'
+import './Chat.css'
 
-const store = useChatStore();
-const isSidebarOpen = ref(false);
+const store = useChatStore()
+const isSidebarOpen = ref(false)
 
 // Task/Step 状态
-const currentTask = ref<Task | null>(null);
-const currentSteps = ref<Step[]>([]);
-const abortController = ref<AbortController | null>(null);
+const currentTask = ref<Task | null>(null)
+const currentSteps = ref<Step[]>([])
+const abortController = ref<AbortController | null>(null)
+
+// 监听会话切换，重置 Task/Step 状态
+watch(
+  () => store.currentSessionId,
+  () => {
+    currentTask.value = null
+    currentSteps.value = []
+  }
+)
 
 function toggleSidebar() {
-  isSidebarOpen.value = !isSidebarOpen.value;
+  isSidebarOpen.value = !isSidebarOpen.value
 }
 
 function closeSidebar() {
-  isSidebarOpen.value = false;
+  isSidebarOpen.value = false
 }
 
 /**
  * 发送消息（支持多模态）
  */
-async function handleSend(content: string, images: ImageData[]) {
-  if (store.isLoading) return;
+async function handleSend(content: string, images: ImageData[] = []) {
+  if (store.isLoading) return
 
   // 添加用户消息
   store.addMessage(store.currentSessionId!, {
     role: 'user',
-    content: content || (images.length > 0 ? '[图片]' : ''),
-  });
+    content: content || (images.length > 0 ? '[图片]' : '')
+  })
 
   // 准备 AI 回复位置
-  const assistantIndex = store.messages.length;
-  store.messages.push({ role: 'assistant', content: '' });
+  const assistantIndex = store.messages.length
+  store.messages.push({ role: 'assistant', content: '' })
 
-  store.isLoading = true;
-  abortController.value = new AbortController();
+  store.isLoading = true
+  abortController.value = new AbortController()
 
   // 重置 Task/Step 状态
-  currentTask.value = null;
-  currentSteps.value = [];
+  currentTask.value = null
+  currentSteps.value = []
 
   try {
     await sendTaskRequest(
       {
-        messages: store.messages.slice(0, -1).map(m => ({
+        messages: store.messages.slice(0, -1).map((m) => ({
           role: m.role,
-          content: m.content,
+          content: m.content
         })),
         images: images.length > 0 ? images : undefined,
-        temperature: 0.7,
+        temperature: 0.7
       },
       {
         onTaskStart: (task) => {
-          currentTask.value = task;
+          currentTask.value = task
         },
         onTaskUpdate: (task) => {
-          currentTask.value = task;
+          currentTask.value = task
         },
         onStepStart: (step) => {
-          currentSteps.value.push(step);
+          currentSteps.value.push(step)
         },
         onStepComplete: (step) => {
-          const index = currentSteps.value.findIndex(s => s.id === step.id);
+          const index = currentSteps.value.findIndex((s) => s.id === step.id)
           if (index !== -1) {
-            currentSteps.value[index] = step;
+            currentSteps.value[index] = step
           }
         },
         onContent: (content) => {
           if (store.messages[assistantIndex]) {
-            store.messages[assistantIndex].content += content;
+            store.messages[assistantIndex].content += content
           }
         },
         onError: (error) => {
-          console.error('Task error:', error);
+          console.error('Task error:', error)
           if (store.messages[assistantIndex]) {
-            store.messages[assistantIndex].content += '\n\n[错误: ' + error + ']';
+            store.messages[assistantIndex].content += '\n\n[错误: ' + error + ']'
           }
         },
         onComplete: (task) => {
-          currentTask.value = task;
-          store.isLoading = false;
-          abortController.value = null;
-        },
+          currentTask.value = task
+          store.isLoading = false
+          abortController.value = null
+        }
       },
       abortController.value.signal
-    );
+    )
   } catch (error) {
-    console.error(error);
-    store.isLoading = false;
-    abortController.value = null;
+    console.error(error)
+    store.isLoading = false
+    abortController.value = null
   }
 }
 
@@ -109,9 +119,9 @@ async function handleSend(content: string, images: ImageData[]) {
  */
 function handleStop() {
   if (abortController.value) {
-    abortController.value.abort();
-    abortController.value = null;
-    store.isLoading = false;
+    abortController.value.abort()
+    abortController.value = null
+    store.isLoading = false
   }
 }
 </script>
@@ -128,9 +138,16 @@ function handleStop() {
     <div class="chat-layout">
       <ChatHeader @toggle-sidebar="toggleSidebar" />
 
-      <ChatMessages :current-task="currentTask" :current-steps="currentSteps" />
+      <ChatMessages :current-task="currentTask" :current-steps="currentSteps" @send="handleSend" />
 
       <footer class="chat-footer">
+        <!-- Step 进度指示器（底部） -->
+        <StepIndicator
+          v-if="currentTask && currentSteps.length > 0"
+          :task="currentTask"
+          :steps="currentSteps"
+        />
+
         <ChatInput :loading="store.isLoading" @send="handleSend" @stop="handleStop" />
       </footer>
     </div>
