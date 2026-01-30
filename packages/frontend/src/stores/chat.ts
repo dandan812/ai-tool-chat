@@ -357,6 +357,7 @@ AI：${aiMsg.slice(0, 300)}`
     switchSession,
     deleteSession,
     updateSystemPrompt,
+    addMessage,
     deleteMessage,
     sendMessage,
     stopGeneration,

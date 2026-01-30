@@ -32,9 +32,9 @@ export const multimodalSkill: Skill = {
       // 构建 Qwen-VL 格式的消息
       const qwenMessages = buildQwenMessages(messages, images);
 
-      // 调用 Qwen API
+      // 调用 Qwen API - 使用兼容 OpenAI 的格式
       const response = await fetch(
-        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         {
           method: "POST",
           headers: {
@@ -42,7 +42,7 @@ export const multimodalSkill: Skill = {
             Authorization: `Bearer ${env.QWEN_API_KEY}`,
           },
           body: JSON.stringify({
-            model: "qwen3-vl-flash",
+            model: "qwen-vl-plus",
             messages: qwenMessages,
             stream: true,
             temperature,
@@ -102,6 +102,7 @@ export const multimodalSkill: Skill = {
 
 /**
  * 构建 Qwen-VL 格式的消息
+ * 使用 OpenAI 兼容格式
  */
 function buildQwenMessages(
   messages: Message[],
@@ -109,21 +110,23 @@ function buildQwenMessages(
 ): unknown[] {
   return messages.map((msg) => {
     if (msg.role === "user" && images.length > 0) {
-      // 多模态消息格式
+      // 多模态消息格式 - OpenAI 兼容格式
       const content: unknown[] = [];
 
       // 添加图片
       for (const img of images) {
         content.push({
-          type: "image",
-          image: img.base64,
+          type: "image_url",
+          image_url: {
+            url: `data:${img.mimeType};base64,${img.base64}`,
+          },
         });
       }
 
       // 添加文本
       content.push({
         type: "text",
-        text: msg.content,
+        text: msg.content || "请描述这张图片",
       });
 
       return {
@@ -156,10 +159,10 @@ function parseQwenSSELine(line: string): SkillStreamChunk | null {
 
   try {
     const json = JSON.parse(data);
-    // Qwen 的响应格式可能不同，根据实际情况调整
+    // OpenAI 兼容格式的响应
     const content =
-      json.output?.choices?.[0]?.message?.content ||
-      json.choices?.[0]?.delta?.content;
+      json.choices?.[0]?.delta?.content ||
+      json.choices?.[0]?.message?.content;
 
     if (content) {
       return { type: "content", content };
