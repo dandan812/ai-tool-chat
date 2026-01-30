@@ -250,10 +250,14 @@ function handleClick(e: MouseEvent) {
 
 /* 深色模式 - 代码块样式 (组件级别) */
 :deep(.code-block-wrapper) {
-  /* 确保深色模式下边框正确 */
+  border-color: var(--border-color);
 }
 
 :deep(.code-block-header) {
   /* 确保深色模式下头部正确 */
+  background: var(--code-header-bg);
+  color: var(--code-header-text);
+  border-bottom-color: var(--border-color);
 }
+
 </style>
