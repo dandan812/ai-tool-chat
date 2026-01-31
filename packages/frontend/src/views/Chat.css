@@ -632,7 +632,8 @@
 /* 响应式调整 */
 @media (max-width: 480px) {
   .sidebar {
-    width: 100%;
+    width: 85%;
+    max-width: 300px;
   }
 
   .app-logo h2 {
