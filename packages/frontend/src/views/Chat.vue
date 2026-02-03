@@ -3,11 +3,11 @@
  * 聊天主页面 - 优化版
  * 使用 Composable 管理状态和逻辑
  */
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { sendTaskRequest } from '../api/task'
 import { useTaskManager, createTaskCallbacks } from '../composables/useTaskManager'
-import type { ImageData } from '../types/task'
+import type { ImageData, FileData } from '../types/task'
 
 // 组件导入
 import Sidebar from '../components/Sidebar.vue'
@@ -82,16 +82,24 @@ function closeSidebar() {
 }
 
 /**
- * 发送消息（支持多模态）
+ * 发送消息（支持多模态和文件）
  */
-async function handleSend(content: string, images: ImageData[] = []) {
+async function handleSend(content: string, images: ImageData[] = [], files: FileData[] = []) {
   const sessionId = store.currentSessionId
   if (!sessionId || store.isSessionLoading(sessionId)) return
+
+  // 构建用户消息内容
+  let userContent = content
+  if (images.length > 0 && !userContent) {
+    userContent = '[图片]'
+  } else if (files.length > 0 && !userContent) {
+    userContent = `[文件: ${files.map(f => f.name).join(', ')}]`
+  }
 
   // 添加用户消息
   store.addMessage(sessionId, {
     role: 'user',
-    content: content || (images.length > 0 ? '[图片]' : '')
+    content: userContent || '[消息]'
   })
 
   // 准备 AI 回复位置 - 直接操作 store 中的消息数组
@@ -117,6 +125,7 @@ async function handleSend(content: string, images: ImageData[] = []) {
       {
         messages: apiMessages,
         images: images.length > 0 ? images : undefined,
+        files: files.length > 0 ? files : undefined,
         temperature: 0.7
       },
       {

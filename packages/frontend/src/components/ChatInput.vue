@@ -8,10 +8,12 @@
  * - 柔和阴影和微交互
  */
 import { ref, computed } from 'vue'
-import type { ImageData } from '../types/task'
+import type { ImageData, FileData } from '../types/task'
 import ImageUploader from './ImageUploader.vue'
+import FileUploader from './FileUploader.vue'
 import { useAutoResize } from '../composables/useAutoResize'
 import { fileToImageData } from '../utils/image'
+import { isSupportedTextFile } from '../utils/file'
 
 interface Props {
   loading?: boolean
@@ -20,23 +22,27 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  send: [content: string, images: ImageData[]]
+  send: [content: string, images: ImageData[], files: FileData[]]
   stop: []
 }>()
 
 const input = ref('')
 const images = ref<ImageData[]>([])
+const files = ref<FileData[]>([])
 const showImageUploader = ref(false)
+const showFileUploader = ref(false)
 
 const canSend = computed(() => {
-  return (input.value.trim() || images.value.length > 0) && !props.loading
+  return (input.value.trim() || images.value.length > 0 || files.value.length > 0) && !props.loading
 })
 
 defineExpose({
   clear: () => {
     input.value = ''
     images.value = []
+    files.value = []
     showImageUploader.value = false
+    showFileUploader.value = false
     reset()
   }
 })
@@ -63,6 +69,26 @@ async function handlePaste(e: ClipboardEvent) {
   }
 }
 
+import { fileToFileData } from '../utils/file'
+
+async function handleFilePaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items) return
+
+  for (const item of items) {
+    const file = item.getAsFile()
+    if (file && isSupportedTextFile(file)) {
+      try {
+        const fileData = await fileToFileData(file)
+        addFile(fileData)
+        showFileUploader.value = true
+      } catch (err) {
+        console.error('Failed to paste file:', err)
+      }
+    }
+  }
+}
+
 function addImage(image: ImageData) {
   images.value.push(image)
 }
@@ -71,15 +97,25 @@ function removeImage(id: string) {
   images.value = images.value.filter((img) => img.id !== id)
 }
 
+function addFile(file: FileData) {
+  files.value.push(file)
+}
+
+function removeFile(id: string) {
+  files.value = files.value.filter((f) => f.id !== id)
+}
+
 function handleSend() {
   if (!canSend.value) return
 
-  emit('send', input.value.trim(), images.value)
+  emit('send', input.value.trim(), images.value, files.value)
 
   // 发送后清空输入框
   input.value = ''
   images.value = []
+  files.value = []
   showImageUploader.value = false
+  showFileUploader.value = false
   reset()
 }
 
@@ -96,6 +132,11 @@ function handleKeydown(e: KeyboardEvent) {
     <!-- 图片上传区域 -->
     <div v-if="showImageUploader" class="image-area">
       <ImageUploader :images="images" @add="addImage" @remove="removeImage" />
+    </div>
+
+    <!-- 文件上传区域 -->
+    <div v-if="showFileUploader" class="file-area">
+      <FileUploader :files="files" @add="addFile" @remove="removeFile" />
     </div>
 
     <!-- 输入框主体 -->
@@ -115,6 +156,22 @@ function handleKeydown(e: KeyboardEvent) {
             <polyline points="21 15 16 10 5 21"></polyline>
           </svg>
         </button>
+
+        <button
+          class="tool-btn"
+          :class="{ active: showFileUploader }"
+          @click="showFileUploader = !showFileUploader"
+          title="添加文件"
+          aria-label="添加文件"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+        </button>
       </div>
 
       <!-- 文本输入 -->
@@ -127,7 +184,7 @@ function handleKeydown(e: KeyboardEvent) {
         class="message-input"
         @keydown="handleKeydown"
         @input="resize"
-        @paste="handlePaste"
+        @paste="(e) => { handlePaste(e); handleFilePaste(e); }"
       />
 
       <!-- 发送/停止按钮 -->
@@ -173,7 +230,8 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 /* 图片上传区域 */
-.image-area {
+.image-area,
+.file-area {
   max-width: 900px;
   margin: 0 auto var(--space-4);
   padding: var(--space-4);

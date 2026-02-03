@@ -76,6 +76,17 @@ export interface ImageData {
   file?: File;
 }
 
+// ==================== 文件上传 ====================
+
+export interface FileData {
+  id: string;
+  name: string;
+  content: string;
+  mimeType: string;
+  size: number;
+  file?: File;
+}
+
 // ==================== 工具调用 ====================
 
 export interface ToolCall {

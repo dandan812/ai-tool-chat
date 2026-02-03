@@ -20,25 +20,90 @@ const emit = defineEmits<{
   delete: [index: number]
 }>()
 
-const md = new MarkdownIt()
+// 配置 MarkdownIt，为代码块添加复制按钮
+const md = new MarkdownIt({
+  highlight: (str: string, lang: string) => {
+    const escapedStr = escapeHtml(str)
+    const langDisplay = lang || 'text'
+    
+    return `
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang">${langDisplay}</span>
+    <button class="copy-code-btn" data-code="${escapeAttr(str)}" title="复制代码">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <span class="btn-text">复制</span>
+    </button>
+  </div>
+  <pre><code class="language-${lang || 'text'}">${escapedStr}</code></pre>
+</div>
+    `.trim()
+  }
+})
+
+// 覆盖默认的代码块渲染规则
+md.renderer.rules.fence = (tokens, idx) => {
+  const token = tokens[idx]
+  if (!token) return ''
+  
+  const code = token.content
+  const lang = token.info?.trim() || ''
+  
+  const highlight = md.options.highlight
+  if (highlight) {
+    return highlight(code, lang, '')
+  }
+  return `<pre><code>${escapeHtml(code)}</code></pre>`
+}
+
+// HTML 转义函数
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+// HTML 属性转义
+function escapeAttr(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+    .replace(/\n/g, '&#10;')
+    .replace(/\r/g, '&#13;')
+}
+
 const htmlContent = computed(() => md.render(props.content))
 const isUser = computed(() => props.role === 'user')
 
 function handleClick(e: MouseEvent) {
   const target = e.target as HTMLElement
-  if (!target.classList.contains('copy-code-btn')) return
+  const btn = target.closest('.copy-code-btn') as HTMLElement
+  if (!btn) return
 
-  const code = target.getAttribute('data-code')
+  const code = btn.getAttribute('data-code')
   if (!code) return
 
   navigator.clipboard.writeText(code).then(() => {
-    const original = target.textContent ?? '复制'
-    target.textContent = '已复制!'
-    target.classList.add('copied')
+    const btnText = btn.querySelector('.btn-text')
+    const originalText = btnText?.textContent ?? '复制'
+    
+    if (btnText) {
+      btnText.textContent = '已复制!'
+    }
+    btn.classList.add('copied')
 
     setTimeout(() => {
-      target.textContent = original
-      target.classList.remove('copied')
+      if (btnText) {
+        btnText.textContent = originalText
+      }
+      btn.classList.remove('copied')
     }, 2000)
   })
 }
@@ -65,7 +130,7 @@ function handleClick(e: MouseEvent) {
       <div v-if="!isUser" class="markdown-body" v-html="htmlContent" @click="handleClick" />
       
       <!-- 用户消息 -->
-      <div v-else class="user-text">{{ content }}</div>
+      <div v-else class="user-text markdown-body" v-html="htmlContent" />
 
       <!-- 暂停标记 -->
       <div v-if="isPaused" class="pause-indicator">
@@ -133,10 +198,14 @@ function handleClick(e: MouseEvent) {
 .bubble {
   position: relative;
   max-width: 80%;
-  padding: var(--space-4) var(--space-5);
+  min-width: 0;
+  padding: 16px 20px;
   line-height: 1.7;
   border-radius: var(--radius-xl);
   transition: all var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: break-word;
 }
 
 .message-row.user .bubble {
@@ -152,11 +221,52 @@ function handleClick(e: MouseEvent) {
   border-bottom-left-radius: var(--radius-sm);
 }
 
+/* Markdown 内容容器 */
+.markdown-body {
+  overflow-wrap: break-word;
+  min-width: 0;
+  width: 100%;
+}
+
 /* 用户文本 */
 .user-text {
   font-size: var(--text-base);
-  white-space: pre-wrap;
+  line-height: 1.7;
   word-break: break-word;
+}
+
+/* 用户消息的 Markdown 样式调整 */
+.message-row.user :deep(.markdown-body p) {
+  margin: 0 0 var(--space-3);
+}
+
+.message-row.user :deep(.markdown-body p:last-child) {
+  margin-bottom: 0;
+}
+
+.message-row.user :deep(.markdown-body pre) {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  overflow-x: auto;
+  font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+}
+
+.message-row.user :deep(.markdown-body code) {
+  padding: var(--space-1) var(--space-2);
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9em;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+}
+
+.message-row.user :deep(.markdown-body pre code) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
 }
 
 /* 操作按钮 */
@@ -203,6 +313,7 @@ function handleClick(e: MouseEvent) {
 :deep(.markdown-body) {
   font-size: var(--text-base);
   line-height: 1.7;
+  overflow-wrap: break-word;
 }
 
 :deep(.markdown-body p) {
@@ -247,24 +358,36 @@ function handleClick(e: MouseEvent) {
 }
 
 :deep(.copy-code-btn) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
   font-weight: 500;
-  color: white;
-  background: var(--accent-primary);
-  border: none;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 :deep(.copy-code-btn:hover) {
-  background: var(--accent-primary-hover);
+  color: white;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
   transform: translateY(-1px);
 }
 
 :deep(.copy-code-btn.copied) {
+  color: white;
   background: var(--success);
+  border-color: var(--success);
+}
+
+:deep(.code-lang) {
+  font-family: var(--font-sans);
+  letter-spacing: 0.05em;
 }
 
 :deep(.markdown-body code) {

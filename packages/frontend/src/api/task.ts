@@ -3,13 +3,14 @@
  * 支持新的 SSE 事件格式（Task/Step/Content）
  */
 import type { ChatMessage } from './ai';
-import type { Task, Step, SSEEvent, ImageData } from '../types/task';
+import type { Task, Step, SSEEvent, ImageData, FileData } from '../types/task';
 
 const API_URL = 'https://api.i-tool-chat.store';
 
 export interface TaskRequest {
   messages: ChatMessage[];
   images?: ImageData[];
+  files?: FileData[];
   temperature?: number;
   enableTools?: boolean;
 }
