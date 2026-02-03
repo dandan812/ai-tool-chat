@@ -57,6 +57,7 @@ export async function sendTaskRequest(
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       console.log('Request aborted by user');
+      // 用户主动取消，不触发错误回调
       return;
     }
     callbacks.onError?.(String(error));
@@ -157,6 +158,7 @@ function handleSSEEvent(event: SSEEvent, callbacks: TaskCallbacks): void {
 
     case 'content': {
       const { content } = event.data as { content: string };
+      console.log('[TaskAPI] Received content:', JSON.stringify(content));
       callbacks.onContent?.(content);
       break;
     }

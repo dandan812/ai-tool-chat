@@ -1,291 +1,345 @@
 <script setup lang="ts">
 /**
- * 聊天输入组件（多模态版）
- * 支持文本输入、图片上传、快捷键发送
+ * 聊天输入组件 - 《反主流》美学
+ * 
+ * 特点：
+ * - 有机圆角输入框
+ * - 温暖的橙色强调
+ * - 柔和阴影和微交互
  */
 import { ref, computed } from 'vue'
 import type { ImageData } from '../types/task'
 import ImageUploader from './ImageUploader.vue'
+import { useAutoResize } from '../composables/useAutoResize'
+import { fileToImageData } from '../utils/image'
 
-// ==================== Props & Emits ====================
-
-/**
- * 组件 Props 定义
- * @property loading - 是否正在加载中，控制按钮显示状态
- */
 interface Props {
   loading?: boolean
 }
 
 const props = defineProps<Props>()
 
-/**
- * 组件事件定义
- * @event send - 发送消息事件，携带文本内容和图片数组
- * @event stop - 停止生成事件
- */
 const emit = defineEmits<{
   send: [content: string, images: ImageData[]]
   stop: []
 }>()
 
-// ==================== 输入状态 ====================
-
-/** 输入框文本内容 */
 const input = ref('')
-
-/** 已上传的图片数组 */
 const images = ref<ImageData[]>([])
-
-/** 是否显示图片上传区域 */
 const showImageUploader = ref(false)
 
-/**
- * 是否可以发送消息
- * 条件：有文本内容或有图片，且不在加载中
- */
 const canSend = computed(() => {
   return (input.value.trim() || images.value.length > 0) && !props.loading
 })
 
-// ==================== 图片处理 ====================
+defineExpose({
+  clear: () => {
+    input.value = ''
+    images.value = []
+    showImageUploader.value = false
+    reset()
+  }
+})
 
-/**
- * 添加图片到上传列表
- * @param image - 图片数据对象
- */
+const { textareaRef, resize, reset } = useAutoResize()
+
+async function handlePaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items) return
+
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) {
+        try {
+          const imageData = await fileToImageData(file)
+          addImage(imageData)
+          showImageUploader.value = true
+        } catch (err) {
+          console.error('Failed to paste image:', err)
+        }
+      }
+    }
+  }
+}
+
 function addImage(image: ImageData) {
   images.value.push(image)
 }
 
-/**
- * 从上传列表移除图片
- * @param id - 图片唯一标识
- */
 function removeImage(id: string) {
   images.value = images.value.filter((img) => img.id !== id)
 }
 
-// ==================== 发送处理 ====================
-
-/**
- * 处理发送消息
- * 触发 send 事件并清空输入状态
- */
 function handleSend() {
   if (!canSend.value) return
 
-  // 触发发送事件，传递文本和图片
   emit('send', input.value.trim(), images.value)
 
-  // 重置输入状态
+  // 发送后清空输入框
   input.value = ''
   images.value = []
   showImageUploader.value = false
+  reset()
 }
 
-/**
- * 处理键盘按键事件
- * Enter 发送消息，Shift+Enter 换行
- * @param e - 键盘事件对象
- */
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     handleSend()
   }
 }
-
-/**
- * 自动调整文本框高度
- * 根据内容行数动态调整，最大高度 200px
- * @param e - 输入事件对象
- */
-function autoResize(e: Event) {
-  const el = e.target as HTMLTextAreaElement
-  el.style.height = 'auto'
-  el.style.height = `${Math.min(el.scrollHeight, 200)}px`
-}
 </script>
 
 <template>
-  <!-- 输入容器 -->
-  <div class="input-container">
-    <!-- 图片上传区域 - 点击 📷 按钮后显示 -->
-    <div v-if="showImageUploader" class="uploader-wrapper">
+  <div class="input-section">
+    <!-- 图片上传区域 -->
+    <div v-if="showImageUploader" class="image-area">
       <ImageUploader :images="images" @add="addImage" @remove="removeImage" />
     </div>
 
     <!-- 输入框主体 -->
-    <div class="input-wrapper">
+    <div class="input-box">
       <!-- 左侧工具栏 -->
       <div class="toolbar">
-        <!-- 图片上传按钮 -->
         <button
-          class="toolbar-btn"
+          class="tool-btn"
           :class="{ active: showImageUploader }"
           @click="showImageUploader = !showImageUploader"
-          title="上传图片"
+          title="添加图片"
+          aria-label="添加图片"
         >
-          📷
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
         </button>
       </div>
 
-      <!-- 文本输入框 -->
+      <!-- 文本输入 -->
       <textarea
+        ref="textareaRef"
         v-model="input"
         :disabled="loading"
-        placeholder="输入消息..."
+        placeholder="想说点什么..."
         rows="1"
-        class="chat-textarea"
+        class="message-input"
         @keydown="handleKeydown"
-        @input="autoResize"
+        @input="resize"
+        @paste="handlePaste"
       />
 
-      <!-- 右侧操作按钮 -->
-      <!-- 未加载时显示发送按钮 -->
-      <button v-if="!loading" class="send-btn" :disabled="!canSend" @click="handleSend">
-        发送
+      <!-- 发送/停止按钮 -->
+      <button
+        v-if="!loading"
+        class="action-btn send"
+        :disabled="!canSend"
+        @click="handleSend"
+        aria-label="发送"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
       </button>
-      <!-- 加载中时显示停止按钮 -->
-      <button v-else class="stop-btn" @click="emit('stop')">停止</button>
+      
+      <button
+        v-else
+        class="action-btn pause"
+        @click="emit('stop')"
+        title="暂停生成"
+        aria-label="暂停"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="6" y="4" width="4" height="16"></rect>
+          <rect x="14" y="4" width="4" height="16"></rect>
+        </svg>
+      </button>
+    </div>
+
+    <!-- 快捷提示 -->
+    <div class="input-hint">
+      <span>Enter 发送 · Shift + Enter 换行</span>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 输入容器 - 底部固定区域 */
-.input-container {
-  padding: 16px 20px;
-  background: var(--bg-color);
-  border-top: 1px solid var(--border-color);
+.input-section {
+  padding: var(--space-4) var(--space-6);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-subtle);
 }
 
-/* 图片上传区域包装器 */
-.uploader-wrapper {
-  margin-bottom: 12px;
-  padding: 12px;
-  background: var(--input-wrapper-bg);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+/* 图片上传区域 */
+.image-area {
+  max-width: 900px;
+  margin: 0 auto var(--space-4);
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  animation: fadeIn 200ms ease-out;
 }
 
-/* 输入框主体 - 圆角卡片样式 */
-.input-wrapper {
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 输入框主体 - 有机药丸形状 */
+.input-box {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  width: 100%;
-  max-width: 1200px;
+  gap: var(--space-3);
+  max-width: 900px;
   margin: 0 auto;
-  padding: 8px 12px;
-  background: var(--input-wrapper-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
+  padding: var(--space-3) var(--space-4);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
 }
 
-/* 聚焦状态 - 高亮边框 */
-.input-wrapper:focus-within {
-  border-color: var(--accent-color);
-  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.1);
+.input-box:focus-within {
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 0 3px var(--input-focus-ring), var(--shadow-md);
 }
 
-/* 工具栏 - 左侧按钮组 */
+/* 工具栏 */
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-right: 8px;
-  border-right: 1px solid var(--border-color);
-  height: 36px;
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--border-subtle);
 }
 
-/* 工具栏按钮 */
-.toolbar-btn {
-  width: 36px;
-  height: 36px;
+.tool-btn {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 36px;
+  height: 36px;
   background: transparent;
+  color: var(--text-muted);
   border: none;
-  border-radius: 8px;
-  font-size: 24px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.2s;
-  line-height: 1;
-  padding: 0;
+  transition: all var(--transition-fast);
 }
 
-.toolbar-btn:hover {
-  background: var(--btn-secondary-hover);
+.tool-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
-/* 工具栏按钮激活状态 */
-.toolbar-btn.active {
-  background: var(--btn-secondary-hover);
+.tool-btn.active {
+  background: var(--accent-primary);
+  color: white;
+  box-shadow: var(--shadow-warm);
 }
 
-/* 文本输入框 - 自适应高度 */
-.chat-textarea {
+/* 文本输入 */
+.message-input {
   flex: 1;
   min-height: 36px;
-  max-height: 200px;
-  padding: 10px 12px;
-  font-family: inherit;
-  font-size: 16px;
-  line-height: 1.5;
-  color: var(--text-color);
+  max-height: 160px;
+  padding: var(--space-2) 0;
   background: transparent;
   border: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  line-height: 1.6;
   resize: none;
   outline: none;
 }
 
-/* 发送按钮 */
-.send-btn {
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  color: white;
-  background: var(--btn-primary-bg);
+.message-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* 操作按钮 */
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border: none;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
+  flex-shrink: 0;
 }
 
-.send-btn:hover:not(:disabled) {
-  background: var(--btn-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+/* 发送按钮 - 橙色强调 */
+.action-btn.send {
+  background: var(--accent-primary);
+  color: white;
+  box-shadow: var(--shadow-warm);
 }
 
-/* 发送按钮禁用状态 */
-.send-btn:disabled {
-  background: var(--btn-secondary-bg);
+.action-btn.send:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 6px 20px -4px var(--accent-glow);
+}
+
+.action-btn.send:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
-/* 停止按钮 - 红色警示 */
-.stop-btn {
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
+/* 暂停按钮 - 温暖橙色 */
+.action-btn.pause {
+  background: linear-gradient(135deg, #F97316 0%, #FBBF24 100%);
   color: white;
-  background: var(--error-color);
-  border: none;
-  border-radius: 16px;
-  cursor: pointer;
-  transition: all 0.2s;
+  animation: pulse-warm 2s ease-in-out infinite;
 }
 
-.stop-btn:hover {
-  background: var(--error-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+@keyframes pulse-warm {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(249, 115, 22, 0);
+  }
+}
+
+.action-btn.pause:hover {
+  transform: scale(1.05);
+}
+
+/* 底部提示 */
+.input-hint {
+  max-width: 900px;
+  margin: var(--space-3) auto 0;
+  text-align: center;
+}
+
+.input-hint span {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .input-section {
+    padding: var(--space-3) var(--space-4);
+  }
+  
+  .input-box {
+    padding: var(--space-2) var(--space-3);
+  }
+  
+  .input-hint {
+    display: none;
+  }
 }
 </style>

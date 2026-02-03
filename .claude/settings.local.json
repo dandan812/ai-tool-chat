@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(glm-plan-usage:usage-query)",
+      "Skill(usage-query-skill)",
+      "Bash(pnpm add:*)",
+      "Bash(uipro init:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}

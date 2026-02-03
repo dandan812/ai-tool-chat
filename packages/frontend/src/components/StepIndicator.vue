@@ -127,19 +127,21 @@ function toggleExpand() {
 <style scoped>
 .step-panel {
   background: var(--input-wrapper-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  margin-bottom: 12px;
+  border: 2px solid var(--border-color);
+  border-radius: 16px;
+  margin-bottom: 14px;
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: var(--transition);
   width: 100%;
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
+  box-shadow: var(--card-shadow);
 }
 
 .step-panel.expanded {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--card-shadow-hover), var(--glow-shadow);
+  border-color: var(--accent-color);
 }
 
 /* 头部样式 */
@@ -147,9 +149,9 @@ function toggleExpand() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 14px;
+  padding: 12px 16px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: var(--transition);
   user-select: none;
 }
 
@@ -160,22 +162,24 @@ function toggleExpand() {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .model-badge {
   font-size: 12px;
-  font-weight: 600;
-  padding: 4px 10px;
-  background: var(--accent-color);
+  font-weight: 700;
+  padding: 6px 12px;
+  background: var(--btn-primary-bg);
   color: white;
-  border-radius: 12px;
+  border-radius: 14px;
+  letter-spacing: 0.3px;
+  box-shadow: var(--card-shadow);
 }
 
 .status-text {
   font-size: 13px;
   color: var(--text-color);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .status-text.completed {
@@ -189,23 +193,25 @@ function toggleExpand() {
 .duration {
   font-size: 12px;
   color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .step-count {
   font-size: 12px;
   color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .expand-icon {
   font-size: 10px;
   color: var(--text-secondary);
-  transition: transform 0.3s ease;
+  transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .expand-icon.rotated {
@@ -214,15 +220,15 @@ function toggleExpand() {
 
 /* 内容区域 */
 .step-content {
-  border-top: 1px solid var(--border-color);
-  padding: 12px 14px;
-  animation: slideDown 0.3s ease;
+  border-top: 1.5px solid var(--border-color);
+  padding: 14px 16px;
+  animation: slideDown 0.4s ease-out;
 }
 
 @keyframes slideDown {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(-12px);
   }
   to {
     opacity: 1;
@@ -233,29 +239,34 @@ function toggleExpand() {
 .steps-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .step-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
   background: var(--bg-color);
-  transition: all 0.2s;
+  transition: var(--transition);
+  border: 1.5px solid transparent;
+}
+
+.step-item:hover {
+  border-color: var(--border-color);
+  box-shadow: var(--card-shadow);
 }
 
 .step-item.running {
-  background: var(--accent-color);
- opacity: 0.1; /* ✅ 正确：设置元素整体透明度 */
-  box-shadow: 0 0 0 1px var(--accent-color);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+ box-shadow: 0 0 0 2px var(--accent-color), var(--glow-shadow);
+  animation: stepPulse 2s ease-in-out infinite;
 }
 
 .step-item.failed {
-  background: var(--error-color);
-  opacity: 0.1; /* ✅ 正确：设置元素整体透明度 */
-  box-shadow: 0 0 0 1px var(--error-color);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(249, 115, 22, 0.15) 100%);
+  box-shadow: 0 0 0 2px var(--error-color);
 }
 
 .step-left {
@@ -265,16 +276,17 @@ function toggleExpand() {
 }
 
 .step-number {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--btn-secondary-bg);
   border-radius: 50%;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-color);
+  box-shadow: var(--card-shadow);
 }
 
 .step-type {
@@ -307,10 +319,11 @@ function toggleExpand() {
 
 .error-badge {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 4px 10px;
   background: var(--error-color);
   color: white;
-  border-radius: 4px;
+  border-radius: 8px;
+  font-weight: 600;
 }
 
 .running-badge {
@@ -320,11 +333,12 @@ function toggleExpand() {
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   background: var(--accent-color);
   border-radius: 50%;
   animation: pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 10px var(--accent-color);
 }
 
 @keyframes pulse {

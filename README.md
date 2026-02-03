@@ -1,12 +1,12 @@
 # AI Tool Chat Platform
 
-AI 对话与工具平台，基于 Vue 3 构建的现代化前端应用。
+AI 对话与工具平台，基于 Vue 3 构建的现代化前端应用，支持多种 AI 模型和先进的 UI/UX 设计系统。
 
 ## 功能特性
 
-- 🤖 **AI 智能对话**：与 AI 助手进行实时对话，获取智能回答
-- 💬 **对话历史管理**：查看、切换和删除对话历史
-- 💾 **本地持久化**：对话数据存储在本地，确保数据安全
+- 🤖 **多模型支持**：集成 Kimi K2.5、GLM 等多种顶级 AI 模型
+- 💬 **AI 智能对话**：与 AI 助手进行实时对话，获取智能回答
+- � **对话历史管理**：查看、切换和删除对话历史，支持本地持久化
 - 🌙 **主题切换**：支持浅色和深色主题，适应不同使用场景
 - 📱 **响应式设计**：适配不同屏幕尺寸，在手机和电脑上都有良好表现
 - ⚙️ **助手人设设置**：自定义 AI 助手的系统提示词，调整助手行为
@@ -16,6 +16,11 @@ AI 对话与工具平台，基于 Vue 3 构建的现代化前端应用。
 - 🔥 **热门提问**：提供热门问题推荐，快速开始对话
 - 📊 **步骤指示器**：显示 AI 处理过程的详细步骤
 - 🔄 **自动滚动**：智能自动滚动到最新消息，提升阅读体验
+- 🛠️ **MCP 协议支持**：实现 Model Context Protocol，内置代码执行和网页搜索工具
+- 🧠 **智能技能路由**：根据输入内容（文本/图片）自动选择最佳处理技能
+- 🎨 **反主流美学设计**：基于 ui-ux-pro-max 技能的现代化设计系统
+- 🚀 **高性能渲染**：优化的渲染性能，流畅的用户体验
+- 🔒 **数据安全**：对话数据存储在本地，确保数据安全和隐私保护
 
 ## 技术栈
 
@@ -24,11 +29,19 @@ AI 对话与工具平台，基于 Vue 3 构建的现代化前端应用。
 - **框架**：Vue 3 + TypeScript
 - **状态管理**：Pinia
 - **路由**：Vue Router
-- **构建工具**：Vite
+- **构建工具**：Vite 7
 - **代码规范**：ESLint + Prettier
-- **样式**：原生 CSS + CSS 变量
+- **样式**：原生 CSS + CSS 变量 + ui-ux-pro-max 设计系统
 - **Markdown 渲染**：Markdown-It
 - **多模态支持**：FileReader API + Canvas API
+- **性能优化**：组件懒加载、虚拟列表、代码分割
+
+### 设计系统
+
+- **ui-ux-pro-max**：集成先进的设计系统，提供反主流美学设计
+- **响应式布局**：自适应各种屏幕尺寸
+- **主题系统**：支持自定义主题和动态主题切换
+- **无障碍设计**：考虑键盘导航和屏幕阅读器支持
 
 ### 后端
 
@@ -88,8 +101,9 @@ ai-tool-chat/
 
 ### 前置条件
 
-- Node.js 16.0 或更高版本
+- Node.js 18.0 或更高版本
 - pnpm 8.0 或更高版本
+- Git 版本控制系统
 
 ### 安装依赖
 
@@ -190,8 +204,29 @@ pnpm --filter @ai-tool-chat/worker deploy
 
 Worker 需要配置以下环境变量：
 
-- `OPENAI_API_KEY`：OpenAI API 密钥
+- `OPENAI_API_KEY`：OpenAI API 密钥（可选）
 - `ANTHROPIC_API_KEY`：Anthropic API 密钥（可选）
+- `KIMI_API_KEY`：Kimi AI API 密钥（推荐）
+- `ZHIPU_API_KEY`：智谱 AI API 密钥（可选）
+
+### 模型配置
+
+可以通过以下方式配置使用的 AI 模型：
+
+1. **Kimi K2.5 配置**：
+
+   ```bash
+   ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic
+   ANTHROPIC_AUTH_TOKEN=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ANTHROPIC_DEFAULT_MODEL=kimi-k2-turbo-preview
+   ```
+
+2. **GLM 配置**：
+   ```bash
+   ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic
+   ANTHROPIC_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ANTHROPIC_DEFAULT_MODEL=GLM-4.7
+   ```
 
 ## 贡献指南
 

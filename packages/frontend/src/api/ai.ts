@@ -120,6 +120,7 @@ function processBuffer(buffer: string, onChunk: (chunk: string) => void): string
 
 /**
  * 处理单行 SSE 数据
+ * 支持后端 Task → Step → Skill 架构的事件格式
  */
 function processLine(line: string, onChunk: (chunk: string) => void): void {
   const trimmed = line.trim()
@@ -135,11 +136,22 @@ function processLine(line: string, onChunk: (chunk: string) => void): void {
   }
 
   try {
-    const json: StreamChunk = JSON.parse(data)
-    const content = json.choices?.[0]?.delta?.content
+    const json = JSON.parse(data) as {
+      type?: string
+      data?: { content?: string }
+      choices?: Array<{ delta?: { content?: string } }>
+    }
 
-    if (content) {
-      onChunk(content)
+    // 新的后端格式: { type: 'content', data: { content: '...' } }
+    if (json.type === 'content' && json.data?.content) {
+      onChunk(json.data.content)
+      return
+    }
+
+    // 兼容旧的 OpenAI 格式: { choices: [{ delta: { content: '...' } }] }
+    const legacyContent = json.choices?.[0]?.delta?.content
+    if (legacyContent) {
+      onChunk(legacyContent)
     }
   } catch (e) {
     console.warn('Failed to parse SSE data:', e)

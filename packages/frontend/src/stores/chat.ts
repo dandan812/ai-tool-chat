@@ -1,12 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, shallowRef } from 'vue'
 import { type ChatMessage, sendChatRequest } from '../api/ai'
 
-/**
- * ==================== 类型定义 ====================
- */
+// ==================== 类型定义 ====================
 
-/** 会话信息 */
 export interface ChatSession {
   id: string
   title: string
@@ -15,16 +12,13 @@ export interface ChatSession {
   systemPrompt?: string
 }
 
-/** 存储数据结构 */
 interface StorageData {
   sessionList: ChatSession[]
   messagesMap: Record<string, ChatMessage[]>
   currentSessionId: string
 }
 
-/**
- * ==================== 常量定义 ====================
- */
+// ==================== 常量定义 ====================
 
 const STORAGE_KEYS = {
   SESSION_LIST: 'chat_session_list',
@@ -32,62 +26,129 @@ const STORAGE_KEYS = {
   CURRENT_SESSION_ID: 'chat_current_session_id'
 } as const
 
-/**
- * ==================== Store 定义 ====================
- */
+const STORAGE_VERSION = 'v1'
+const MAX_STORAGE_SIZE = 4 * 1024 * 1024 // 4MB 限制
+const TITLE_MAX_LENGTH = 50
+const DEBOUNCE_MS = 300
+
+// ==================== 工具函数 ====================
+
+function generateId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number) {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return (...args: Parameters<T>) => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), delay)
+  }
+}
+
+function estimateSize(data: unknown): number {
+  return new Blob([JSON.stringify(data)]).size
+}
+
+// ==================== Store 定义 ====================
 
 export const useChatStore = defineStore('chat', () => {
-  // ==================== State ====================
-
+  // State
   const sessionList = ref<ChatSession[]>([])
   const messagesMap = ref<Record<string, ChatMessage[]>>({})
   const currentSessionId = ref<string>('')
   const isLoading = ref(false)
-  const abortController = ref<AbortController | null>(null)
+  const abortController = shallowRef<AbortController | null>(null)
+  const storageError = ref<string | null>(null)
+  
+  // 按会话的 loading 状态
+  const sessionLoadingMap = ref<Record<string, boolean>>({})
+  
+  // 流式内容追踪 - 用于实时显示AI生成内容
+  const streamingContent = ref<{ sessionId: string; index: number; content: string } | null>(null)
 
-  // ==================== Getters ====================
-
+  // Getters
+  const sessions = computed(() => sessionList.value)
   const currentSession = computed(() =>
     sessionList.value.find((s) => s.id === currentSessionId.value)
   )
-
   const messages = computed(() => {
     if (!currentSessionId.value) return []
     return messagesMap.value[currentSessionId.value] ?? []
   })
 
-  // ==================== 本地存储操作 ====================
+  // ==================== 存储管理 ====================
 
-  function saveToStorage() {
-    localStorage.setItem(STORAGE_KEYS.SESSION_LIST, JSON.stringify(sessionList.value))
-    localStorage.setItem(STORAGE_KEYS.MESSAGES_MAP, JSON.stringify(messagesMap.value))
-    localStorage.setItem(STORAGE_KEYS.CURRENT_SESSION_ID, currentSessionId.value)
+  const saveToStorage = debounce(() => {
+    try {
+      const data = {
+        sessionList: sessionList.value,
+        messagesMap: messagesMap.value,
+        version: STORAGE_VERSION
+      }
+
+      // 检查存储大小
+      if (estimateSize(data) > MAX_STORAGE_SIZE) {
+        // 清理旧消息
+        cleanupOldMessages()
+      }
+
+      localStorage.setItem(STORAGE_KEYS.SESSION_LIST, JSON.stringify(sessionList.value))
+      localStorage.setItem(STORAGE_KEYS.MESSAGES_MAP, JSON.stringify(messagesMap.value))
+      localStorage.setItem(STORAGE_KEYS.CURRENT_SESSION_ID, currentSessionId.value)
+      storageError.value = null
+    } catch (error) {
+      console.error('Storage save failed:', error)
+      storageError.value = '存储空间不足，已清理旧数据'
+      cleanupOldMessages()
+    }
+  }, DEBOUNCE_MS)
+
+  function cleanupOldMessages(): void {
+    const sessions = sessionList.value
+    if (sessions.length <= 3) return
+
+    // 保留最近3个会话的完整消息
+    const recentIds = new Set(sessions.slice(0, 3).map(s => s.id))
+    const newMap: Record<string, ChatMessage[]> = {}
+
+    for (const [id, msgs] of Object.entries(messagesMap.value)) {
+      if (recentIds.has(id)) {
+        newMap[id] = msgs
+      } else {
+        // 旧会话只保留最近10条
+        newMap[id] = msgs.slice(-10)
+      }
+    }
+
+    messagesMap.value = newMap
   }
 
   function loadFromStorage(): StorageData | null {
     try {
-      const sessionList = localStorage.getItem(STORAGE_KEYS.SESSION_LIST)
-      const messagesMap = localStorage.getItem(STORAGE_KEYS.MESSAGES_MAP)
-      const currentSessionId = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID)
+      const sessionListData = localStorage.getItem(STORAGE_KEYS.SESSION_LIST)
+      const messagesMapData = localStorage.getItem(STORAGE_KEYS.MESSAGES_MAP)
+      const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID)
 
-      if (sessionList && messagesMap) {
-        return {
-          sessionList: JSON.parse(sessionList),
-          messagesMap: JSON.parse(messagesMap),
-          currentSessionId: currentSessionId ?? ''
-        }
+      if (!sessionListData || !messagesMapData) return null
+
+      const sessions: ChatSession[] = JSON.parse(sessionListData)
+      const messages: Record<string, ChatMessage[]> = JSON.parse(messagesMapData)
+
+      // 数据验证
+      if (!Array.isArray(sessions)) return null
+
+      return {
+        sessionList: sessions,
+        messagesMap: messages,
+        currentSessionId: currentId ?? sessions[0]?.id ?? ''
       }
     } catch (error) {
-      console.error('Failed to load from storage:', error)
+      console.error('Storage load failed:', error)
+      return null
     }
-    return null
   }
 
   // ==================== 会话管理 ====================
-
-  function generateId(): string {
-    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
-  }
 
   function createSession(title?: string, initialMessages?: ChatMessage[]): string {
     const id = generateId()
@@ -101,18 +162,18 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     sessionList.value.unshift(newSession)
-    messagesMap.value[id] = initialMessages ?? []
+    messagesMap.value = { ...messagesMap.value, [id]: initialMessages ?? [] }
     currentSessionId.value = id
     saveToStorage()
 
     return id
   }
 
-  function switchSession(id: string): void {
-    if (sessionList.value.some((s) => s.id === id)) {
-      currentSessionId.value = id
-      saveToStorage()
-    }
+  function switchSession(id: string): boolean {
+    if (!sessionList.value.some((s) => s.id === id)) return false
+    currentSessionId.value = id
+    saveToStorage()
+    return true
   }
 
   function deleteSession(id: string): void {
@@ -120,15 +181,14 @@ export const useChatStore = defineStore('chat', () => {
     if (index === -1) return
 
     sessionList.value.splice(index, 1)
-    delete messagesMap.value[id]
+    const newMap = { ...messagesMap.value }
+    delete newMap[id]
+    messagesMap.value = newMap
 
     if (id === currentSessionId.value) {
       if (sessionList.value.length > 0) {
         const newIndex = Math.min(index, sessionList.value.length - 1)
-        const targetSession = sessionList.value[newIndex]
-        if (targetSession) {
-          currentSessionId.value = targetSession.id
-        }
+        currentSessionId.value = sessionList.value[newIndex]?.id ?? ''
       } else {
         createSession()
       }
@@ -139,27 +199,27 @@ export const useChatStore = defineStore('chat', () => {
 
   function updateSessionTitle(id: string, title: string): void {
     const session = sessionList.value.find((s) => s.id === id)
-    if (session && title.trim()) {
-      session.title = title.trim().slice(0, 50)
-      saveToStorage()
-    }
+    if (!session || !title.trim()) return
+
+    session.title = title.trim().slice(0, TITLE_MAX_LENGTH)
+    saveToStorage()
   }
 
   function updateSystemPrompt(id: string, prompt: string): void {
     const session = sessionList.value.find((s) => s.id === id)
-    if (session) {
-      session.systemPrompt = prompt
-      saveToStorage()
-    }
+    if (!session) return
+
+    session.systemPrompt = prompt
+    saveToStorage()
   }
 
   // ==================== 消息管理 ====================
 
   function addMessage(sessionId: string, message: ChatMessage): void {
     if (!messagesMap.value[sessionId]) {
-      messagesMap.value[sessionId] = []
+      messagesMap.value = { ...messagesMap.value, [sessionId]: [] }
     }
-    messagesMap.value[sessionId].push(message)
+    messagesMap.value[sessionId]!.push(message)
 
     const session = sessionList.value.find((s) => s.id === sessionId)
     if (session) {
@@ -171,16 +231,21 @@ export const useChatStore = defineStore('chat', () => {
 
   function deleteMessage(index: number): void {
     if (!currentSessionId.value) return
-    messagesMap.value[currentSessionId.value]?.splice(index, 1)
+    const sessionId = currentSessionId.value
+    const msgs = messagesMap.value[sessionId]
+    if (!msgs) return
+
+    msgs.splice(index, 1)
+    messagesMap.value = { ...messagesMap.value }
     saveToStorage()
   }
 
   function clearMessages(): void {
     stopGeneration()
-    if (currentSessionId.value) {
-      messagesMap.value[currentSessionId.value] = []
-      saveToStorage()
-    }
+    if (!currentSessionId.value) return
+
+    messagesMap.value = { ...messagesMap.value, [currentSessionId.value]: [] }
+    saveToStorage()
   }
 
   // ==================== AI 交互 ====================
@@ -202,12 +267,8 @@ AI：${aiMsg.slice(0, 300)}`
     try {
       await sendChatRequest(
         [{ role: 'user', content: prompt }],
-        (chunk) => {
-          titleBuffer += chunk
-        },
-        (error) => {
-          console.warn('Title generation failed:', error)
-        },
+        (chunk) => { titleBuffer += chunk },
+        () => {}, // 忽略错误
         () => {
           const finalTitle = titleBuffer
             .trim()
@@ -218,8 +279,8 @@ AI：${aiMsg.slice(0, 300)}`
           }
         }
       )
-    } catch (e) {
-      console.warn('Title generation exception:', e)
+    } catch {
+      // 静默失败，标题不重要
     }
   }
 
@@ -241,7 +302,6 @@ AI：${aiMsg.slice(0, 300)}`
 
     try {
       const apiMessages = buildApiMessages(sessionMessages, isReGenerate)
-
       if (apiMessages.length === 0) {
         isLoading.value = false
         return
@@ -251,17 +311,20 @@ AI：${aiMsg.slice(0, 300)}`
         apiMessages,
         (chunk) => {
           if (sessionMessages[assistantIndex]) {
-            sessionMessages[assistantIndex].content += chunk
+            const msg = sessionMessages[assistantIndex]
+            sessionMessages[assistantIndex] = { ...msg, content: msg.content + chunk }
           }
         },
         (error) => {
           console.error('Chat error:', error)
-          const errorMsg =
-            error.message.includes('Failed to fetch') || error.message.includes('network error')
-              ? '[后端服务未部署，请检查 Cloudflare Worker 配置]'
-              : '[出错了，请重试]'
+          const isNetworkError = error.message?.includes('Failed to fetch') || 
+                                 error.message?.includes('network')
+          const errorMsg = isNetworkError 
+            ? '[网络错误，请检查连接]' 
+            : '[出错了，请重试]'
           if (sessionMessages[assistantIndex]) {
-            sessionMessages[assistantIndex].content += '\n\n' + errorMsg
+            const msg = sessionMessages[assistantIndex]
+            sessionMessages[assistantIndex] = { ...msg, content: msg.content + '\n\n' + errorMsg }
           }
         },
         () => {
@@ -269,6 +332,7 @@ AI：${aiMsg.slice(0, 300)}`
           abortController.value = null
           saveToStorage()
 
+          // 生成智能标题（前3条消息后）
           if (sessionMessages.length === 3) {
             const userMsgIndex = isReGenerate ? assistantIndex - 2 : assistantIndex - 1
             const userMsg = sessionMessages[userMsgIndex]?.content || content
@@ -280,9 +344,9 @@ AI：${aiMsg.slice(0, 300)}`
         },
         abortController.value.signal
       )
-    } catch (err) {
-      console.error(err)
+    } catch {
       isLoading.value = false
+      abortController.value = null
     }
   }
 
@@ -293,8 +357,8 @@ AI：${aiMsg.slice(0, 300)}`
       .filter((m) => m.role !== 'system')
       .map((m) => ({ ...m }))
 
-    const firstMessage = apiMessages[0]
-    if (firstMessage && firstMessage.role === 'assistant') {
+    // 移除开头的 assistant 消息
+    if (apiMessages[0]?.role === 'assistant') {
       apiMessages.shift()
     }
 
@@ -302,13 +366,8 @@ AI：${aiMsg.slice(0, 300)}`
     if (session?.systemPrompt?.trim()) {
       apiMessages.unshift({
         role: 'system',
-        content: `You must strictly follow this persona: ${session.systemPrompt}`
+        content: session.systemPrompt.trim()
       })
-
-      const lastMsg = apiMessages[apiMessages.length - 1]
-      if (lastMsg?.role === 'user') {
-        lastMsg.content = `[IMPORTANT: Remember to speak as ${session.systemPrompt}]\n\n${lastMsg.content}`
-      }
     }
 
     return apiMessages
@@ -327,13 +386,40 @@ AI：${aiMsg.slice(0, 300)}`
   function init(): void {
     const data = loadFromStorage()
 
-    if (data) {
+    if (data?.sessionList?.length) {
       sessionList.value = data.sessionList
       messagesMap.value = data.messagesMap
-      currentSessionId.value = data.currentSessionId || sessionList.value[0]?.id || ''
+      currentSessionId.value = data.currentSessionId || data.sessionList[0]?.id || ''
     } else {
       createSession()
     }
+  }
+
+  // ==================== 流式内容辅助函数 ====================
+  
+  function setStreamingContent(sessionId: string, index: number, content: string) {
+    streamingContent.value = { sessionId, index, content }
+  }
+  
+  function clearStreamingContent() {
+    streamingContent.value = null
+  }
+  
+  function getMessageContent(sessionId: string, index: number, originalContent: string): string {
+    if (streamingContent.value?.sessionId === sessionId && streamingContent.value?.index === index) {
+      return streamingContent.value.content
+    }
+    return originalContent
+  }
+  
+  // ==================== 按会话 loading 状态 ====================
+  
+  function setSessionLoading(sessionId: string, loading: boolean) {
+    sessionLoadingMap.value[sessionId] = loading
+  }
+  
+  function isSessionLoading(sessionId: string): boolean {
+    return sessionLoadingMap.value[sessionId] || false
   }
 
   init()
@@ -342,15 +428,14 @@ AI：${aiMsg.slice(0, 300)}`
 
   return {
     // State
-    sessionList,
-    messagesMap,
-    currentSessionId,
-    isLoading,
-
-    // Getters (兼容旧 API)
-    sessions: computed(() => sessionList.value),
+    sessions,
     currentSession,
     messages,
+    messagesMap,
+    streamingContent,
+    currentSessionId,
+    isLoading,
+    storageError,
 
     // Actions
     createSession,
@@ -361,6 +446,12 @@ AI：${aiMsg.slice(0, 300)}`
     deleteMessage,
     sendMessage,
     stopGeneration,
-    clearChat: clearMessages
+    clearChat: clearMessages,
+    cleanupOldMessages,
+    setStreamingContent,
+    clearStreamingContent,
+    getMessageContent,
+    setSessionLoading,
+    isSessionLoading
   }
 })

@@ -1,17 +1,17 @@
 <script setup lang="ts">
 /**
- * 单条消息组件
- * 支持 Markdown 渲染、代码块复制、消息删除
+ * 单条消息组件 - 《反主流》美学
+ * 
+ * 有机气泡、温暖交互
  */
 import { computed } from 'vue'
 import MarkdownIt from 'markdown-it'
-
-// ==================== Props & Emits ====================
 
 interface Props {
   role: 'user' | 'assistant' | 'system'
   content: string
   index: number
+  isPaused?: boolean
 }
 
 const props = defineProps<Props>()
@@ -20,44 +20,9 @@ const emit = defineEmits<{
   delete: [index: number]
 }>()
 
-// ==================== Markdown 配置 ====================
-
-const md = new MarkdownIt({
-  html: false, // 禁用 HTML，防止 XSS
-  linkify: true, // 自动转换 URL 为链接
-  breaks: true // 换行转 <br>
-})
-
-// 自定义代码块渲染，添加复制按钮
-const defaultRender =
-  md.renderer.rules.fence ??
-  ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
-
-md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-  const token = tokens[idx]
-  if (!token) return ''
-
-  const code = token.content.replace(/"/g, '&quot;')
-  const lang = token.info?.trim().split(/\s+/)[0] ?? ''
-  const rawCode = defaultRender(tokens, idx, options, env, self)
-
-  return `
-    <div class="code-block-wrapper">
-      <div class="code-block-header">
-        <span class="code-lang">${lang || 'code'}</span>
-        <button class="copy-code-btn" data-code="${code}">Copy</button>
-      </div>
-      ${rawCode}
-    </div>
-  `
-}
-
-// ==================== 计算属性 ====================
-
+const md = new MarkdownIt()
 const htmlContent = computed(() => md.render(props.content))
 const isUser = computed(() => props.role === 'user')
-
-// ==================== 事件处理 ====================
 
 function handleClick(e: MouseEvent) {
   const target = e.target as HTMLElement
@@ -67,8 +32,8 @@ function handleClick(e: MouseEvent) {
   if (!code) return
 
   navigator.clipboard.writeText(code).then(() => {
-    const original = target.textContent ?? 'Copy'
-    target.textContent = 'Copied!'
+    const original = target.textContent ?? '复制'
+    target.textContent = '已复制!'
     target.classList.add('copied')
 
     setTimeout(() => {
@@ -80,180 +45,311 @@ function handleClick(e: MouseEvent) {
 </script>
 
 <template>
-  <div class="message-container" :class="{ 'message-user': isUser, 'message-ai': !isUser }">
-    <div class="message-content">
-      <!-- AI 消息：Markdown 渲染 -->
-      <div v-if="!isUser" class="markdown-body" v-html="htmlContent" @click="handleClick" />
+  <div class="message-row" :class="{ 'user': isUser, 'ai': !isUser }">
+    <!-- 头像 -->
+    <div class="avatar">
+      <svg v-if="isUser" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+      <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+        <line x1="12" y1="19" x2="12" y2="22"></line>
+      </svg>
+    </div>
 
-      <!-- 用户消息：纯文本 -->
-      <div v-else>{{ content }}</div>
+    <!-- 内容 -->
+    <div class="bubble">
+      <!-- AI 消息 -->
+      <div v-if="!isUser" class="markdown-body" v-html="htmlContent" @click="handleClick" />
+      
+      <!-- 用户消息 -->
+      <div v-else class="user-text">{{ content }}</div>
+
+      <!-- 暂停标记 -->
+      <div v-if="isPaused" class="pause-indicator">
+        <span class="pause-dot"></span>
+        <span class="pause-text">已暂停</span>
+      </div>
 
       <!-- 操作按钮 -->
-      <div class="message-actions">
-        <button class="action-btn" title="删除消息" @click="emit('delete', index)">🗑️</button>
+      <div class="actions">
+        <button class="action-btn" title="删除" @click="emit('delete', index)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"></path>
+            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+          </svg>
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.message-container {
+.message-row {
   display: flex;
-  gap: 12px;
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 16px;
+  gap: var(--space-3);
+  animation: slideIn 0.4s ease-out;
 }
 
-.message-user {
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-row.user {
   flex-direction: row-reverse;
 }
 
-.message-content {
-  position: relative;
-  max-width: 80%;
-  padding: 12px 16px;
-  line-height: 1.6;
-  word-wrap: break-word;
-  border-radius: 12px;
+/* 头像 */
+.avatar {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
 }
 
-.message-user .message-content {
+.message-row.user .avatar {
   background: var(--message-user-bg);
   color: var(--message-user-text);
-  border-radius: 12px 0 12px 12px;
 }
 
-.message-ai .message-content {
+.message-row.ai .avatar {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  color: white;
+}
+
+/* 气泡 */
+.bubble {
+  position: relative;
+  max-width: 80%;
+  padding: var(--space-4) var(--space-5);
+  line-height: 1.7;
+  border-radius: var(--radius-xl);
+  transition: all var(--transition-fast);
+}
+
+.message-row.user .bubble {
+  background: var(--message-user-bg);
+  color: var(--message-user-text);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.message-row.ai .bubble {
   background: var(--message-ai-bg);
-  color: var(--text-color);
-  border-radius: 0 12px 12px 12px;
+  color: var(--message-ai-text);
+  border: 1px solid var(--message-ai-border);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+/* 用户文本 */
+.user-text {
+  font-size: var(--text-base);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* 操作按钮 */
-.message-actions {
+.actions {
   position: absolute;
-  bottom: -30px;
+  bottom: -28px;
   left: 0;
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-fast);
 }
 
-.message-user .message-actions {
+.message-row.user .actions {
   left: auto;
   right: 0;
 }
 
-.message-container:hover .message-actions {
+.bubble:hover .actions {
   opacity: 1;
 }
 
 .action-btn {
-  padding: 2px 6px;
-  font-size: 14px;
-  color: var(--text-color);
-  background: var(--bg-color);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all var(--transition-fast);
 }
 
 .action-btn:hover {
-  background: var(--btn-secondary-hover);
+  background: var(--error);
+  color: white;
+  border-color: var(--error);
 }
 
-/* Markdown 样式 - 浅色模式 */
+/* Markdown 样式 */
 :deep(.markdown-body) {
-  will-change: transform;
-  backface-visibility: hidden;
-}
-
-:deep(.markdown-body pre) {
-  margin: 0;
-  padding: 16px;
-  overflow-x: auto;
-  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.5;
-  white-space: pre;
-  background: #f3f4f6;
-  border-radius: 0 0 8px 8px;
-}
-
-:deep(.code-block-wrapper) {
-  margin: 16px 0;
-  overflow: hidden;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-:deep(.code-block-header) {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
-  font-family: sans-serif;
-  font-size: 12px;
-  color: #6b7280;
-  background: #e5e7eb;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-:deep(.code-lang) {
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-:deep(.copy-code-btn) {
-  min-width: 70px;
-  padding: 4px 12px;
-  font-size: 11px;
-  color: #e5e7eb;
-  cursor: pointer;
-  background: #374151;
-  border: 1px solid #4b5563;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-:deep(.copy-code-btn:hover) {
-  color: #ffffff;
-  background: #4b5563;
-  border-color: #6b7280;
-}
-
-:deep(.copy-code-btn.copied) {
-  color: #ffffff;
-  background: #10b981;
-  border-color: #10b981;
-}
-
-:deep(.markdown-body code) {
-  padding: 2px 4px;
-  color: var(--text-color);
-  background: var(--btn-secondary-bg);
-  border-radius: 4px;
+  font-size: var(--text-base);
+  line-height: 1.7;
 }
 
 :deep(.markdown-body p) {
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-3);
 }
 
 :deep(.markdown-body p:last-child) {
   margin-bottom: 0;
 }
 
-/* 深色模式 - 代码块样式 (组件级别) */
+:deep(.markdown-body pre) {
+  margin: 0;
+  padding: var(--space-4);
+  overflow-x: auto;
+  font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  background: var(--gray-950);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  color: var(--gray-200);
+}
+
 :deep(.code-block-wrapper) {
-  /* 确保深色模式下边框正确 */
+  margin: var(--space-4) 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
 }
 
 :deep(.code-block-header) {
-  /* 确保深色模式下头部正确 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+:deep(.copy-code-btn) {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: white;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+:deep(.copy-code-btn:hover) {
+  background: var(--accent-primary-hover);
+  transform: translateY(-1px);
+}
+
+:deep(.copy-code-btn.copied) {
+  background: var(--success);
+}
+
+:deep(.markdown-body code) {
+  padding: var(--space-1) var(--space-2);
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9em;
+  color: var(--accent-primary);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+:deep(.markdown-body pre code) {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border-radius: 0;
+}
+
+/* 列表样式 */
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
+  margin: var(--space-3) 0;
+  padding-left: var(--space-6);
+}
+
+:deep(.markdown-body li) {
+  margin-bottom: var(--space-2);
+}
+
+/* 链接 */
+:deep(.markdown-body a) {
+  color: var(--accent-primary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+:deep(.markdown-body a:hover) {
+  border-bottom-color: var(--accent-primary);
+}
+
+/* 暂停标记 */
+.pause-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.pause-dot {
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(135deg, #F97316 0%, #FBBF24 100%);
+  border-radius: 50%;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+.pause-text {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .bubble {
+    max-width: 90%;
+    padding: var(--space-3) var(--space-4);
+  }
+  
+  .actions {
+    opacity: 1;
+  }
 }
 </style>

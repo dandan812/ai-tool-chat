@@ -1,124 +1,375 @@
 /**
- * 全局样式
- * 包含 CSS 变量定义、基础样式、滚动条样式
+ * 《反主流》美学设计系统
+ * 
+ * 设计理念：
+ * - "现代但不要紫色" → 深灰 (#1C1917) + 橙色 (#EA580C)
+ * - "极简但要有温度" → 大留白 + 手绘质感 + 温暖微交互
+ * - "科技感但不要冰冷" → 深色基底 + 暖色点缀 + 柔和阴影
+ * 
+ * Style References: Minimalism + Soft UI Evolution + Dark Mode OLED
+ * Color Palette: Dark Gray (E-commerce Luxury variant) + Warm Amber
+ * Typography: Inter (clean) + Space Grotesk (character)
  */
 
-/* ==================== CSS 变量 ==================== */
+/* ==================== Google Fonts ==================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+/* ==================== CSS 变量 - 反主流美学 ==================== */
 
 :root {
-  /* 字体 */
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  /* 字体系统 */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', var(--font-sans);
+  
+  /* 字体大小 - 大留白设计 */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+  
+  /* 间距系统 - 大留白 */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+  
+  /* 圆角 - 有机手感 */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+  --radius-full: 9999px;
 
-  /* 浅色模式 - 科技蓝系 */
-  --bg-color: #ffffff;
-  --sidebar-bg: #f9fafb;
-  --text-color: #1f2937;
-  --text-secondary: #6b7280;
-  --border-color: #e5e7eb;
-
-  /* 消息 */
-  --message-user-bg: #60a5fa;
-  --message-user-text: #ffffff;
-  --message-ai-bg: #f3f4f6;
-
+  /* ===== 核心配色 - 深灰 + 橙 ===== */
+  
+  /* 主色调 - 深灰系 */
+  --gray-950: #0A0A0A;
+  --gray-900: #1C1917;      /* 主背景 */
+  --gray-850: #1F1C1A;
+  --gray-800: #292524;      /* 卡片背景 */
+  --gray-750: #33302E;
+  --gray-700: #44403C;      /* 边框、次要背景 */
+  --gray-600: #57534E;
+  --gray-500: #78716C;
+  --gray-400: #A8A29E;
+  --gray-300: #D6D3D1;
+  --gray-200: #E7E5E4;
+  --gray-100: #F5F5F4;
+  --gray-50: #FAFAF9;
+  
+  /* 暖色点缀 - 橙/琥珀系 */
+  --amber-950: #451A03;
+  --amber-900: #78350F;
+  --amber-800: #92400E;
+  --amber-700: #B45309;
+  --amber-600: #D97706;     /* 主强调色 */
+  --amber-500: #F59E0B;     /* 悬停高亮 */
+  --amber-400: #FBBF24;
+  --amber-300: #FCD34D;
+  --amber-200: #FDE68A;
+  --amber-100: #FEF3C7;
+  --amber-50: #FFFBEB;
+  
+  /* 橙色变体 */
+  --orange-600: #EA580C;    /* CTA 按钮 */
+  --orange-500: #F97316;    /* 高亮 */
+  --orange-400: #FB923C;
+  
+  /* 功能色 */
+  --success: #22C55E;
+  --success-dark: #16A34A;
+  --warning: #EAB308;
+  --error: #EF4444;
+  --info: #06B6D4;
+  
+  /* ===== 浅色模式（默认） - 极简单色 ===== */
+  --bg-primary: var(--gray-50);
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: var(--gray-100);
+  --bg-elevated: #FFFFFF;
+  
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-tertiary: var(--gray-500);
+  --text-muted: var(--gray-400);
+  
+  --border-subtle: var(--gray-200);
+  --border-default: var(--gray-300);
+  --border-strong: var(--gray-400);
+  
+  /* 强调色 */
+  --accent-primary: var(--orange-600);
+  --accent-primary-hover: var(--orange-500);
+  --accent-secondary: var(--amber-600);
+  --accent-glow: rgba(234, 88, 12, 0.3);
+  
+  /* 消息气泡 */
+  --message-user-bg: var(--gray-900);
+  --message-user-text: var(--gray-50);
+  --message-ai-bg: #FFFFFF;
+  --message-ai-border: var(--gray-200);
+  --message-ai-text: var(--gray-800);
+  
   /* 输入框 */
-  --input-bg: #ffffff;
-  --input-wrapper-bg: #f3f4f6;
-
-  /* 按钮 */
-  --btn-primary-bg: #60a5fa;
-  --btn-primary-hover: #2563eb;
-  --btn-secondary-bg: #f3f4f6;
-  --btn-secondary-text: #374151;
-  --btn-secondary-border: #e5e7eb;
-  --btn-secondary-hover: #e5e7eb;
-
-  /* 状态 */
-  --active-session-bg: #e5e7eb;
-  --accent-color: #60a5fa;
-  --accent-hover: #93c5fd;
-  --success-color: #10b981;
-  --success-hover: #34d399;
-  --warning-color: #f59e0b;
-  --warning-hover: #fbbf24;
-  --error-color: #ef4444;
-  --error-hover: #f87171;
-  --info-color: #8b5cf6;
-  --info-hover: #a78bfa;
-
-  /* 效果 */
-  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1),
-    0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --input-bg: #FFFFFF;
+  --input-border: var(--gray-300);
+  --input-focus-border: var(--orange-500);
+  --input-focus-ring: rgba(234, 88, 12, 0.2);
+  
+  /* 侧边栏 */
+  --sidebar-bg: var(--gray-100);
+  --sidebar-active: #FFFFFF;
+  --sidebar-hover: var(--gray-200);
+  
+  /* 阴影 - 柔和有机 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+  --shadow-warm: 0 4px 20px -2px rgba(234, 88, 12, 0.15);
+  
+  /* 动画 */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* ==================== 深色模式 ==================== */
+/* ==================== 深色模式 - 温暖科技 ==================== */
 
 [data-theme='dark'] {
-  --bg-color: #0a0a0a;
-  --sidebar-bg: #1a1a1a;
-  --text-color: #ffffff;
-  --text-secondary: #b0b0b0;
-  --border-color: #333333;
-
-  --message-user-bg: #3b82f6;
-  --message-user-text: #ffffff;
-  --message-ai-bg: #2a2a2a;
-
-  --input-bg: #0a0a0a;
-  --input-wrapper-bg: #2a2a2a;
-
-  --btn-primary-bg: #3b83f6c5;
-  --btn-primary-hover: #60a5fa;
-  --btn-secondary-bg: #1f2937;
-  --btn-secondary-text: #f9fafb;
-  --btn-secondary-border: #374151;
-  --btn-secondary-hover: #374151;
-
-  --active-session-bg: #3a3a3a;
-  --accent-color: #60a5fa;
-  --accent-hover: #3b82f6;
-
-  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.5),
-    0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  /* 背景 - 深灰系 */
+  --bg-primary: var(--gray-950);
+  --bg-secondary: var(--gray-900);
+  --bg-tertiary: var(--gray-850);
+  --bg-elevated: var(--gray-800);
+  
+  /* 文字 - 高对比 */
+  --text-primary: var(--gray-100);
+  --text-secondary: var(--gray-400);
+  --text-tertiary: var(--gray-500);
+  --text-muted: var(--gray-600);
+  
+  /* 边框 */
+  --border-subtle: var(--gray-800);
+  --border-default: var(--gray-750);
+  --border-strong: var(--gray-700);
+  
+  /* 强调色 - 暖橙 */
+  --accent-primary: var(--amber-500);
+  --accent-primary-hover: var(--amber-400);
+  --accent-secondary: var(--orange-500);
+  --accent-glow: rgba(245, 158, 11, 0.25);
+  
+  /* 消息气泡 */
+  --message-user-bg: var(--amber-600);
+  --message-user-text: #FFFFFF;
+  --message-ai-bg: var(--gray-850);
+  --message-ai-border: var(--gray-750);
+  --message-ai-text: var(--gray-200);
+  
+  /* 输入框 */
+  --input-bg: var(--gray-850);
+  --input-border: var(--gray-750);
+  --input-focus-border: var(--amber-500);
+  --input-focus-ring: rgba(245, 158, 11, 0.2);
+  
+  /* 侧边栏 */
+  --sidebar-bg: var(--gray-900);
+  --sidebar-active: var(--gray-850);
+  --sidebar-hover: var(--gray-800);
+  
+  /* 阴影 - 更深但不冰冷 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  --shadow-warm: 0 4px 20px -2px rgba(245, 158, 11, 0.2);
 }
 
-/* ==================== 基础样式 ==================== */
+/* ==================== 基础样式 - 极简留白 ==================== */
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
-}
-
-html,
-body {
   margin: 0;
   padding: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  font-family: var(--font-family);
+}
+
+html {
   font-size: 16px;
-  line-height: 1.5;
-  color: var(--text-color);
-  background-color: var(--bg-color);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s, color 0.3s;
+  text-rendering: optimizeLegibility;
 }
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  transition: background-color var(--transition-slow), color var(--transition-slow);
+}
+
+/* 标题 - Space Grotesk 个性 */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+h1 { font-size: var(--text-4xl); }
+h2 { font-size: var(--text-3xl); }
+h3 { font-size: var(--text-2xl); }
+h4 { font-size: var(--text-xl); }
+h5 { font-size: var(--text-lg); }
+h6 { font-size: var(--text-base); font-weight: 600; }
 
 #app {
   width: 100%;
-  height: 100%;
+  height: 100vh;
+  overflow: hidden;
 }
 
-/* ==================== 滚动条 ==================== */
+/* ==================== 按钮 - 有机手感 ==================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.5;
+  border-radius: var(--radius-lg);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 100%);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.btn:hover::before {
+  opacity: 1;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+/* 主按钮 - 橙色 */
+.btn-primary {
+  background: var(--accent-primary);
+  color: white;
+  box-shadow: var(--shadow-warm);
+}
+
+.btn-primary:hover {
+  background: var(--accent-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px -4px var(--accent-glow);
+}
+
+/* 次要按钮 - 柔和 */
+.btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+/* 幽灵按钮 */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* ==================== 卡片 - 悬浮感 ==================== */
+
+.card {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-subtle);
+  padding: var(--space-6);
+  transition: all var(--transition-base);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-default);
+}
+
+/* ==================== 输入框 - 温暖聚焦 ==================== */
+
+.input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+.input:hover {
+  border-color: var(--border-strong);
+}
+
+.input:focus {
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ==================== 滚动条 - 极简 ==================== */
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -126,36 +377,17 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 4px;
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: var(--text-muted);
 }
 
-/* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-/* ==================== 移动端适配 ==================== */
-
-@media (max-width: 768px) {
-  ::-webkit-scrollbar {
-    display: none;
-  }
-
-  * {
-    scrollbar-width: none;
-  }
-
-  html,
-  body {
-    overscroll-behavior: none;
-    touch-action: pan-y;
-  }
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 /* ==================== 工具类 ==================== */
@@ -172,10 +404,47 @@ body {
   border: 0;
 }
 
-/* ==================== 深色模式代码块样式 ==================== */
+/* 动画 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-warm {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(234, 88, 12, 0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--transition-slow) ease-out;
+}
+
+.animate-pulse-warm {
+  animation: pulse-warm 2s ease-in-out infinite;
+}
+
+/* ==================== 移动端适配 ==================== */
+
+@media (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+  
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  
+  * {
+    scrollbar-width: none;
+  }
+}
+
+/* ==================== Markdown 代码块 - 深色适配 ==================== */
 
 [data-theme='dark'] .markdown-body pre {
-  background: #0d0d0d !important;
+  background: var(--gray-950) !important;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
 }
 
 [data-theme='dark'] .markdown-body pre code,

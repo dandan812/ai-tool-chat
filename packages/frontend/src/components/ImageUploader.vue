@@ -59,48 +59,26 @@ async function processFiles(files: File[]) {
     }
 
     try {
-      const imageData = await fileToImageData(file)
+      const imageData = await new Promise<ImageData>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const base64 = (e.target?.result as string).split(',')[1]
+          resolve({
+            id: crypto.randomUUID(),
+            base64: base64 || '',
+            mimeType: file.type,
+            description: file.name
+          })
+        }
+        reader.onerror = () => reject(new Error('读取文件失败'))
+        reader.readAsDataURL(file)
+      })
       emit('add', imageData)
     } catch (error) {
       console.error('Failed to process image:', error)
       alert(`处理图片失败: ${file.name}`)
     }
   }
-}
-
-/**
- * 将 File 转换为 ImageData
- */
-function fileToImageData(file: File): Promise<ImageData> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-
-    reader.onload = () => {
-      const base64 = reader.result as string
-      // 移除 data:image/xxx;base64, 前缀
-      const base64Data = base64.split(',')[1]
-
-      resolve({
-        id: generateId(),
-        base64: base64Data || '',
-        mimeType: file.type,
-        file: file
-      })
-    }
-
-    reader.onerror = () => {
-      reject(new Error('Failed to read file'))
-    }
-
-    reader.readAsDataURL(file)
-  })
-}
-
-/**
- * 生成唯一 ID
- */
-function generateId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 /**
@@ -127,7 +105,12 @@ function removeImage(id: string) {
           :src="`data:${image.mimeType};base64,${image.base64}`"
           :alt="image.description || 'Uploaded image'"
         />
-        <button class="remove-btn" @click="removeImage(image.id)" title="移除图片">×</button>
+        <button class="remove-btn" @click="removeImage(image.id)" title="移除图片" aria-label="移除图片">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -151,7 +134,12 @@ function removeImage(id: string) {
         @change="handleFileSelect"
       />
       <div class="upload-content">
-        <span class="upload-icon">📷</span>
+        <span class="upload-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+            <circle cx="12" cy="13" r="4"></circle>
+          </svg>
+        </span>
         <span class="upload-text">
           {{ isDragging ? '松开以上传' : '点击或拖拽上传图片' }}
         </span>
@@ -165,23 +153,29 @@ function removeImage(id: string) {
 .image-uploader {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 /* 图片预览列表 */
 .image-preview-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .image-preview-item {
   position: relative;
-  width: 80px;
-  height: 80px;
-  border-radius: 8px;
+  width: 90px;
+  height: 90px;
+  border-radius: 12px;
   overflow: hidden;
   border: 2px solid var(--border-color);
+  box-shadow: var(--card-shadow);
+  transition: var(--transition);
+}
+
+.image-preview-item:hover {
+  box-shadow: var(--card-shadow-hover);
 }
 
 .image-preview-item img {
@@ -192,10 +186,10 @@ function removeImage(id: string) {
 
 .remove-btn {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 20px;
-  height: 20px;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -203,35 +197,57 @@ function removeImage(id: string) {
   color: white;
   border: none;
   border-radius: 50%;
-  font-size: 14px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: var(--transition);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+}
+
+.remove-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .image-preview-item:hover .remove-btn {
   opacity: 1;
 }
 
+.remove-btn:hover {
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.6);
+}
+
+.remove-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--error-color);
+  outline-offset: 2px;
+}
+
 /* 上传区域 */
 .upload-zone {
-  border: 2px dashed var(--border-color);
-  border-radius: 12px;
-  padding: 20px;
+  border: 2.5px dashed var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--transition);
   background: var(--bg-color);
+  box-shadow: var(--card-shadow);
 }
 
 .upload-zone:hover {
   border-color: var(--accent-color);
   background: var(--input-wrapper-bg);
+  box-shadow: var(--card-shadow-hover), var(--glow-shadow);
+}
+
+.upload-zone:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 .upload-zone.dragging {
   border-color: var(--accent-color);
-  background: var(--accent-color);
-  background-opacity: 0.1;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  box-shadow: var(--glow-shadow);
 }
 
 .file-input {
@@ -242,20 +258,26 @@ function removeImage(id: string) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .upload-icon {
-  font-size: 24px;
+  transition: var(--transition);
+}
+
+.upload-zone:hover .upload-icon {
+  color: var(--accent-color);
 }
 
 .upload-text {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text-color);
+  font-weight: 500;
 }
 
 .upload-hint {
   font-size: 12px;
   color: var(--text-secondary);
+  font-weight: 400;
 }
 </style>
