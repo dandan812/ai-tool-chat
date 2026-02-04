@@ -1,18 +1,35 @@
 /**
  * Task API 模块
- * 支持新的 SSE 事件格式（Task/Step/Content）
+ *
+ * 负责与 Worker 后端通信，使用 SSE（Server-Sent Events）实现流式响应
+ * 支持新的 Task/Step/Content 架构
+ *
+ * 功能特性：
+ * - 发送 Task 请求
+ * - 处理 SSE 流式响应
+ * - 支持多模态（图片、文件）
+ * - 支持取消请求
+ *
+ * @package frontend/src/api
  */
+
 import type { ChatMessage } from './ai';
 import type { Task, Step, SSEEvent, ImageData, FileData } from '../types/task';
-
-const API_URL = 'https://api.i-tool-chat.store';
+import { API_BASE_URL } from '../config';
 
 export interface TaskRequest {
+  /** 消息列表 */
   messages: ChatMessage[];
+  /** 图片数据（多模态） */
   images?: ImageData[];
+  /** 文件数据 */
   files?: FileData[];
+  /** 温度参数 */
   temperature?: number;
+  /** 是否启用工具调用 */
   enableTools?: boolean;
+  /** 系统提示词（助手人设） */
+  systemPrompt?: string;
 }
 
 export interface TaskCallbacks {
@@ -34,7 +51,7 @@ export async function sendTaskRequest(
   signal?: AbortSignal
 ): Promise<void> {
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(API_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

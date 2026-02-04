@@ -1,34 +1,70 @@
 /**
  * AI API 模块
+ *
  * 负责与后端服务通信，处理流式响应
+ *
+ * 功能特性：
+ * - 发送流式聊天请求
+ * - 处理 SSE 流式响应
+ * - 支持取消请求
+ * - 支持多种 AI 模型格式
+ *
+ * @package frontend/src/api
  */
 
 // ==================== 类型定义 ====================
 
+/**
+ * 聊天消息接口
+ * 表示一条对话消息
+ *
+ * @property role - 消息角色（用户/AI/系统）
+ * @property content - 消息内容
+ */
 export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system'
-  content: string
+  /** 消息角色 */
+  role: 'user' | 'assistant' | 'system';
+  /** 消息内容 */
+  content: string;
 }
 
+/**
+ * 聊天选项接口
+ * 配置聊天请求的参数
+ *
+ * @property model - 使用的 AI 模型
+ * @property temperature - 温度参数（控制随机性）
+ */
 export interface ChatOptions {
-  model?: string
-  temperature?: number
+  /** 使用的 AI 模型 */
+  model?: string;
+  /** 温度参数（控制输出的随机性，0-2，越低越确定） */
+  temperature?: number;
 }
 
+/**
+ * 流式响应块接口
+ * OpenAI 格式的流式响应结构
+ */
 interface StreamChunk {
+  /** 选择列表（通常只有一个） */
   choices?: Array<{
     delta?: {
-      content?: string
-    }
-  }>
+      content?: string;
+    };
+  }>;
 }
 
 // ==================== 常量 ====================
 
-const API_URL = 'https://api.i-tool-chat.store'
+/** API 基础 URL */
+const API_URL = 'https://api.i-tool-chat.store';
 
-const SSE_DONE_MARKER = '[DONE]'
-const SSE_DATA_PREFIX = 'data: '
+/** SSE 结束标记 */
+const SSE_DONE_MARKER = '[DONE]';
+
+/** SSE 数据前缀 */
+const SSE_DATA_PREFIX = 'data: ';
 
 // ==================== 核心函数 ====================
 

@@ -1,25 +1,46 @@
 <script setup lang="ts">
 /**
  * 侧边栏组件 - 《反主流》美学
- * 
- * 温暖、有质感的侧边栏设计
+ *
+ * 设计理念：温暖、有质感的侧边栏设计
+ *
+ * 功能特性：
+ * - 显示会话列表和切换会话
+ * - 创建新对话
+ * - 系统提示词编辑
+ * - 主题切换（亮色/暗色）
+ * - 移动端响应式折叠
+ *
+ * @package frontend/src/components
  */
+
 import { ref, watch } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useTheme } from '../composables/useTheme'
 
+/**
+ * 组件属性
+ */
 interface Props {
+  /** 侧边栏是否展开（移动端） */
   isOpen: boolean
 }
 
 defineProps<Props>()
 
+/** 聊天状态管理 */
 const store = useChatStore()
+/** 主题管理 */
 const { theme, setTheme } = useTheme()
 
+/** 是否显示系统提示词编辑器 */
 const showSystemPrompt = ref(false)
+/** 系统提示词输入内容 */
 const systemPromptInput = ref('')
 
+/**
+ * 监听当前会话变化，自动更新系统提示词输入框
+ */
 watch(
   () => store.currentSessionId,
   () => {
@@ -28,6 +49,9 @@ watch(
   { immediate: true }
 )
 
+/**
+ * 保存系统提示词到当前会话
+ */
 function saveSystemPrompt() {
   if (store.currentSessionId) {
     store.updateSystemPrompt(store.currentSessionId, systemPromptInput.value)
@@ -35,11 +59,19 @@ function saveSystemPrompt() {
   }
 }
 
+/**
+ * 时间常量定义（毫秒）
+ */
 const TIME_CONSTANTS = {
   ONE_DAY: 24 * 60 * 60 * 1000,
   TWO_DAYS: 48 * 60 * 60 * 1000
 } as const
 
+/**
+ * 格式化时间戳为友好的显示格式
+ * @param timestamp 时间戳（毫秒）
+ * @returns 格式化后的时间字符串
+ */
 function formatTime(timestamp: number): string {
   const date = new Date(timestamp)
   const now = new Date()

@@ -2,27 +2,48 @@
 /**
  * 文件上传组件
  * 支持拖拽上传文本文件
+ *
+ * 功能特性：
+ * - 支持点击选择或拖拽上传
+ * - 显示已上传文件列表
+ * - 文件类型检查（仅支持文本文件）
+ * - 显示文件大小和图标
+ *
+ * @package frontend/src/components
  */
+
 import { ref } from 'vue'
 import type { FileData } from '../types/task'
 import { fileToFileData, isSupportedTextFile, formatFileSize, getFileIcon } from '../utils/file'
 
+/**
+ * 组件属性
+ */
 interface Props {
+  /** 已上传的文件列表 */
   files: FileData[]
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 
+/**
+ * 组件事件
+ */
 const emit = defineEmits<{
+  /** 添加文件事件 */
   add: [file: FileData]
+  /** 移除文件事件 */
   remove: [id: string]
 }>()
 
+/** 拖拽状态标识 */
 const isDragging = ref(false)
+/** 文件输入框引用 */
 const inputRef = ref<HTMLInputElement | null>(null)
 
 /**
- * 处理文件选择
+ * 处理文件选择事件
+ * 用户点击上传区域选择文件时触发
  */
 async function handleFileSelect(event: Event) {
   const target = event.target as HTMLInputElement
@@ -30,7 +51,7 @@ async function handleFileSelect(event: Event) {
   if (!files || files.length === 0) return
 
   await processFiles(Array.from(files))
-  
+
   // 清空 input，允许重复选择同一文件
   if (inputRef.value) {
     inputRef.value.value = ''
@@ -39,6 +60,8 @@ async function handleFileSelect(event: Event) {
 
 /**
  * 处理文件列表
+ * 过滤并处理每个文件
+ * @param files 待处理的文件数组
  */
 async function processFiles(files: File[]) {
   for (const file of files) {
@@ -58,7 +81,7 @@ async function processFiles(files: File[]) {
 }
 
 /**
- * 处理拖拽进入
+ * 处理拖拽进入事件
  */
 function handleDragEnter(e: DragEvent) {
   e.preventDefault()
@@ -66,7 +89,7 @@ function handleDragEnter(e: DragEvent) {
 }
 
 /**
- * 处理拖拽离开
+ * 处理拖拽离开事件
  */
 function handleDragLeave(e: DragEvent) {
   e.preventDefault()
@@ -74,14 +97,14 @@ function handleDragLeave(e: DragEvent) {
 }
 
 /**
- * 处理拖拽悬停
+ * 处理拖拽悬停事件
  */
 function handleDragOver(e: DragEvent) {
   e.preventDefault()
 }
 
 /**
- * 处理放置文件
+ * 处理放置文件事件
  */
 async function handleDrop(e: DragEvent) {
   e.preventDefault()
@@ -94,14 +117,15 @@ async function handleDrop(e: DragEvent) {
 }
 
 /**
- * 点击上传区域
+ * 点击上传区域触发文件选择
  */
 function handleClick() {
   inputRef.value?.click()
 }
 
 /**
- * 移除文件
+ * 移除指定文件
+ * @param id 要移除的文件 ID
  */
 function removeFile(id: string) {
   emit('remove', id)
@@ -109,6 +133,9 @@ function removeFile(id: string) {
 
 /**
  * 获取文件图标（简化版）
+ * 根据文件类型返回对应的 emoji 图标
+ * @param name 文件名
+ * @returns emoji 图标字符串
  */
 function getIcon(name: string): string {
   const icon = getFileIcon(name)

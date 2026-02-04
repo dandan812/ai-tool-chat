@@ -1,21 +1,39 @@
 <script setup lang="ts">
 /**
  * Step 进度指示器组件（底部折叠版）
- * 显示在输入框上方，展示模型调用信息
+ * 显示在输入框上方，展示模型调用信息和任务执行步骤
+ *
+ * 功能特性：
+ * - 显示当前任务状态和模型信息
+ * - 可折叠查看详细的步骤列表
+ * - 显示每个步骤的状态（运行中/完成/失败）
+ * - 计算并显示总耗时
+ *
+ * @package frontend/src/components
  */
+
 import { ref, computed } from 'vue'
 import type { Step, Task } from '../types/task'
 
+/**
+ * 组件属性
+ */
 interface Props {
+  /** 当前任务对象 */
   task: Task | null
+  /** 步骤列表 */
   steps: Step[]
 }
 
 const props = defineProps<Props>()
 
+/** 控制面板展开/折叠状态 */
 const isExpanded = ref(false)
 
-// Step 类型中文映射
+/**
+ * Step 类型中文映射表
+ * 将内部步骤类型转换为中文显示名称
+ */
 const stepTypeNames: Record<string, string> = {
   plan: '分析',
   skill: '执行',
@@ -24,14 +42,20 @@ const stepTypeNames: Record<string, string> = {
   respond: '生成'
 }
 
-// 模型名称映射
+/**
+ * 模型名称映射表
+ * 将内部模型 ID 转换为友好的显示名称
+ */
 const modelNames: Record<string, string> = {
   'deepseek-chat': 'DeepSeek',
   'qwen-vl-plus': 'Qwen-VL',
   'qwen3-vl-flash': 'Qwen3-VL'
 }
 
-// 当前调用的模型
+/**
+ * 计算属性：当前使用的 AI 模型
+ * 从 skill 步骤的输出中提取模型信息
+ */
 const currentModel = computed(() => {
   const skillStep = props.steps.find((s) => s.type === 'skill')
   if (skillStep?.output && typeof skillStep.output === 'object') {
@@ -42,7 +66,10 @@ const currentModel = computed(() => {
   return 'AI 模型'
 })
 
-// 当前状态文本
+/**
+ * 计算属性：当前状态文本
+ * 根据任务状态和运行中的步骤显示不同的状态描述
+ */
 const statusText = computed(() => {
   if (!props.task) return ''
   if (props.task.status === 'completed') return '已完成'
@@ -55,13 +82,20 @@ const statusText = computed(() => {
   return '处理中'
 })
 
-// 是否已完成
+/**
+ * 计算属性：任务是否已完成
+ */
 const isCompleted = computed(() => props.task?.status === 'completed')
 
-// 是否失败
+/**
+ * 计算属性：任务是否失败
+ */
 const isFailed = computed(() => props.task?.status === 'failed')
 
-// 总耗时
+/**
+ * 计算属性：总耗时（秒）
+ * 计算从第一个步骤开始到最后一个步骤结束的总时长
+ */
 const totalDuration = computed(() => {
   if (!props.steps.length) return 0
   const firstStep = props.steps[0]
@@ -71,6 +105,11 @@ const totalDuration = computed(() => {
   return Math.round((end - start) / 1000)
 })
 
+/**
+ * 格式化时长显示
+ * @param seconds 秒数
+ * @returns 格式化的时间字符串（如 "5秒" 或 "2分30秒"）
+ */
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}秒`
   const mins = Math.floor(seconds / 60)
@@ -78,6 +117,10 @@ function formatDuration(seconds: number): string {
   return `${mins}分${secs}秒`
 }
 
+/**
+ * 切换展开/折叠状态
+ * 用于显示或隐藏详细的步骤列表
+ */
 function toggleExpand() {
   isExpanded.value = !isExpanded.value
 }
@@ -133,7 +176,7 @@ function toggleExpand() {
   overflow: hidden;
   transition: var(--transition);
   width: 100%;
-  max-width: 1200px;
+  max-width: 800px;
   margin-left: auto;
   margin-right: auto;
   box-shadow: var(--card-shadow);
@@ -149,7 +192,7 @@ function toggleExpand() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  /* padding: 12px 16px; */
   cursor: pointer;
   transition: var(--transition);
   user-select: none;
@@ -260,7 +303,9 @@ function toggleExpand() {
 
 .step-item.running {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
- box-shadow: 0 0 0 2px var(--accent-color), var(--glow-shadow);
+  box-shadow:
+    0 0 0 2px var(--accent-color),
+    var(--glow-shadow);
   animation: stepPulse 2s ease-in-out infinite;
 }
 

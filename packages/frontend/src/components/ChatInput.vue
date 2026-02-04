@@ -1,12 +1,22 @@
 <script setup lang="ts">
 /**
  * 聊天输入组件 - 《反主流》美学
- * 
- * 特点：
+ *
+ * 设计理念：
  * - 有机圆角输入框
  * - 温暖的橙色强调
  * - 柔和阴影和微交互
+ *
+ * 功能特性：
+ * - 文本输入与自动调整高度
+ * - 图片上传和预览
+ * - 文件上传和预览
+ * - 支持粘贴图片和文本文件
+ * - 发送/暂停生成控制
+ *
+ * @package frontend/src/components
  */
+
 import { ref, computed } from 'vue'
 import type { ImageData, FileData } from '../types/task'
 import ImageUploader from './ImageUploader.vue'
@@ -14,28 +24,48 @@ import FileUploader from './FileUploader.vue'
 import { useAutoResize } from '../composables/useAutoResize'
 import { fileToImageData } from '../utils/image'
 import { isSupportedTextFile } from '../utils/file'
+import { fileToFileData } from '../utils/file'
 
+/**
+ * 组件属性
+ */
 interface Props {
+  /** 是否正在加载中（AI 响应中） */
   loading?: boolean
 }
 
 const props = defineProps<Props>()
 
+/**
+ * 组件事件
+ */
 const emit = defineEmits<{
+  /** 发送消息事件 */
   send: [content: string, images: ImageData[], files: FileData[]]
+  /** 停止生成事件 */
   stop: []
 }>()
 
+/** 输入框内容 */
 const input = ref('')
+/** 已上传的图片列表 */
 const images = ref<ImageData[]>([])
+/** 已上传的文件列表 */
 const files = ref<FileData[]>([])
+/** 是否显示图片上传器 */
 const showImageUploader = ref(false)
+/** 是否显示文件上传器 */
 const showFileUploader = ref(false)
 
+/**
+ * 计算属性：是否可以发送消息
+ * 必须有内容或附件，且不在加载状态
+ */
 const canSend = computed(() => {
   return (input.value.trim() || images.value.length > 0 || files.value.length > 0) && !props.loading
 })
 
+/** 向父组件暴露清空方法 */
 defineExpose({
   clear: () => {
     input.value = ''
@@ -47,8 +77,13 @@ defineExpose({
   }
 })
 
+/** 自动调整文本框高度的 composable */
 const { textareaRef, resize, reset } = useAutoResize()
 
+/**
+ * 处理粘贴事件（图片）
+ * 用户粘贴图片时自动添加到上传列表
+ */
 async function handlePaste(e: ClipboardEvent) {
   const items = e.clipboardData?.items
   if (!items) return
@@ -69,8 +104,10 @@ async function handlePaste(e: ClipboardEvent) {
   }
 }
 
-import { fileToFileData } from '../utils/file'
-
+/**
+ * 处理粘贴事件（文本文件）
+ * 用户粘贴文本文件时自动添加到上传列表
+ */
 async function handleFilePaste(e: ClipboardEvent) {
   const items = e.clipboardData?.items
   if (!items) return
@@ -89,22 +126,42 @@ async function handleFilePaste(e: ClipboardEvent) {
   }
 }
 
+/**
+ * 添加图片到上传列表
+ * @param image 图片数据
+ */
 function addImage(image: ImageData) {
   images.value.push(image)
 }
 
+/**
+ * 从上传列表移除图片
+ * @param id 图片 ID
+ */
 function removeImage(id: string) {
   images.value = images.value.filter((img) => img.id !== id)
 }
 
+/**
+ * 添加文件到上传列表
+ * @param file 文件数据
+ */
 function addFile(file: FileData) {
   files.value.push(file)
 }
 
+/**
+ * 从上传列表移除文件
+ * @param id 文件 ID
+ */
 function removeFile(id: string) {
   files.value = files.value.filter((f) => f.id !== id)
 }
 
+/**
+ * 处理发送消息事件
+ * 清空输入框和上传列表后发送
+ */
 function handleSend() {
   if (!canSend.value) return
 
@@ -119,6 +176,10 @@ function handleSend() {
   reset()
 }
 
+/**
+ * 处理键盘按下事件
+ * Enter 发送，Shift+Enter 换行
+ */
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()

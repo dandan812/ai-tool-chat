@@ -96,13 +96,16 @@ async function handleSend(content: string, images: ImageData[] = [], files: File
     userContent = `[文件: ${files.map(f => f.name).join(', ')}]`
   }
 
+  // 获取当前消息列表（在添加新消息之前）
+  const currentMessages = store.messagesMap[sessionId] || []
+
   // 添加用户消息
   store.addMessage(sessionId, {
     role: 'user',
     content: userContent || '[消息]'
   })
 
-  // 准备 AI 回复位置 - 直接操作 store 中的消息数组
+  // 准备 AI 回复位置
   const messages = store.messagesMap[sessionId] || []
   const assistantIndex = messages.length
   store.addMessage(sessionId, { role: 'assistant', content: '' })
@@ -114,11 +117,13 @@ async function handleSend(content: string, images: ImageData[] = [], files: File
   abortControllers.value[sessionId] = new AbortController()
 
   try {
-    // 构建 API 消息
-    const apiMessages = messages.slice(0, -1).map((m) => ({
-      role: m.role,
-      content: m.content
-    }))
+    // 构建 API 消息 - 使用添加前的消息，并过滤掉空内容
+    const apiMessages = currentMessages
+      .filter(m => m.content.trim().length > 0)
+      .map((m) => ({
+        role: m.role,
+        content: m.content
+      }))
 
     // 发送请求
     await sendTaskRequest(
@@ -126,7 +131,8 @@ async function handleSend(content: string, images: ImageData[] = [], files: File
         messages: apiMessages,
         images: images.length > 0 ? images : undefined,
         files: files.length > 0 ? files : undefined,
-        temperature: 0.7
+        temperature: 0.7,
+        systemPrompt: store.currentSession?.systemPrompt
       },
       {
         // Task 回调

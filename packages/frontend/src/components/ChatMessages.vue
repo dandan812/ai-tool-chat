@@ -1,9 +1,18 @@
 <script setup lang="ts">
 /**
  * 消息列表组件 - 《反主流》美学
- * 
- * 简洁的消息列表容器
+ *
+ * 设计理念：简洁的消息列表容器
+ *
+ * 功能特性：
+ * - 显示消息列表或欢迎页
+ * - 支持流式内容实时更新
+ * - 自动滚动到最新消息
+ * - 消息暂停状态显示
+ *
+ * @package frontend/src/components
  */
+
 import { watch, computed } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useScroll } from '../composables/useScroll'
@@ -11,30 +20,45 @@ import ChatMessage from './ChatMessage.vue'
 import ChatWelcome from './ChatWelcome.vue'
 import type { Task, Step } from '../types/task'
 
+/**
+ * 组件属性
+ */
 interface Props {
+  /** 当前任务对象 */
   currentTask: Task | null
+  /** 当前步骤列表 */
   currentSteps: Step[]
+  /** 判断消息是否暂停的回调函数 */
   isMessagePaused?: (index: number) => boolean
 }
 
 const props = defineProps<Props>()
 
+/**
+ * 组件事件
+ */
 const emit = defineEmits<{
+  /** 发送消息事件 */
   send: [content: string]
 }>()
 
+/** 聊天状态管理 */
 const store = useChatStore()
+/** 滚动管理 composable */
 const { container, scrollToBottom, shouldAutoScroll } = useScroll()
 
-// 带流式内容的消息列表
+/**
+ * 计算属性：带流式内容的消息列表
+ * 如果当前有正在流式输出的消息，则显示流式内容
+ */
 const displayMessages = computed(() => {
   const sessionId = store.currentSessionId
   if (!sessionId) return []
-  
+
   const messages = store.messages
   return messages.map((msg, index) => {
     // 如果有流式内容且匹配当前消息，使用流式内容
-    if (store.streamingContent?.sessionId === sessionId && 
+    if (store.streamingContent?.sessionId === sessionId &&
         store.streamingContent?.index === index) {
       return { ...msg, content: store.streamingContent.content }
     }
@@ -42,9 +66,14 @@ const displayMessages = computed(() => {
   })
 })
 
-// 自动滚动
+/**
+ * 监听消息数量变化，自动滚动到底部
+ */
 watch(() => displayMessages.value.length, () => scrollToBottom())
 
+/**
+ * 监听最后一条消息内容变化，自动滚动到底部（仅在用户处于底部时）
+ */
 watch(
   () => displayMessages.value[displayMessages.value.length - 1]?.content,
   () => {
@@ -54,6 +83,11 @@ watch(
   }
 )
 
+/**
+ * 处理建议点击事件
+ * 将建议内容作为消息发送
+ * @param suggestion 建议文本
+ */
 function handleSuggestion(suggestion: string) {
   emit('send', suggestion)
 }

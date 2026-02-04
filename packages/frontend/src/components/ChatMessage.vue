@@ -1,31 +1,54 @@
 <script setup lang="ts">
 /**
  * 单条消息组件 - 《反主流》美学
- * 
- * 有机气泡、温暖交互
+ *
+ * 设计理念：有机气泡、温暖交互
+ *
+ * 功能特性：
+ * - 显示用户/AI 消息气泡
+ * - Markdown 内容渲染
+ * - 代码块语法高亮和复制功能
+ * - 消息删除操作
+ * - 暂停状态显示
+ *
+ * @package frontend/src/components
  */
+
 import { computed } from 'vue'
 import MarkdownIt from 'markdown-it'
 
+/**
+ * 组件属性
+ */
 interface Props {
+  /** 消息角色（用户/AI/系统） */
   role: 'user' | 'assistant' | 'system'
+  /** 消息内容（Markdown 格式） */
   content: string
+  /** 消息索引 */
   index: number
+  /** 是否处于暂停状态 */
   isPaused?: boolean
 }
 
 const props = defineProps<Props>()
 
+/**
+ * 组件事件
+ */
 const emit = defineEmits<{
+  /** 删除消息事件 */
   delete: [index: number]
 }>()
 
-// 配置 MarkdownIt，为代码块添加复制按钮
+/**
+ * 配置 MarkdownIt，为代码块添加复制按钮
+ */
 const md = new MarkdownIt({
   highlight: (str: string, lang: string) => {
     const escapedStr = escapeHtml(str)
     const langDisplay = lang || 'text'
-    
+
     return `
 <div class="code-block-wrapper">
   <div class="code-block-header">
@@ -44,14 +67,17 @@ const md = new MarkdownIt({
   }
 })
 
-// 覆盖默认的代码块渲染规则
+/**
+ * 覆盖默认的代码块渲染规则
+ * 处理代码块并添加复制功能
+ */
 md.renderer.rules.fence = (tokens, idx) => {
   const token = tokens[idx]
   if (!token) return ''
-  
+
   const code = token.content
   const lang = token.info?.trim() || ''
-  
+
   const highlight = md.options.highlight
   if (highlight) {
     return highlight(code, lang, '')
@@ -59,7 +85,10 @@ md.renderer.rules.fence = (tokens, idx) => {
   return `<pre><code>${escapeHtml(code)}</code></pre>`
 }
 
-// HTML 转义函数
+/**
+ * HTML 转义函数
+ * 防止 XSS 攻击
+ */
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -69,7 +98,10 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;')
 }
 
-// HTML 属性转义
+/**
+ * HTML 属性转义函数
+ * 转义用于 HTML 属性的文本
+ */
 function escapeAttr(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -79,9 +111,20 @@ function escapeAttr(text: string): string {
     .replace(/\r/g, '&#13;')
 }
 
+/**
+ * 计算属性：渲染后的 HTML 内容
+ */
 const htmlContent = computed(() => md.render(props.content))
+
+/**
+ * 计算属性：是否为用户消息
+ */
 const isUser = computed(() => props.role === 'user')
 
+/**
+ * 处理点击事件
+ * 处理代码块复制按钮的点击
+ */
 function handleClick(e: MouseEvent) {
   const target = e.target as HTMLElement
   const btn = target.closest('.copy-code-btn') as HTMLElement
@@ -93,7 +136,7 @@ function handleClick(e: MouseEvent) {
   navigator.clipboard.writeText(code).then(() => {
     const btnText = btn.querySelector('.btn-text')
     const originalText = btnText?.textContent ?? '复制'
-    
+
     if (btnText) {
       btnText.textContent = '已复制!'
     }

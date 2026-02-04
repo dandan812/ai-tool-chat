@@ -88,10 +88,10 @@ export function selectSkill(input: { images?: unknown[]; files?: unknown[] }): S
     return multimodalSkill;
   }
 
-  // 规则 2：未来可以扩展文件处理
-  // if (files.length > 0) {
-  //   return fileSkill;
-  // }
+  // 规则 2：如果有文件，使用文件处理 Skill
+  if (files.length > 0) {
+    return fileSkill;
+  }
 
   // 默认规则：纯文本对话
   return textSkill;

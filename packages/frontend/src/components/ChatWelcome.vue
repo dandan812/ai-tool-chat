@@ -1,19 +1,35 @@
 <script setup lang="ts">
 /**
  * 欢迎页组件 - 《反主流》美学
- * 
+ *
  * 设计理念：
  * - 大留白 + 有机圆角
  * - 手绘感的温暖图标
  * - 深灰 + 橙色强调
+ *
+ * 功能特性：
+ * - 显示品牌和欢迎信息
+ * - 展示随机建议提问卡片
+ * - 支持点击卡片快速开始对话
+ * - 可刷新建议列表
+ *
+ * @package frontend/src/components
  */
+
 import { ref, onMounted } from 'vue'
 
+/**
+ * 组件事件
+ */
 const emit = defineEmits<{
+  /** 选择建议提问事件 */
   select: [suggestion: string]
 }>()
 
-// 精选提问 - 更有人情味
+/**
+ * 所有可用的建议提问列表
+ * 这些问题经过精心设计，更具人情味和创意性
+ */
 const allSuggestions = [
   '帮我设计一个个人网站',
   '写一段温暖的产品介绍文案',
@@ -29,17 +45,24 @@ const allSuggestions = [
   '帮我制定一个晨间routine'
 ]
 
+/** 当前显示的建议列表（随机抽取 4 个） */
 const suggestions = ref<string[]>([])
 
+/**
+ * 生成随机建议列表
+ * 从所有建议中随机抽取 4 个展示
+ */
 function generateSuggestions() {
   const shuffled = [...allSuggestions].sort(() => 0.5 - Math.random())
   suggestions.value = shuffled.slice(0, 4)
 }
 
+/** 向父组件暴露刷新方法 */
 defineExpose({
   refresh: generateSuggestions
 })
 
+/** 组件挂载时生成初始建议 */
 onMounted(generateSuggestions)
 </script>
 

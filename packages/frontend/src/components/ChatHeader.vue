@@ -1,15 +1,30 @@
 <script setup lang="ts">
 /**
  * 聊天头部组件 - 《反主流》美学
- * 
+ *
+ * 设计理念：
  * 简洁、有温度的头部设计
+ *
+ * 功能特性：
+ * - 显示当前会话标题
+ * - 显示在线状态指示
+ * - 切换侧边栏按钮（移动端）
+ * - 清空当前对话按钮
+ *
+ * @package frontend/src/components
  */
+
 import { useChatStore } from '../stores/chat'
 
+/**
+ * 组件事件
+ */
 const emit = defineEmits<{
+  /** 切换侧边栏事件 */
   toggleSidebar: []
 }>()
 
+/** 聊天状态管理 */
 const store = useChatStore()
 </script>
 

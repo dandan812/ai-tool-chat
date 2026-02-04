@@ -2,12 +2,26 @@
 /**
  * 图片上传组件
  * 支持多模态对话的图片选择和预览
+ *
+ * 功能特性：
+ * - 支持点击选择或拖拽上传
+ * - 支持图片预览和删除
+ * - 自动转换为 base64 格式
+ * - 限制最大上传数量
+ *
+ * @package frontend/src/components
  */
+
 import { ref } from 'vue'
 import type { ImageData } from '../types/task'
 
+/**
+ * 组件属性
+ */
 interface Props {
+  /** 已上传的图片列表 */
   images: ImageData[]
+  /** 最大可上传图片数量，默认为 4 */
   maxImages?: number
 }
 
@@ -15,16 +29,24 @@ const props = withDefaults(defineProps<Props>(), {
   maxImages: 4
 })
 
+/**
+ * 组件事件
+ */
 const emit = defineEmits<{
+  /** 添加图片事件 */
   add: [image: ImageData]
+  /** 移除图片事件 */
   remove: [id: string]
 }>()
 
+/** 文件输入框引用 */
 const fileInput = ref<HTMLInputElement | null>(null)
+/** 拖拽状态标识 */
 const isDragging = ref(false)
 
 /**
- * 处理文件选择
+ * 处理文件选择事件
+ * 用户点击上传区域选择文件时触发
  */
 function handleFileSelect(event: Event) {
   const input = event.target as HTMLInputElement
@@ -36,7 +58,8 @@ function handleFileSelect(event: Event) {
 }
 
 /**
- * 处理拖拽文件
+ * 处理拖拽文件放置事件
+ * 用户拖拽文件到上传区域并释放时触发
  */
 function handleDrop(event: DragEvent) {
   isDragging.value = false
@@ -48,6 +71,8 @@ function handleDrop(event: DragEvent) {
 
 /**
  * 处理文件列表
+ * 过滤出图片文件并逐个处理
+ * @param files 待处理的文件数组
  */
 async function processFiles(files: File[]) {
   const imageFiles = files.filter((file) => file.type.startsWith('image/'))
@@ -82,14 +107,16 @@ async function processFiles(files: File[]) {
 }
 
 /**
- * 触发文件选择
+ * 触发文件选择对话框
+ * 通过编程方式点击隐藏的文件输入框
  */
 function triggerFileSelect() {
   fileInput.value?.click()
 }
 
 /**
- * 移除图片
+ * 移除指定图片
+ * @param id 要移除的图片 ID
  */
 function removeImage(id: string) {
   emit('remove', id)
