@@ -51,6 +51,7 @@ export async function sendTaskRequest(
   signal?: AbortSignal
 ): Promise<void> {
   try {
+    console.log('[TaskAPI] Sending request to:', API_BASE_URL);
     const response = await fetch(API_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -60,6 +61,7 @@ export async function sendTaskRequest(
       }),
       signal,
     });
+    console.log('[TaskAPI] Response received:', response.status, response.ok);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -70,9 +72,12 @@ export async function sendTaskRequest(
       throw new Error('Response body is null');
     }
 
+    console.log('[TaskAPI] Starting stream processing');
     await processTaskStream(response.body, callbacks);
+    console.log('[TaskAPI] Stream processing completed');
 
   } catch (error) {
+    console.error('[TaskAPI] Error caught:', error);
     if (error instanceof DOMException && error.name === 'AbortError') {
       console.log('Request aborted by user');
       // 用户主动取消，不触发错误回调

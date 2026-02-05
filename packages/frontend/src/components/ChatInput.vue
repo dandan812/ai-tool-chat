@@ -12,7 +12,7 @@
  * - 图片上传和预览
  * - 文件上传和预览
  * - 支持粘贴图片和文本文件
- * - 发送/暂停生成控制
+ * - 发送消息控制
  *
  * @package frontend/src/components
  */
@@ -42,8 +42,6 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   /** 发送消息事件 */
   send: [content: string, images: ImageData[], files: FileData[]]
-  /** 停止生成事件 */
-  stop: []
 }>()
 
 /** 输入框内容 */
@@ -164,10 +162,8 @@ function removeFile(id: string) {
  */
 function handleSend() {
   if (!canSend.value) return
-
   emit('send', input.value.trim(), images.value, files.value)
-
-  // 发送后清空输入框
+  // 发送后清空
   input.value = ''
   images.value = []
   files.value = []
@@ -217,7 +213,6 @@ function handleKeydown(e: KeyboardEvent) {
             <polyline points="21 15 16 10 5 21"></polyline>
           </svg>
         </button>
-
         <button
           class="tool-btn"
           :class="{ active: showFileUploader }"
@@ -230,7 +225,7 @@ function handleKeydown(e: KeyboardEvent) {
             <polyline points="14 2 14 8 20 8"></polyline>
             <line x1="16" y1="13" x2="8" y2="13"></line>
             <line x1="16" y1="17" x2="8" y2="17"></line>
-            <polyline points="10 9 9 9 8 9"></polyline>
+            <polyline points="10 9 9 8 20 8"></polyline>
           </svg>
         </button>
       </div>
@@ -248,7 +243,7 @@ function handleKeydown(e: KeyboardEvent) {
         @paste="(e) => { handlePaste(e); handleFilePaste(e); }"
       />
 
-      <!-- 发送/停止按钮 -->
+      <!-- 发送按钮 -->
       <button
         v-if="!loading"
         class="action-btn send"
@@ -258,20 +253,7 @@ function handleKeydown(e: KeyboardEvent) {
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"></line>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-        </svg>
-      </button>
-      
-      <button
-        v-else
-        class="action-btn pause"
-        @click="emit('stop')"
-        title="暂停生成"
-        aria-label="暂停"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="6" y="4" width="4" height="16"></rect>
-          <rect x="14" y="4" width="4" height="16"></rect>
+          <polygon points="22 2 15 22 11 13 2 9"></polygon>
         </svg>
       </button>
     </div>
@@ -308,7 +290,7 @@ function handleKeydown(e: KeyboardEvent) {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* 输入框主体 - 有机药丸形状 */
+/* 输入框主体 - 有机胶囊形状 */
 .input-box {
   display: flex;
   align-items: flex-end;
@@ -415,26 +397,6 @@ function handleKeydown(e: KeyboardEvent) {
   box-shadow: none;
 }
 
-/* 暂停按钮 - 温暖橙色 */
-.action-btn.pause {
-  background: linear-gradient(135deg, #F97316 0%, #FBBF24 100%);
-  color: white;
-  animation: pulse-warm 2s ease-in-out infinite;
-}
-
-@keyframes pulse-warm {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(249, 115, 22, 0);
-  }
-}
-
-.action-btn.pause:hover {
-  transform: scale(1.05);
-}
-
 /* 底部提示 */
 .input-hint {
   max-width: 900px;
@@ -452,11 +414,16 @@ function handleKeydown(e: KeyboardEvent) {
   .input-section {
     padding: var(--space-3) var(--space-4);
   }
-  
+
+  .image-area,
+  .file-area {
+    padding: var(--space-3);
+  }
+
   .input-box {
     padding: var(--space-2) var(--space-3);
   }
-  
+
   .input-hint {
     display: none;
   }

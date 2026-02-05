@@ -9,7 +9,6 @@
  * - Markdown 内容渲染
  * - 代码块语法高亮和复制功能
  * - 消息删除操作
- * - 暂停状态显示
  *
  * @package frontend/src/components
  */
@@ -27,8 +26,6 @@ interface Props {
   content: string
   /** 消息索引 */
   index: number
-  /** 是否处于暂停状态 */
-  isPaused?: boolean
 }
 
 const props = defineProps<Props>()
@@ -174,12 +171,6 @@ function handleClick(e: MouseEvent) {
       
       <!-- 用户消息 -->
       <div v-else class="user-text markdown-body" v-html="htmlContent" />
-
-      <!-- 暂停标记 -->
-      <div v-if="isPaused" class="pause-indicator">
-        <span class="pause-dot"></span>
-        <span class="pause-text">已暂停</span>
-      </div>
 
       <!-- 操作按钮 -->
       <div class="actions">
@@ -472,48 +463,13 @@ function handleClick(e: MouseEvent) {
   border-bottom-color: var(--accent-primary);
 }
 
-/* 暂停标记 */
-.pause-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px dashed var(--border-subtle);
-}
-
-.pause-dot {
-  width: 8px;
-  height: 8px;
-  background: linear-gradient(135deg, #F97316 0%, #FBBF24 100%);
-  border-radius: 50%;
-  animation: pulse-dot 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse-dot {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(0.9);
-  }
-}
-
-.pause-text {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  font-style: italic;
-}
-
 /* 响应式 */
 @media (max-width: 768px) {
   .bubble {
     max-width: 90%;
     padding: var(--space-3) var(--space-4);
   }
-  
+
   .actions {
     opacity: 1;
   }

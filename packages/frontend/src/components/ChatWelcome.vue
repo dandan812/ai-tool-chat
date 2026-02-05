@@ -105,12 +105,6 @@ onMounted(generateSuggestions)
         @click="emit('select', suggestion)"
       >
         <span class="card-text">{{ suggestion }}</span>
-        <span class="card-arrow">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-            <polyline points="12 5 19 12 12 19"></polyline>
-          </svg>
-        </span>
       </button>
     </div>
 
@@ -206,36 +200,26 @@ onMounted(generateSuggestions)
 .suggestions-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-4);
-  width: 100%;
+  gap: var(--space-2);
+  width: 80%;
   max-width: 640px;
   margin-bottom: var(--space-10);
+  /* height: 100px; */
+  margin: 40px;
 }
 
 .suggestion-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--space-5) var(--space-6);
+  justify-content: center;
+  padding: var(--space-6) var(--space-6);
+  min-height: 45px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: all var(--transition-base);
-  animation: slideUp 0.5s ease-out backwards;
-  opacity: 0.9;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 0.9;
-    transform: translateY(0);
-  }
 }
 
 .suggestion-card:hover {
@@ -243,7 +227,6 @@ onMounted(generateSuggestions)
   border-color: var(--border-default);
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
-  opacity: 1;
 }
 
 .card-text {
@@ -254,26 +237,6 @@ onMounted(generateSuggestions)
 
 .suggestion-card:hover .card-text {
   color: var(--text-primary);
-}
-
-.card-arrow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-  margin-left: var(--space-3);
-}
-
-.suggestion-card:hover .card-arrow {
-  background: var(--accent-primary);
-  color: white;
-  transform: translateX(2px);
 }
 
 /* 底部提示 */

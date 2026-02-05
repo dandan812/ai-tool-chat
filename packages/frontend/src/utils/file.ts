@@ -83,6 +83,14 @@ export async function fileToFileData(file: File): Promise<FileData> {
     reader.onload = () => {
       const content = reader.result as string
 
+      // 调试日志
+      console.log('[File] File read successfully:', {
+        name: file.name,
+        size: file.size,
+        contentLength: content?.length || 0,
+        contentPreview: content?.substring(0, 100) || '(empty)'
+      })
+
       const fileData: FileData = {
         id: generateId(),
         name: file.name,
@@ -96,6 +104,7 @@ export async function fileToFileData(file: File): Promise<FileData> {
     }
 
     reader.onerror = () => {
+      console.error('[File] File read failed:', file.name)
       reject(new Error(`读取文件失败: ${file.name}`))
     }
 

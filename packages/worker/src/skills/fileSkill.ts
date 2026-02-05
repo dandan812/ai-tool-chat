@@ -21,6 +21,15 @@ export const fileSkill: Skill = {
 
     logger.info('Processing files', { fileCount: files.length });
 
+    // 调试：打印文件信息
+    for (const file of files) {
+      logger.info('File details', {
+        name: file.name,
+        contentLength: file.content?.length || 0,
+        contentPreview: file.content?.substring(0, 100) || '(empty)'
+      });
+    }
+
     // 构建包含文件内容的提示词
     const fileContents = files.map(file => {
       // 根据文件类型添加标记

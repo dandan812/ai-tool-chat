@@ -1,14 +1,11 @@
 <script setup lang="ts">
 /**
- * 消息列表组件 - 《反主流》美学
- *
- * 设计理念：简洁的消息列表容器
+ * 消息列表组件
  *
  * 功能特性：
  * - 显示消息列表或欢迎页
  * - 支持流式内容实时更新
  * - 自动滚动到最新消息
- * - 消息暂停状态显示
  *
  * @package frontend/src/components
  */
@@ -18,21 +15,6 @@ import { useChatStore } from '../stores/chat'
 import { useScroll } from '../composables/useScroll'
 import ChatMessage from './ChatMessage.vue'
 import ChatWelcome from './ChatWelcome.vue'
-import type { Task, Step } from '../types/task'
-
-/**
- * 组件属性
- */
-interface Props {
-  /** 当前任务对象 */
-  currentTask: Task | null
-  /** 当前步骤列表 */
-  currentSteps: Step[]
-  /** 判断消息是否暂停的回调函数 */
-  isMessagePaused?: (index: number) => boolean
-}
-
-const props = defineProps<Props>()
 
 /**
  * 组件事件
@@ -96,8 +78,8 @@ function handleSuggestion(suggestion: string) {
 <template>
   <main ref="container" class="messages">
     <!-- 欢迎界面 -->
-    <ChatWelcome 
-      v-if="displayMessages.length === 0 && !currentTask" 
+    <ChatWelcome
+      v-if="displayMessages.length === 0"
       @select="handleSuggestion"
     />
 
@@ -109,7 +91,6 @@ function handleSuggestion(suggestion: string) {
         :index="index"
         :role="msg.role"
         :content="msg.content"
-        :is-paused="props.isMessagePaused?.(index) ?? false"
         @delete="store.deleteMessage"
       />
     </div>
