@@ -256,6 +256,45 @@ export interface FileData {
   file?: File;
 }
 
+// ==================== 上传进度类型 ====================
+
+/**
+ * 上传进度信息
+ */
+export interface UploadProgress {
+  /** 文件 ID */
+  fileId: string;
+  /** 文件名 */
+  fileName: string;
+  /** 已上传分片数 */
+  uploadedChunks: number;
+  /** 总分片数 */
+  totalChunks: number;
+  /** 上传进度（0-100） */
+  percentage: number;
+  /** 上传速度（KB/s） */
+  speed: number;
+  /** 预计剩余时间（秒） */
+  estimatedTime: number;
+}
+
+/**
+ * 上传进度回调函数类型
+ */
+export type UploadProgressCallback = (progress: UploadProgress) => void;
+
+/**
+ * 文件分片
+ */
+export interface FileChunk {
+  /** 分片索引 */
+  index: number;
+  /** 分片数据 */
+  data: ArrayBuffer;
+  /** 分片大小 */
+  size: number;
+}
+
 // ==================== 工具调用类型 ====================
 
 /**

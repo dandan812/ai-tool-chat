@@ -184,6 +184,68 @@ export interface FileData {
   size?: number;
 }
 
+// ==================== 分片上传 ====================
+
+/**
+ * 分片元数据
+ */
+export interface ChunkMetadata {
+  fileId: string;
+  fileName: string;
+  fileHash: string;
+  totalSize: number;
+  totalChunks: number;
+  receivedChunks: number;
+  receivedIndices: number[];
+  mimeType: string;
+  createdAt: number;
+}
+
+/**
+ * 上传分片请求
+ */
+export interface UploadChunkRequest {
+  fileId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  fileHash: string;
+  chunk: ArrayBuffer;
+  mimeType: string;
+}
+
+/**
+ * 上传完成请求
+ */
+export interface UploadCompleteRequest {
+  fileId: string;
+  fileHash: string;
+  fileName: string;
+  mimeType: string;
+}
+
+/**
+ * 上传完成响应
+ */
+export interface UploadCompleteResponse {
+  success: boolean;
+  fileData?: FileData;
+  error?: string;
+}
+
+/**
+ * 上传状态响应
+ */
+export interface UploadStatusResponse {
+  fileId: string;
+  fileName?: string;
+  fileHash?: string;
+  totalChunks?: number;
+  receivedChunks?: number;
+  receivedIndices?: number[];
+  percentage?: number;
+  isComplete?: boolean;
+}
+
 // ==================== MCP (Model Context Protocol) ====================
 
 export interface MCPClient {

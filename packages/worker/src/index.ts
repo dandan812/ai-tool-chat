@@ -3,7 +3,7 @@
  * Task → Step → Skill + MCP Client 架构
  * SSE 流式返回
  */
-import type { Env, ChatRequest } from './types';
+import type { Env, ChatRequest, UploadChunkRequest, UploadCompleteRequest, UploadCompleteResponse, UploadStatusResponse } from './types';
 import { ValidationError, NotFoundError } from './types';
 import { TaskManager } from './core/taskManager';
 import {
@@ -18,6 +18,7 @@ import {
 } from './utils/middleware';
 import { logger } from './utils/logger';
 import { serializeSSEEvent } from './utils/sse';
+import { chunkManager } from './utils/chunkManager';
 
 export { Env } from './types';
 
@@ -32,6 +33,15 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     case '/':
     case '/chat':
       return handleChatRequest(request, env);
+
+    case '/upload/chunk':
+      return handleUploadChunk(request, env);
+
+    case '/upload/complete':
+      return handleUploadComplete(request, env);
+
+    case '/upload/status':
+      return handleUploadStatus(request, env);
 
     case '/health':
       return handleHealthCheck(env);
@@ -223,6 +233,170 @@ async function handleStatsRequest(
     tasks: stats,
     timestamp: new Date().toISOString(),
   });
+}
+
+/**
+ * 处理分片上传
+ */
+async function handleUploadChunk(request: Request, env: Env): Promise<Response> {
+  try {
+    const formData = await request.formData();
+
+    const fileId = formData.get('fileId') as string;
+    const chunkIndex = parseInt(formData.get('chunkIndex') as string || '0');
+    const totalChunks = parseInt(formData.get('totalChunks') as string || '0');
+    const fileHash = formData.get('fileHash') as string;
+    const chunk = formData.get('chunk') as File;
+    const mimeType = formData.get('mimeType') as string || 'text/plain';
+
+    // 验证必需字段
+    if (!fileId || !chunk || isNaN(chunkIndex)) {
+      throw new ValidationError('Missing required fields: fileId, chunk, or chunkIndex');
+    }
+
+    // 转换 chunk 为 ArrayBuffer
+    const arrayBuffer = await chunk.arrayBuffer();
+
+    // 存储分片
+    const success = chunkManager.storeChunk(fileId, chunkIndex, arrayBuffer);
+
+    if (!success) {
+      throw new ValidationError('Failed to store chunk');
+    }
+
+    // 更新元数据
+    chunkManager.updateMetadata(fileId, {
+      fileName: '', // 稍后在 complete 时设置
+      fileHash,
+      totalSize: 0, // 稍后计算
+      totalChunks,
+      receivedChunks: 0, // 已在 storeChunk 中更新
+      receivedIndices: [],
+      mimeType,
+      createdAt: Date.now(),
+    });
+
+    logger.info('Chunk uploaded', {
+      fileId,
+      chunkIndex,
+      chunkSize: arrayBuffer.byteLength,
+      totalChunks,
+    });
+
+    return createJSONResponse({
+      success: true,
+      chunkIndex,
+      fileId,
+      receivedChunks: chunkManager.getReceivedCount(fileId),
+    });
+  } catch (error) {
+    logger.error('Upload chunk error', error);
+    throw error;
+  }
+}
+
+/**
+ * 处理上传完成
+ */
+async function handleUploadComplete(request: Request, env: Env): Promise<Response> {
+  try {
+    const body = await safeJSONParse<UploadCompleteRequest>(request);
+
+    if (!body) {
+      throw new ValidationError('Invalid JSON body');
+    }
+
+    const { fileId, fileHash, fileName, mimeType } = body;
+
+    // 更新文件名到元数据
+    chunkManager.updateMetadata(fileId, {
+      fileName,
+    });
+
+    // 检查是否所有分片都已上传
+    if (!chunkManager.isComplete(fileId)) {
+      throw new ValidationError('Not all chunks received yet');
+    }
+
+    // 合并分片
+    const mergedData = chunkManager.mergeChunks(fileId);
+
+    // 转换为文本（因为我们只处理文本文件）
+    const textContent = new TextDecoder().decode(mergedData);
+
+    // 检查文件内容是否为空
+    if (!textContent || textContent.length === 0) {
+      throw new ValidationError('Uploaded file is empty');
+    }
+
+    // 生成文件 ID
+    const generateId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+
+    const fileData = {
+      id: generateId(),
+      name: fileName,
+      content: textContent,
+      mimeType: mimeType || 'text/plain',
+      size: mergedData.byteLength,
+    };
+
+    // 清理分片
+    chunkManager.cleanup(fileId);
+
+    logger.info('File upload completed', {
+      fileId,
+      fileName,
+      contentLength: textContent.length,
+      size: mergedData.byteLength,
+    });
+
+    return createJSONResponse<UploadCompleteResponse>({
+      success: true,
+      fileData,
+    });
+  } catch (error) {
+    logger.error('Upload complete error', error);
+    throw error;
+  }
+}
+
+/**
+ * 查询上传状态
+ */
+async function handleUploadStatus(request: Request, env: Env): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const fileId = url.searchParams.get('fileId');
+
+    if (!fileId) {
+      throw new ValidationError('Missing fileId parameter');
+    }
+
+    const metadata = chunkManager.getMetadata(fileId);
+
+    if (!metadata) {
+      throw new NotFoundError(`File ${fileId} not found`);
+    }
+
+    const receivedCount = chunkManager.getReceivedCount(fileId);
+    const percentage = metadata.totalChunks > 0
+      ? (receivedCount / metadata.totalChunks) * 100
+      : 0;
+
+    return createJSONResponse<UploadStatusResponse>({
+      fileId,
+      fileName: metadata.fileName,
+      fileHash: metadata.fileHash,
+      totalChunks: metadata.totalChunks,
+      receivedChunks: receivedCount,
+      receivedIndices: chunkManager.getReceivedIndices(fileId),
+      percentage: Math.round(percentage * 100) / 100,
+      isComplete: chunkManager.isComplete(fileId),
+    });
+  } catch (error) {
+    logger.error('Upload status error', error);
+    throw error;
+  }
 }
 
 // 组合中间件

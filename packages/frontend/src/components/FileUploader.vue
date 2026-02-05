@@ -8,13 +8,20 @@
  * - 显示已上传文件列表
  * - 文件类型检查（仅支持文本文件）
  * - 显示文件大小和图标
+ * - 支持分片上传大文件
+ * - 显示上传进度
  *
  * @package frontend/src/components
  */
 
 import { ref } from 'vue'
-import type { FileData } from '../types/task'
+import type { FileData, UploadProgress } from '../types/task'
 import { fileToFileData, isSupportedTextFile, formatFileSize, getFileIcon } from '../utils/file'
+import {
+  uploadChunkedFile,
+  shouldUseChunking,
+  formatUploadProgress
+} from '../utils/chunk'
 
 /**
  * 组件属性
@@ -34,12 +41,17 @@ const emit = defineEmits<{
   add: [file: FileData]
   /** 移除文件事件 */
   remove: [id: string]
+  /** 上传进度事件 */
+  uploadProgress: [progress: UploadProgress]
 }>()
 
 /** 拖拽状态标识 */
 const isDragging = ref(false)
 /** 文件输入框引用 */
 const inputRef = ref<HTMLInputElement | null>(null)
+
+/** 上传进度映射 */
+const uploadProgressMap = ref<Map<string, UploadProgress>>(new Map())
 
 /**
  * 处理文件选择事件
@@ -72,10 +84,32 @@ async function processFiles(files: File[]) {
     }
 
     try {
-      const fileData = await fileToFileData(file)
-      emit('add', fileData)
+      // 检查是否需要使用分片上传
+      if (shouldUseChunking(file)) {
+        // 分片上传
+        const fileData = await uploadChunkedFile(file, {
+          onProgress: (progress) => {
+            // 更新进度映射
+            uploadProgressMap.value.set(progress.fileId, progress)
+            // 触发进度事件
+            emit('uploadProgress', progress)
+          },
+        })
+
+        emit('add', fileData)
+        // 完成后清理进度
+        uploadProgressMap.value.delete(fileData.id)
+      } else {
+        // 小文件直接读取上传
+        const fileData = await fileToFileData(file)
+        emit('add', fileData)
+      }
     } catch (error) {
       console.error('读取文件失败:', error)
+      // 清理进度
+      uploadProgressMap.value.forEach((_, fileId) => {
+        uploadProgressMap.value.delete(fileId)
+      })
     }
   }
 }
@@ -132,6 +166,25 @@ function removeFile(id: string) {
 }
 
 /**
+ * 格式化时间（秒 → 可读格式）
+ * @param seconds 秒数
+ * @returns 格式化后的时间字符串
+ */
+function formatTime(seconds: number): string {
+  if (seconds < 60) {
+    return `${Math.round(seconds)}秒`
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60)
+    const secs = Math.round(seconds % 60)
+    return `${minutes}分${secs}秒`
+  } else {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    return `${hours}小时${minutes}分`
+  }
+}
+
+/**
  * 获取文件图标（简化版）
  * 根据文件类型返回对应的 emoji 图标
  * @param name 文件名
@@ -177,6 +230,30 @@ function getIcon(name: string): string {
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
+      </div>
+    </div>
+
+    <!-- 上传进度列表 -->
+    <div v-if="uploadProgressMap.size > 0" class="upload-progress-list">
+      <div
+        v-for="progress in uploadProgressMap.values()"
+        :key="progress.fileId"
+        class="upload-progress-item"
+      >
+        <div class="progress-header">
+          <span class="progress-filename">{{ progress.fileName }}</span>
+          <span class="progress-percentage">{{ progress.percentage.toFixed(1) }}%</span>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" :style="{ width: `${progress.percentage}%` }"></div>
+        </div>
+        <div class="progress-info">
+          <span>{{ progress.uploadedChunks }}/{{ progress.totalChunks }} 片</span>
+          <span v-if="progress.speed > 0">{{ progress.speed.toFixed(1) }} KB/s</span>
+          <span v-if="progress.estimatedTime > 0">
+            剩余 {{ formatTime(progress.estimatedTime) }}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -293,6 +370,74 @@ function getIcon(name: string): string {
   color: var(--error);
 }
 
+/* 上传进度列表 */
+.upload-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.upload-progress-item {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  animation: fadeIn 200ms ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.progress-filename {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.progress-percentage {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.progress-bar-container {
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent-primary);
+  transition: width 0.3s ease;
+  border-radius: var(--radius-sm);
+}
+
+.progress-info {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
 /* 上传区域 */
 .upload-zone {
   position: relative;
@@ -357,7 +502,7 @@ function getIcon(name: string): string {
   .upload-zone {
     padding: var(--space-4);
   }
-  
+
   .upload-hint {
     display: none;
   }
