@@ -18,6 +18,8 @@ import './Chat.css'
 
 const store = useChatStore()
 const isSidebarOpen = ref(false)
+/** 用于取消当前请求的 AbortController */
+let abortController: AbortController | null = null
 
 // ==================== 监听器 ====================
 
@@ -46,6 +48,14 @@ function closeSidebar() {
 async function handleSend(content: string, images: ImageData[] = [], files: FileData[] = []) {
   const sessionId = store.currentSessionId
   if (!sessionId || store.isSessionLoading(sessionId)) return
+
+  // 取消之前的请求
+  if (abortController) {
+    abortController.abort()
+  }
+
+  // 创建新的 AbortController
+  abortController = new AbortController()
 
   // 构建用户消息内容
   let userContent = content
@@ -102,21 +112,6 @@ async function handleSend(content: string, images: ImageData[] = [], files: File
             }
           }
         },
-        // 内容回调 - 逐字显示
-        onContent: (chunk: string) => {
-          console.log('[Chat] onContent received:', chunk)
-          const sessionMessages = store.messagesMap[sessionId]
-          if (sessionMessages && sessionMessages[assistantIndex]) {
-            sessionMessages[assistantIndex].content += chunk
-            console.log('[Chat] Updated content length:', sessionMessages[assistantIndex].content.length)
-            // 只在当前会话显示流式内容
-            if (store.currentSessionId === sessionId) {
-              store.setStreamingContent(sessionId, assistantIndex, sessionMessages[assistantIndex].content)
-            }
-          } else {
-            console.log('[Chat] onContent: sessionMessages or assistantIndex is invalid')
-          }
-        },
 
         // 错误回调
         onError: (error: string) => {
@@ -137,21 +132,36 @@ async function handleSend(content: string, images: ImageData[] = [], files: File
             store.clearStreamingContent()
           }
         }
-      }
+      },
+      abortController.signal
     )
   } catch (error) {
-    console.error('Send message failed:', error)
-    const sessionMessages = store.messagesMap[sessionId]
-    if (sessionMessages && sessionMessages[assistantIndex] && !sessionMessages[assistantIndex].content) {
-      sessionMessages[assistantIndex].content = '[发送失败，请重试]'
-      store.setStreamingContent(sessionId, assistantIndex, sessionMessages[assistantIndex].content)
+    // 如果是用户取消，不显示错误
+    if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      console.error('Send message failed:', error)
+      const sessionMessages = store.messagesMap[sessionId]
+      if (sessionMessages && sessionMessages[assistantIndex] && !sessionMessages[assistantIndex].content) {
+        sessionMessages[assistantIndex].content = '[发送失败，请重试]'
+        store.setStreamingContent(sessionId, assistantIndex, sessionMessages[assistantIndex].content)
+      }
     }
   } finally {
     store.setSessionLoading(sessionId, false)
+    abortController = null
     // 只在当前会话清理流式内容
     if (store.currentSessionId === sessionId) {
       store.clearStreamingContent()
     }
+  }
+}
+
+/**
+ * 停止当前请求
+ */
+function handleStop() {
+  if (abortController) {
+    abortController.abort()
+    abortController = null
   }
 }
 </script>
@@ -176,6 +186,7 @@ async function handleSend(content: string, images: ImageData[] = [], files: File
         <ChatInput
           :loading="store.isSessionLoading(store.currentSessionId)"
           @send="handleSend"
+          @stop="handleStop"
         />
       </footer>
     </div>

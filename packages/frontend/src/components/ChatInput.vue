@@ -42,6 +42,8 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   /** 发送消息事件 */
   send: [content: string, images: ImageData[], files: FileData[]]
+  /** 停止生成事件 */
+  stop: []
 }>()
 
 /** 输入框内容 */
@@ -256,6 +258,18 @@ function handleKeydown(e: KeyboardEvent) {
           <polygon points="22 2 15 22 11 13 2 9"></polygon>
         </svg>
       </button>
+
+      <!-- 停止按钮 -->
+      <button
+        v-else
+        class="action-btn stop"
+        @click="emit('stop')"
+        aria-label="停止生成"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <rect x="6" y="6" width="12" height="12" rx="1"></rect>
+        </svg>
+      </button>
     </div>
 
     <!-- 快捷提示 -->
@@ -395,6 +409,18 @@ function handleKeydown(e: KeyboardEvent) {
   color: var(--text-muted);
   cursor: not-allowed;
   box-shadow: none;
+}
+
+/* 停止按钮 - 红色强调 */
+.action-btn.stop {
+  background: var(--accent-stop, #ef4444);
+  color: white;
+  box-shadow: var(--shadow-warm);
+}
+
+.action-btn.stop:hover {
+  background: var(--accent-stop-hover, #dc2626);
+  transform: translateY(-1px) scale(1.05);
 }
 
 /* 底部提示 */
