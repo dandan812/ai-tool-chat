@@ -247,11 +247,3 @@ export class ChunkManager {
  */
 export const chunkManager = new ChunkManager();
 
-/**
- * 定期清理任务（每 5 分钟）
- */
-if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    chunkManager.cleanup();
-  }, CHUNK_TIMEOUT);
-}
