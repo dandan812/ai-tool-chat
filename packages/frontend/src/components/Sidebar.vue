@@ -7,14 +7,13 @@
  * 功能特性：
  * - 显示会话列表和切换会话
  * - 创建新对话
- * - 系统提示词编辑
  * - 主题切换（亮色/暗色）
  * - 移动端响应式折叠
  *
  * @package frontend/src/components
  */
 
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useTheme } from '../composables/useTheme'
 
@@ -32,32 +31,6 @@ defineProps<Props>()
 const store = useChatStore()
 /** 主题管理 */
 const { theme, setTheme } = useTheme()
-
-/** 是否显示系统提示词编辑器 */
-const showSystemPrompt = ref(false)
-/** 系统提示词输入内容 */
-const systemPromptInput = ref('')
-
-/**
- * 监听当前会话变化，自动更新系统提示词输入框
- */
-watch(
-  () => store.currentSessionId,
-  () => {
-    systemPromptInput.value = store.currentSession?.systemPrompt ?? ''
-  },
-  { immediate: true }
-)
-
-/**
- * 保存系统提示词到当前会话
- */
-function saveSystemPrompt() {
-  if (store.currentSessionId) {
-    store.updateSystemPrompt(store.currentSessionId, systemPromptInput.value)
-    showSystemPrompt.value = false
-  }
-}
 
 /**
  * 时间常量定义（毫秒）
@@ -118,28 +91,6 @@ function formatTime(timestamp: number): string {
         </svg>
         新对话
       </button>
-    </div>
-
-    <!-- 系统提示词 -->
-    <div class="section">
-      <button class="section-toggle" @click="showSystemPrompt = !showSystemPrompt">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-        {{ showSystemPrompt ? '收起草稿' : '助手人设' }}
-      </button>
-
-      <div v-if="showSystemPrompt" class="prompt-editor">
-        <textarea
-          v-model="systemPromptInput"
-          placeholder="例如：你是一个温暖的设计师朋友，说话亲切有创意..."
-          rows="4"
-        />
-        <button class="save-btn" @click="saveSystemPrompt">
-          保存设置
-        </button>
-      </div>
     </div>
 
     <!-- 会话列表 -->
@@ -277,73 +228,6 @@ function formatTime(timestamp: number): string {
   background: var(--accent-primary-hover);
   transform: translateY(-1px);
   box-shadow: 0 6px 20px -4px var(--accent-glow);
-}
-
-/* Section */
-.section {
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.section-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.section-toggle:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.prompt-editor {
-  margin-top: var(--space-3);
-  animation: fadeIn 200ms ease-out;
-}
-
-.prompt-editor textarea {
-  width: 100%;
-  padding: var(--space-3);
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-  resize: vertical;
-  transition: all var(--transition-fast);
-}
-
-.prompt-editor textarea:focus {
-  outline: none;
-  border-color: var(--input-focus-border);
-  box-shadow: 0 0 0 3px var(--input-focus-ring);
-}
-
-.save-btn {
-  width: 100%;
-  margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.save-btn:hover {
-  background: var(--accent-primary);
-  color: white;
 }
 
 /* Session List */

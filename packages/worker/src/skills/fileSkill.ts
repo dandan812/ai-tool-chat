@@ -19,14 +19,16 @@ export const fileSkill: Skill = {
   async *execute(input: SkillInput, context: SkillContext): AsyncIterable<SkillStreamChunk> {
     const { files = [], messages } = input;
 
-    logger.info('Processing files', { fileCount: files.length });
+    logger.info('Processing files in fileSkill', { fileCount: files.length });
 
     // 调试：打印文件信息
     for (const file of files) {
-      logger.info('File details', {
+      logger.info('File details in fileSkill', {
         name: file.name,
         contentLength: file.content?.length || 0,
-        contentPreview: file.content?.substring(0, 100) || '(empty)'
+        contentPreview: file.content?.substring(0, 200) || '(empty)',
+        mimeType: file.mimeType,
+        size: file.size
       });
     }
 

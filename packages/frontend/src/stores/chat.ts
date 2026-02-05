@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef } from 'vue'
 import { type ChatMessage, sendChatRequest } from '../api/ai'
+import { getUserFriendlyError } from '../utils/error'
 
 // ==================== 类型定义 ====================
 
@@ -9,7 +10,6 @@ export interface ChatSession {
   title: string
   createdAt: number
   updatedAt: number
-  systemPrompt?: string
 }
 
 interface StorageData {
@@ -98,7 +98,7 @@ export const useChatStore = defineStore('chat', () => {
       storageError.value = null
     } catch (error) {
       console.error('Storage save failed:', error)
-      storageError.value = '存储空间不足，已清理旧数据'
+      storageError.value = getUserFriendlyError(error as Error, '存储失败')
       cleanupOldMessages()
     }
   }, DEBOUNCE_MS)
@@ -202,14 +202,6 @@ export const useChatStore = defineStore('chat', () => {
     if (!session || !title.trim()) return
 
     session.title = title.trim().slice(0, TITLE_MAX_LENGTH)
-    saveToStorage()
-  }
-
-  function updateSystemPrompt(id: string, prompt: string): void {
-    const session = sessionList.value.find((s) => s.id === id)
-    if (!session) return
-
-    session.systemPrompt = prompt
     saveToStorage()
   }
 
@@ -317,11 +309,7 @@ AI：${aiMsg.slice(0, 300)}`
         },
         (error) => {
           console.error('Chat error:', error)
-          const isNetworkError = error.message?.includes('Failed to fetch') || 
-                                 error.message?.includes('network')
-          const errorMsg = isNetworkError 
-            ? '[网络错误，请检查连接]' 
-            : '[出错了，请重试]'
+          const errorMsg = getUserFriendlyError(error as Error, '出错了，请重试')
           if (sessionMessages[assistantIndex]) {
             const msg = sessionMessages[assistantIndex]
             sessionMessages[assistantIndex] = { ...msg, content: msg.content + '\n\n' + errorMsg }
@@ -360,14 +348,6 @@ AI：${aiMsg.slice(0, 300)}`
     // 移除开头的 assistant 消息
     if (apiMessages[0]?.role === 'assistant') {
       apiMessages.shift()
-    }
-
-    const session = currentSession.value
-    if (session?.systemPrompt?.trim()) {
-      apiMessages.unshift({
-        role: 'system',
-        content: session.systemPrompt.trim()
-      })
     }
 
     return apiMessages
@@ -441,7 +421,6 @@ AI：${aiMsg.slice(0, 300)}`
     createSession,
     switchSession,
     deleteSession,
-    updateSystemPrompt,
     addMessage,
     deleteMessage,
     sendMessage,

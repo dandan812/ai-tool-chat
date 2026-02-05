@@ -16,6 +16,7 @@
 import type { ChatMessage } from './ai';
 import type { Task, Step, SSEEvent, ImageData, FileData } from '../types/task';
 import { API_BASE_URL } from '../config';
+import { getUserFriendlyError } from '../utils/error';
 
 export interface TaskRequest {
   /** 消息列表 */
@@ -28,8 +29,6 @@ export interface TaskRequest {
   temperature?: number;
   /** 是否启用工具调用 */
   enableTools?: boolean;
-  /** 系统提示词（助手人设） */
-  systemPrompt?: string;
 }
 
 export interface TaskCallbacks {
@@ -52,24 +51,40 @@ export async function sendTaskRequest(
 ): Promise<void> {
   try {
     console.log('[TaskAPI] Sending request to:', API_BASE_URL);
+    // 调试：打印文件信息
+    if (request.files && request.files.length > 0) {
+      console.log('[TaskAPI] Sending files:', request.files.map(f => ({
+        name: f.name,
+        contentLength: f.content?.length || 0,
+        contentPreview: f.content?.substring(0, 100) || '(empty)',
+        mimeType: f.mimeType,
+        size: f.size
+      })));
+    }
+    const requestBody = {
+      ...request,
+      stream: true,
+    };
+    // 调试：检查序列化后的数据
+    const serialized = JSON.stringify(requestBody);
+    console.log('[TaskAPI] Request body size:', serialized.length);
     const response = await fetch(API_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...request,
-        stream: true,
-      }),
+      body: JSON.stringify(requestBody),
       signal,
     });
     console.log('[TaskAPI] Response received:', response.status, response.ok);
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      const error = new Error(`HTTP ${response.status}`);
+      const userError = getUserFriendlyError(error, `服务器错误 (${response.status})`);
+      throw new Error(userError);
     }
 
     if (!response.body) {
-      throw new Error('Response body is null');
+      throw new Error(getUserFriendlyError(new Error('No response body'), '服务器响应异常'));
     }
 
     console.log('[TaskAPI] Starting stream processing');
@@ -83,7 +98,8 @@ export async function sendTaskRequest(
       // 用户主动取消，不触发错误回调
       return;
     }
-    callbacks.onError?.(String(error));
+    const userError = getUserFriendlyError(error as Error, '请求失败');
+    callbacks.onError?.(userError);
   }
 }
 

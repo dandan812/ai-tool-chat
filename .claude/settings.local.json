@@ -5,7 +5,12 @@
       "Skill(usage-query-skill)",
       "Bash(pnpm add:*)",
       "Bash(uipro init:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "mcp__zread__get_repo_structure",
+      "Bash(pnpm deploy:worker:*)",
+      "Bash(pnpm --filter @ai-tool-chat/frontend build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

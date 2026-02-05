@@ -6,12 +6,14 @@ import { ref, computed, watch } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { sendTaskRequest } from '../api/task'
 import type { ImageData, FileData } from '../types/task'
+import { getUserFriendlyError } from '../utils/error'
 
 // 组件导入
 import Sidebar from '../components/Sidebar.vue'
 import ChatHeader from '../components/ChatHeader.vue'
 import ChatMessages from '../components/ChatMessages.vue'
 import ChatInput from '../components/ChatInput.vue'
+import Toast from '../components/Toast.vue'
 import './Chat.css'
 
 // ==================== 状态管理 ====================
@@ -97,8 +99,7 @@ async function handleSend(content: string, images: ImageData[] = [], files: File
         messages: apiMessages,
         images: images.length > 0 ? images : undefined,
         files: files.length > 0 ? files : undefined,
-        temperature: 0.7,
-        systemPrompt: store.currentSession?.systemPrompt
+        temperature: 0.7
       },
       {
         // 内容回调 - 逐字显示
@@ -116,9 +117,10 @@ async function handleSend(content: string, images: ImageData[] = [], files: File
         // 错误回调
         onError: (error: string) => {
           console.error('Task error:', error)
+          const userError = getUserFriendlyError(new Error(error), '出错了，请重试')
           const sessionMessages = store.messagesMap[sessionId]
           if (sessionMessages && sessionMessages[assistantIndex]) {
-            sessionMessages[assistantIndex].content += `\n\n[错误: ${error}]`
+            sessionMessages[assistantIndex].content += `\n\n${userError}`
             if (store.currentSessionId === sessionId) {
               store.setStreamingContent(sessionId, assistantIndex, sessionMessages[assistantIndex].content)
             }
@@ -139,9 +141,10 @@ async function handleSend(content: string, images: ImageData[] = [], files: File
     // 如果是用户取消，不显示错误
     if (!(error instanceof DOMException && error.name === 'AbortError')) {
       console.error('Send message failed:', error)
+      const userError = getUserFriendlyError(error as Error, '发送失败，请重试')
       const sessionMessages = store.messagesMap[sessionId]
       if (sessionMessages && sessionMessages[assistantIndex] && !sessionMessages[assistantIndex].content) {
-        sessionMessages[assistantIndex].content = '[发送失败，请重试]'
+        sessionMessages[assistantIndex].content = userError
         store.setStreamingContent(sessionId, assistantIndex, sessionMessages[assistantIndex].content)
       }
     }
@@ -190,6 +193,14 @@ function handleStop() {
         />
       </footer>
     </div>
+
+    <!-- 存储错误提示 -->
+    <Toast
+      :show="!!store.storageError"
+      message="存储空间不足，已清理部分旧数据"
+      type="warning"
+      @close="store.storageError = null"
+    />
   </div>
 </template>
 

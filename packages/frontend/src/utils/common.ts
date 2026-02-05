@@ -177,7 +177,9 @@ export function shuffle<T>(arr: T[]): T[] {
   const result = [...arr]
   for (let i = result.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
-    ;[result[i], result[j]] = [result[j], result[i]]
+    const temp = result[i]!
+    result[i] = result[j]!
+    result[j] = temp
   }
   return result
 }
@@ -267,14 +269,17 @@ export function set<T extends object>(
   let result: any = obj
 
   for (let i = 0; i < keys.length - 1; i++) {
-    const key = keys[i]
+    const key = keys[i]!
     if (!result[key]) {
       result[key] = {}
     }
     result = result[key]
   }
 
-  result[keys[keys.length - 1]] = value
+  const lastKey = keys[keys.length - 1]
+  if (lastKey) {
+    result[lastKey] = value
+  }
   return obj
 }
 

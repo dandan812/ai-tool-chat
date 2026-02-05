@@ -64,6 +64,20 @@ async function handleChatRequest(request: Request, env: Env): Promise<Response> 
     temperature = 0.7,
   } = body;
 
+  // 调试：打印文件信息
+  if (files && files.length > 0) {
+    logger.info('Received files in request', {
+      fileCount: files.length,
+      files: files.map(f => ({
+        name: f.name,
+        contentLength: f.content?.length || 0,
+        contentPreview: f.content?.substring(0, 100) || '(empty)',
+        mimeType: f.mimeType,
+        size: f.size
+      }))
+    });
+  }
+
   // 验证必需字段
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new ValidationError('Messages are required');
