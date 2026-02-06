@@ -390,7 +390,7 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
       totalChunks: metadata.totalChunks,
       receivedChunks: receivedCount,
       receivedIndices: chunkManager.getReceivedIndices(fileId),
-      percentage: Math.round(percentage * 100) / 100,
+      percentage,
       isComplete: chunkManager.isComplete(fileId),
     });
   } catch (error) {

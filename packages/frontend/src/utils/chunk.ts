@@ -11,6 +11,7 @@
  */
 
 import type { FileData, UploadProgress, UploadProgressCallback } from '../types/task';
+import { API_BASE_URL } from '../config';
 import { generateId } from './file';
 
 /**
@@ -100,8 +101,6 @@ export async function uploadChunkedFile(
   const {
     onProgress,
     chunkSize = DEFAULT_CHUNK_SIZE,
-    apiUrl = new URL('../api/task.ts', import.meta.url).href.replace(/\/api\/task\.ts$/, '')
-      || `${window.location.origin}/upload`
   } = options;
 
   const fileId = generateId();
@@ -140,7 +139,7 @@ export async function uploadChunkedFile(
       formData.append('chunk', new Blob([chunkData], { type: file.type || 'text/plain' }));
       formData.append('mimeType', file.type || 'text/plain');
 
-      const response = await fetch(`${apiUrl}/chunk`, {
+      const response = await fetch(`${API_BASE_URL}/upload/chunk`, {
         method: 'POST',
         body: formData,
       });
@@ -188,7 +187,7 @@ export async function uploadChunkedFile(
       fileHash,
     });
 
-    const completeResponse = await fetch(`${apiUrl}/complete`, {
+    const completeResponse = await fetch(`${API_BASE_URL}/upload/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -225,8 +224,7 @@ export async function uploadChunkedFile(
  * 查询上传状态
  */
 export async function getUploadStatus(
-  fileId: string,
-  apiUrl?: string
+  fileId: string
 ): Promise<{
     fileId: string;
     fileName?: string;
@@ -235,9 +233,7 @@ export async function getUploadStatus(
     isComplete?: boolean;
     percentage?: number;
   }> {
-  const url = apiUrl || `${window.location.origin}/upload`;
-
-  const response = await fetch(`${url}/status?fileId=${fileId}`);
+  const response = await fetch(`${API_BASE_URL}/upload/status?fileId=${fileId}`);
 
   if (!response.ok) {
     throw new Error('查询上传状态失败');
