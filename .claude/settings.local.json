@@ -11,7 +11,8 @@
       "Bash(pnpm --filter @ai-tool-chat/frontend build:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(pkill:*)"
     ]
   }
 }

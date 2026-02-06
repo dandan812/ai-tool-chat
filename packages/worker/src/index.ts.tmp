@@ -1,0 +1,11 @@
+    // 更新元数据
+    chunkManager.updateMetadata(fileId, {
+      fileName: '', // 稍后在 complete 时设置
+      fileHash,
+      totalSize: 0, // 稍后计算
+      totalChunks,
+      receivedChunks: 0, // 已在 storeChunk 中更新
+      receivedIndices: [],
+      mimeType,
+      createdAt: Date.now(),
+    });
