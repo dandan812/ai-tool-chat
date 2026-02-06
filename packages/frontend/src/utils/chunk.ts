@@ -115,9 +115,13 @@ export async function uploadChunkedFile(
     chunkSize,
   });
 
+  console.log('[Chunk] Starting chunked upload function...');
+
   try {
     // 计算 MD5
+    console.log('[Chunk] Calculating MD5...');
     const fileHash = await calculateFileMD5(file);
+    console.log('[Chunk] MD5 calculated successfully, starting upload loop...');
 
     // 上传进度追踪
     const startTime = Date.now();
@@ -125,11 +129,13 @@ export async function uploadChunkedFile(
 
     // 逐个上传分片
     for (let i = 0; i < totalChunks; i++) {
+      console.log(`[Chunk] Uploading chunk ${i + 1}/${totalChunks}...`);
       const chunk = chunks[i];
       if (!chunk) {
         throw new Error(`Chunk ${i} not found`);
       }
       const chunkData = await chunk.arrayBuffer();
+      console.log(`[Chunk] Chunk data size: ${chunkData.byteLength} bytes`);
 
       const formData = new FormData();
       formData.append('fileId', fileId);
@@ -144,8 +150,11 @@ export async function uploadChunkedFile(
         body: formData,
       });
 
+      console.log(`[Chunk] Chunk ${i + 1} response status: ${response.status} ${response.ok}`);
+
       if (!response.ok) {
         const errorText = await response.text();
+        console.error(`[Chunk] Chunk ${i + 1} failed with response:`, errorText);
         throw new Error(`分片 ${i + 1}/${totalChunks} 上传失败: ${errorText}`);
       }
 

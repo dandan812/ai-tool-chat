@@ -90,6 +90,9 @@ export function withValidation(handler: Handler): Handler {
       throw new ValidationError('Method Not Allowed', { method: request.method });
     }
 
+    const url = new URL(request.url);
+    const isUploadEndpoint = url.pathname.startsWith('/upload/');
+
     // GET 请求跳过 Content-Type 验证
     if (request.method === 'GET') {
       return handler(request, env);
@@ -97,7 +100,8 @@ export function withValidation(handler: Handler): Handler {
 
     // 验证 Content-Type
     const contentType = request.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
+    // 上传端点允许 multipart/form-data
+    if (!isUploadEndpoint && !contentType.includes('application/json')) {
       throw new ValidationError('Content-Type must be application/json', {
         contentType,
       });
