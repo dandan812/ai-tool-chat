@@ -12,7 +12,14 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(pnpm --filter @ai-tool-chat/worker lint:*)",
+      "Bash(pnpm --filter @ai-tool-chat/worker build:*)",
+      "Bash(pnpm lint)",
+      "Bash(npx tsc:*)",
+      "Bash(npx wrangler deploy:*)",
+      "Bash(curl:*)",
+      "Bash(ping:*)"
     ]
   }
 }

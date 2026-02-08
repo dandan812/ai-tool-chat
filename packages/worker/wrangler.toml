@@ -4,3 +4,13 @@ compatibility_date = "2024-01-01"
 
 [observability]
 enabled = true
+
+# Durable Objects configuration
+[[durable_objects.bindings]]
+name = "CHUNK_STORAGE"
+class_name = "ChunkStorage"
+
+[env.dev]
+[[env.dev.durable_objects.bindings]]
+name = "CHUNK_STORAGE"
+class_name = "ChunkStorage"

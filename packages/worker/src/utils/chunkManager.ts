@@ -54,13 +54,17 @@ export class ChunkManager {
         this.chunks.set(fileId, new Map());
       }
 
+      // 先获取当前计数（在存储之前）
+      const currentCount = this.getReceivedCount(fileId);
+      const currentIndices = this.getReceivedIndices(fileId);
+
       const fileChunks = this.chunks.get(fileId)!;
       fileChunks.set(chunkIndex, data);
 
       // 更新元数据
       this.updateMetadata(fileId, {
-        receivedChunks: this.getReceivedCount(fileId) + 1,
-        receivedIndices: this.getReceivedIndices(fileId).concat(chunkIndex),
+        receivedChunks: currentCount + 1,
+        receivedIndices: currentIndices.concat(chunkIndex),
       });
 
       logger.debug('Chunk stored', { fileId, chunkIndex, size: data.byteLength });

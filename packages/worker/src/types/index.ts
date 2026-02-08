@@ -151,11 +151,21 @@ export interface SkillContext {
 }
 
 export interface SkillStreamChunk {
-  type: 'content' | 'tool_call' | 'tool_result' | 'error' | 'complete';
+  type: 'content' | 'tool_call' | 'tool_result' | 'error' | 'complete' | 'progress';
   content?: string;
   toolCall?: ToolCall;
   toolResult?: ToolResult;
   error?: string;
+  progress?: ProgressInfo;
+}
+
+/**
+ * 进度信息
+ */
+export interface ProgressInfo {
+  message: string;
+  current: number;
+  total: number;
 }
 
 // ==================== 消息和多媒体 ====================

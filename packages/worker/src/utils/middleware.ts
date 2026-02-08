@@ -1,6 +1,5 @@
 /**
- * HTTP 中间件工具 - 优化版
- * 支持新的错误类型和更好的错误处理
+ * HTTP 中间件工具
  */
 
 import type { Env, Handler, Middleware } from '../types';
@@ -90,9 +89,6 @@ export function withValidation(handler: Handler): Handler {
       throw new ValidationError('Method Not Allowed', { method: request.method });
     }
 
-    const url = new URL(request.url);
-    const isUploadEndpoint = url.pathname.startsWith('/upload/');
-
     // GET 请求跳过 Content-Type 验证
     if (request.method === 'GET') {
       return handler(request, env);
@@ -100,9 +96,8 @@ export function withValidation(handler: Handler): Handler {
 
     // 验证 Content-Type
     const contentType = request.headers.get('content-type') || '';
-    // 上传端点允许 multipart/form-data
-    if (!isUploadEndpoint && !contentType.includes('application/json')) {
-      throw new ValidationError('Content-Type must be application/json', {
+    if (!contentType.includes('application/json') && !contentType.includes('multipart/form-data')) {
+      throw new ValidationError('Content-Type must be application/json or multipart/form-data', {
         contentType,
       });
     }
@@ -115,28 +110,6 @@ export function withValidation(handler: Handler): Handler {
         size: contentLength,
         maxSize,
       });
-    }
-
-    return handler(request, env);
-  };
-}
-
-/**
- * 认证中间件
- */
-export function withAuth(
-  handler: Handler,
-  getToken: (env: Env) => string | undefined
-): Handler {
-  return async (request, env) => {
-    const authHeader = request.headers.get('authorization');
-    const expectedToken = getToken(env);
-
-    if (expectedToken) {
-      const token = authHeader?.replace('Bearer ', '');
-      if (token !== expectedToken) {
-        throw new AuthenticationError('Invalid or missing token');
-      }
     }
 
     return handler(request, env);
@@ -205,59 +178,6 @@ export function createJSONResponse(data: unknown, status = 200): Response {
 }
 
 /**
- * 创建 SSE 响应
- */
-export function createSSEResponse(
-  generator: AsyncIterable<unknown>,
-  onError?: (error: Error) => void
-): Response {
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        for await (const chunk of generator) {
-          const data = `data: ${JSON.stringify(chunk)}\n\n`;
-          controller.enqueue(encoder.encode(data));
-        }
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        onError?.(err);
-
-        const errorEvent = {
-          type: 'error',
-          data: { error: err.message },
-        };
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-    },
-  });
-}
-
-/**
- * 自定义响应错误 (兼容旧代码)
- * @deprecated 使用 WorkerError 代替
- */
-export class ResponseError extends Error {
-  constructor(message: string, public status: number) {
-    super(message);
-    this.name = 'ResponseError';
-  }
-}
-
-/**
  * 安全的 JSON 解析
  */
 export async function safeJSONParse<T>(request: Request): Promise<T | null> {
@@ -269,23 +189,8 @@ export async function safeJSONParse<T>(request: Request): Promise<T | null> {
 }
 
 /**
- * 安全的 JSON 解析（带验证）
+ * 序列化 SSE 事件
  */
-export async function parseJSON<T>(
-  request: Request,
-  validator?: (data: unknown) => data is T
-): Promise<T> {
-  let data: unknown;
-
-  try {
-    data = await request.json();
-  } catch {
-    throw new ValidationError('Invalid JSON body');
-  }
-
-  if (validator && !validator(data)) {
-    throw new ValidationError('Invalid request body format');
-  }
-
-  return data as T;
+export function serializeSSEEvent(event: unknown): string {
+  return JSON.stringify(event);
 }
