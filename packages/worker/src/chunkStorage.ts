@@ -43,7 +43,32 @@ interface StorageState {
 }
 
 export class ChunkStorage implements DurableObject {
-  constructor(private state: DurableObjectState) {}
+  private stateData: StorageState = {
+    chunks: new Map(),
+    metadata: new Map()
+  };
+
+  constructor(private state: DurableObjectState) {
+    // 从持久化存储加载状态
+    this.loadState();
+  }
+
+  /**
+   * 从持久化存储加载状态
+   */
+  private async loadState(): Promise<void> {
+    const stored = await this.state.storage.get<StorageState>('state');
+    if (stored) {
+      this.stateData = stored;
+    }
+  }
+
+  /**
+   * 保存状态到持久化存储
+   */
+  private async saveState(): Promise<void> {
+    await this.state.storage.put('state', this.stateData);
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -83,18 +108,18 @@ export class ChunkStorage implements DurableObject {
   }
 
   /**
-   * 获取当前状态
+   * 获取当前状态（使用实例变量）
    */
   private getState(): StorageState {
-    const chunks = this.state.storage.get<StorageState>('state');
-    return chunks || { chunks: new Map(), metadata: new Map() };
+    return this.stateData;
   }
 
   /**
-   * 保存状态
+   * 保存状态到持久化存储
    */
   private async setState(state: StorageState): Promise<void> {
-    await this.state.storage.put('state', state);
+    this.stateData = state;
+    await this.saveState();
   }
 
   /**
