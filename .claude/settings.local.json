@@ -20,7 +20,8 @@
       "Bash(npx wrangler deploy:*)",
       "Bash(curl:*)",
       "Bash(ping:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git pull:*)"
     ]
   }
 }
