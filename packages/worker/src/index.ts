@@ -253,11 +253,12 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
     formDataToSend.append('mimeType', mimeType);
     formDataToSend.append('chunk', chunk);
 
-    // 发送到 Durable Object
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl, {
+    // 发送到 Durable Object（创建 Request 对象）
+    const durableRequest = new Request(durableObjectUrl, {
       method: 'POST',
       body: formDataToSend,
     });
+    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
 
     if (!durableResponse.ok) {
       const error = await durableResponse.text();
@@ -295,10 +296,11 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
     // 构建 Durable Object URL（使用相对路径）
     const durableObjectUrl = `/?action=mergeChunks&fileId=${encodeURIComponent(fileId)}`;
 
-    // 调用 Durable Object 合并分片
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl, {
+    // 调用 Durable Object 合并分片（创建 Request 对象）
+    const durableRequest = new Request(durableObjectUrl, {
       method: 'POST',
     });
+    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
 
     if (!durableResponse.ok) {
       const error = await durableResponse.text();
@@ -363,8 +365,11 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
     // 构建 Durable Object URL（使用相对路径）
     const durableObjectUrl = `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`;
 
-    // 调用 Durable Object 获取元数据
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl);
+    // 调用 Durable Object 获取元数据（创建 Request 对象）
+    const durableRequest = new Request(durableObjectUrl, {
+      method: 'GET',
+    });
+    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
 
     if (!durableResponse.ok) {
       throw new NotFoundError(`File ${fileId} not found`);
