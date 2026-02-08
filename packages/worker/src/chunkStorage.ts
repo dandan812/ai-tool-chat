@@ -49,6 +49,8 @@ export class ChunkStorage implements DurableObject {
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
 
+    logger.debug('ChunkStorage request', { action, url: url.href });
+
     try {
       switch (action) {
         case 'storeChunk':

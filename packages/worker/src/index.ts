@@ -241,15 +241,8 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
       throw new ValidationError('Missing required fields: fileId, chunk, or chunkIndex');
     }
 
-    // 构建 Durable Object URL
-    const durableObjectUrl = new URL(env.CHUNK_STORAGE);
-    durableObjectUrl.pathname = '';
-    durableObjectUrl.searchParams.set('action', 'storeChunk');
-    durableObjectUrl.searchParams.set('fileId', fileId);
-    durableObjectUrl.searchParams.set('chunkIndex', chunkIndex.toString());
-    durableObjectUrl.searchParams.set('totalChunks', totalChunks.toString());
-    durableObjectUrl.searchParams.set('fileHash', fileHash);
-    durableObjectUrl.searchParams.set('mimeType', mimeType);
+    // 构建 Durable Object URL（使用相对路径）
+    const durableObjectUrl = `/?action=storeChunk&fileId=${encodeURIComponent(fileId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}&fileHash=${encodeURIComponent(fileHash)}&mimeType=${encodeURIComponent(mimeType)}`;
 
     // 转换 FormData 为新的请求
     const formDataToSend = new FormData();
@@ -261,7 +254,7 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
     formDataToSend.append('chunk', chunk);
 
     // 发送到 Durable Object
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl.toString(), {
+    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl, {
       method: 'POST',
       body: formDataToSend,
     });
@@ -299,14 +292,11 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 
     const { fileId, fileName, mimeType } = body;
 
-    // 构建 Durable Object URL
-    const durableObjectUrl = new URL(env.CHUNK_STORAGE);
-    durableObjectUrl.pathname = '';
-    durableObjectUrl.searchParams.set('action', 'mergeChunks');
-    durableObjectUrl.searchParams.set('fileId', fileId);
+    // 构建 Durable Object URL（使用相对路径）
+    const durableObjectUrl = `/?action=mergeChunks&fileId=${encodeURIComponent(fileId)}`;
 
     // 调用 Durable Object 合并分片
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl.toString(), {
+    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl, {
       method: 'POST',
     });
 
@@ -370,14 +360,11 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
       throw new ValidationError('Missing fileId parameter');
     }
 
-    // 构建 Durable Object URL
-    const durableObjectUrl = new URL(env.CHUNK_STORAGE);
-    durableObjectUrl.pathname = '';
-    durableObjectUrl.searchParams.set('action', 'getMetadata');
-    durableObjectUrl.searchParams.set('fileId', fileId);
+    // 构建 Durable Object URL（使用相对路径）
+    const durableObjectUrl = `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`;
 
     // 调用 Durable Object 获取元数据
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl.toString());
+    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl);
 
     if (!durableResponse.ok) {
       throw new NotFoundError(`File ${fileId} not found`);
