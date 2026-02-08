@@ -286,7 +286,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 
     const chunkStorage = new ChunkStorage();
 
-    // 检查是否所有分片都已上传
+    // 检查是否所有分片都已上传（在合并之前检查）
     const isComplete = await chunkStorage.isComplete(fileId);
     if (!isComplete) {
       throw new ValidationError('Not all chunks received yet');

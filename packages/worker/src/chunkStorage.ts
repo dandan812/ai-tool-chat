@@ -124,7 +124,7 @@ export class ChunkStorage {
       // 解码 Base64 数据
       const textContent = atob(merged);
 
-      // 删除分片
+      // 删除分片（不删除元数据）
       chunksMap.delete(fileId);
 
       return { success: true, data: textContent, size: totalSize };
