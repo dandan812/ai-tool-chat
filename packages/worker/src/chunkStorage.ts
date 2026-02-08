@@ -67,6 +67,8 @@ export class ChunkStorage implements DurableObject {
    * 保存状态到持久化存储
    */
   private async saveState(): Promise<void> {
+    this.stateData.chunks = new Map(this.stateData.chunks);
+    this.stateData.metadata = new Map(this.stateData.metadata);
     await this.state.storage.put('state', this.stateData);
   }
 
