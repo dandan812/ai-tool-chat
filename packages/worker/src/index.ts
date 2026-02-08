@@ -1,12 +1,11 @@
 /**
  * Worker Entry Point
  * Task → Step → Skill + MCP Client 架构
- * SSE 流式返回 + 文件上传端点（使用全局内存存储）
+ * SSE 流式返回 + 文件上传端点（使用 Durable Objects）
  */
 import type { Env, ChatRequest, UploadCompleteRequest, UploadCompleteResponse, UploadStatusResponse } from "./types";
 import { ValidationError, NotFoundError } from './types';
 import { TaskManager } from "./core/taskManager";
-import { ChunkStorage } from "./chunkStorage";
 import {
   compose,
   withCORS,
@@ -18,6 +17,7 @@ import {
   serializeSSEEvent,
 } from './utils/middleware';
 import { logger } from './utils/logger';
+import { ChunkStorage } from "./chunkStorage";
 
 export { Env } from "./types";
 export { ChunkStorage };
@@ -58,7 +58,6 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
  * 处理聊天请求
  */
 async function handleChatRequest(request: Request, env: Env): Promise<Response> {
-  // 解析请求体
   const body = await safeJSONParse<ChatRequest>(request);
 
   if (!body) {
@@ -79,21 +78,6 @@ async function handleChatRequest(request: Request, env: Env): Promise<Response> 
     throw new ValidationError('Messages are required');
   }
 
-  // 验证消息格式
-  for (const msg of messages) {
-    if (!msg.role || !msg.content) {
-      throw new ValidationError('Invalid message format', {
-        message: msg,
-      });
-    }
-  }
-
-  // 验证 API Key
-  if (!env.DEEPSEEK_API_KEY) {
-    logger.error('DEEPSEEK_API_KEY not configured');
-    throw new ValidationError('Service not configured: missing DEEPSEEK_API_KEY');
-  }
-
   logger.info('Creating task', {
     messageCount: messages.length,
     stream,
@@ -102,18 +86,14 @@ async function handleChatRequest(request: Request, env: Env): Promise<Response> 
     enableTools,
   });
 
-  // 创建 TaskManager
   const taskManager = new TaskManager(env);
-
-  // 创建 Task
   const task = taskManager.createTask(body);
 
-  // 非流式响应
+  // 流式响应
   if (!stream) {
-    return await handleNonStreamRequest(taskManager, task.id, body);
+    return handleNonStreamRequest(taskManager, task.id, body);
   }
 
-  // 流式响应
   return handleStreamRequest(taskManager, task.id, body);
 }
 
@@ -147,7 +127,6 @@ function handleStreamRequest(
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
 
-  // 异步执行 Task
   const executeTask = async () => {
     try {
       for await (const event of taskManager.executeTask(taskId, request)) {
@@ -155,7 +134,6 @@ function handleStreamRequest(
         await writer.write(encoder.encode(data));
       }
 
-      // 发送完成标记
       await writer.write(encoder.encode('data: [DONE]\n\n'));
       logger.info('Task completed', { taskId });
     } catch (error) {
@@ -164,18 +142,14 @@ function handleStreamRequest(
         type: 'error',
         data: { error: String(error) },
       };
-      await writer.write(
-        encoder.encode(`data: ${serializeSSEEvent(errorEvent)}\n\n`)
-      );
+      await writer.write(encoder.encode(`data: ${serializeSSEEvent(errorEvent)}\n\n`));
     } finally {
       await writer.close();
     }
   };
 
-  // 启动执行（不等待）
   executeTask();
 
-  // 返回 SSE 响应
   return new Response(readable, {
     headers: {
       'Content-Type': 'text/event-stream',
@@ -212,7 +186,6 @@ async function handleStatsRequest(
   request: Request,
   env: Env
 ): Promise<Response> {
-  // 简单实现 - 实际应该使用全局 TaskManager
   const taskManager = new TaskManager(env);
   const stats = taskManager.getStats();
 
@@ -223,7 +196,7 @@ async function handleStatsRequest(
 }
 
 /**
- * 处理分片上传 - 使用全局内存存储
+ * 处理分片上传
  */
 async function handleUploadChunk(request: Request, env: Env): Promise<Response> {
   try {
@@ -242,30 +215,27 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
     const arrayBuffer = await chunk.arrayBuffer();
     const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-    const chunkStorage = new ChunkStorage();
-    const result = await chunkStorage.storeChunk(
-      fileId,
-      chunkIndex,
-      base64,
-      undefined,
-      fileHash,
-      totalChunks,
-      mimeType
-    );
+    logger.info('Uploading chunk', { fileId, chunkIndex, size: arrayBuffer.byteLength });
 
-    if (!result.success) {
-      throw new ValidationError(result.error || 'Failed to store chunk');
+    const durableObjectUrl = `/?action=storeChunk&fileId=${encodeURIComponent(fileId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}&fileHash=${encodeURIComponent(fileHash)}&mimeType=${encodeURIComponent(mimeType)}`;
+
+    const durableRequest = new Request(durableObjectUrl, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
+
+    if (!durableResponse.ok) {
+      const error = await durableResponse.text();
+      logger.error('Durable Object error', error);
+      throw new ValidationError(`Durable Object error: ${error}`);
     }
 
-    const metadata = await chunkStorage.getMetadata(fileId);
-    const receivedChunks = metadata?.receivedChunks || 1;
+    const result = await durableResponse.json();
+    logger.info('Chunk stored', { fileId, chunkIndex, result });
 
-    return createJSONResponse({
-      success: true,
-      chunkIndex,
-      fileId,
-      receivedChunks,
-    });
+    return createJSONResponse(result);
   } catch (error) {
     logger.error('Upload chunk error', error);
     throw error;
@@ -273,7 +243,7 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
 }
 
 /**
- * 处理上传完成 - 使用全局内存存储
+ * 处理上传完成
  */
 async function handleUploadComplete(request: Request, env: Env): Promise<Response> {
   try {
@@ -284,16 +254,23 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 
     const { fileId, fileName, mimeType } = body;
 
-    const chunkStorage = new ChunkStorage();
+    logger.info('Upload complete request', { fileId, fileName });
 
-    // 检查是否所有分片都已上传（在合并之前检查）
-    const isComplete = await chunkStorage.isComplete(fileId);
-    if (!isComplete) {
-      throw new ValidationError('Not all chunks received yet');
+    const durableObjectUrl = `/?action=mergeChunks&fileId=${encodeURIComponent(fileId)}`;
+    const durableRequest = new Request(durableObjectUrl, {
+      method: 'POST',
+    });
+
+    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
+
+    if (!durableResponse.ok) {
+      const error = await durableResponse.text();
+      logger.error('Durable Object error', error);
+      throw new ValidationError(`Durable Object error: ${error}`);
     }
 
-    // 合并分片
-    const result = await chunkStorage.mergeChunks(fileId);
+    const result = await durableResponse.json();
+    logger.info('Chunks merged', { fileId, result });
 
     if (!result.success) {
       throw new ValidationError(result.error || 'Merge failed');
@@ -302,12 +279,10 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
     // 解码 Base64 数据
     const textContent = atob(result.data!);
 
-    // 检查文件内容是否为空
     if (!textContent || textContent.length === 0) {
       throw new ValidationError('Uploaded file is empty');
     }
 
-    // 生成文件 ID
     const generateId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
     const fileData = {
@@ -318,14 +293,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
       size: result.size,
     };
 
-    // 注意：不删除分片和元数据，保留用于调试
-
-    logger.info('File upload completed via Memory Storage', {
-      fileId,
-      fileName,
-      contentLength: textContent.length,
-      size: result.size,
-    });
+    logger.info('File upload completed', { fileId, fileName, contentLength: textContent.length });
 
     return createJSONResponse<UploadCompleteResponse>({
       success: true,
@@ -338,7 +306,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 }
 
 /**
- * 查询上传状态 - 使用全局内存存储
+ * 查询上传状态
  */
 async function handleUploadStatus(request: Request, env: Env): Promise<Response> {
   try {
@@ -349,11 +317,21 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
       throw new ValidationError('Missing fileId parameter');
     }
 
-    const chunkStorage = new ChunkStorage();
-    const metadata = await chunkStorage.getMetadata(fileId);
+    logger.info('Upload status request', { fileId });
+
+    const durableObjectUrl = `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`;
+
+    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl);
+
+    if (!durableResponse.ok) {
+      throw new NotFoundError(`File ${fileId} not found`);
+    }
+
+    const metadata = await durableResponse.json();
+    logger.info('Got metadata', { fileId, metadata });
 
     if (!metadata) {
-      throw new NotFoundError(`File ${fileId} not found`);
+      throw new ValidationError('Invalid metadata response');
     }
 
     const percentage = metadata.totalChunks > 0
