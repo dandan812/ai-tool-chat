@@ -1,7 +1,7 @@
 /**
  * Worker Entry Point
  * Task → Step → Skill + MCP Client 架构
- * SSE 流式返回 + 文件上传端点（使用 Durable Objects）
+ * SSE 流式返回 + 文件上传端点（使用 KV Storage）
  */
 import type { Env, ChatRequest, UploadCompleteRequest, UploadCompleteResponse, UploadStatusResponse } from "./types";
 import { ValidationError, NotFoundError } from './types';
@@ -223,12 +223,11 @@ async function handleStatsRequest(
 }
 
 /**
- * 处理分片上传 - 使用 Durable Object
+ * 处理分片上传 - 使用 KV Storage
  */
 async function handleUploadChunk(request: Request, env: Env): Promise<Response> {
   try {
     const formData = await request.formData();
-
     const fileId = formData.get('fileId') as string;
     const chunkIndex = parseInt(formData.get('chunkIndex') as string || '0');
     const totalChunks = parseInt(formData.get('totalChunks') as string || '0');
@@ -236,44 +235,34 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
     const chunk = formData.get('chunk') as File;
     const mimeType = formData.get('mimeType') as string || 'text/plain';
 
-    // 验证必需字段
     if (!fileId || !chunk || isNaN(chunkIndex)) {
       throw new ValidationError('Missing required fields: fileId, chunk, or chunkIndex');
     }
 
-    // 构建 Durable Object URL（使用相对路径）
-    const durableObjectUrl = `/?action=storeChunk&fileId=${encodeURIComponent(fileId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}&fileHash=${encodeURIComponent(fileHash)}&mimeType=${encodeURIComponent(mimeType)}`;
+    const arrayBuffer = await chunk.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-    // 转换 FormData 为新的请求
-    const formDataToSend = new FormData();
-    formDataToSend.append('fileId', fileId);
-    formDataToSend.append('chunkIndex', chunkIndex.toString());
-    formDataToSend.append('totalChunks', totalChunks.toString());
-    formDataToSend.append('fileHash', fileHash);
-    formDataToSend.append('mimeType', mimeType);
-    formDataToSend.append('chunk', chunk);
-
-    // 发送到 Durable Object（创建 Request 对象）
-    const durableRequest = new Request(durableObjectUrl, {
-      method: 'POST',
-      body: formDataToSend,
-    });
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
-
-    if (!durableResponse.ok) {
-      const error = await durableResponse.text();
-      throw new ValidationError(`Durable Object error: ${error}`);
-    }
-
-    const result = await durableResponse.json();
-
-    logger.info('Chunk uploaded via Durable Object', {
+    const chunkStorage = new ChunkStorage(env.CHUNK_STORAGE);
+    const result = await chunkStorage.storeChunk(
       fileId,
       chunkIndex,
-      result,
-    });
+      base64,
+      undefined,
+      fileHash,
+      totalChunks,
+      mimeType
+    );
 
-    return createJSONResponse(result);
+    if (!result.success) {
+      throw new ValidationError(result.error || 'Failed to store chunk');
+    }
+
+    return createJSONResponse({
+      success: true,
+      chunkIndex,
+      fileId,
+      receivedChunks: (await chunkStorage.getMetadata(fileId))?.receivedChunks || 1,
+    });
   } catch (error) {
     logger.error('Upload chunk error', error);
     throw error;
@@ -281,41 +270,34 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
 }
 
 /**
- * 处理上传完成 - 使用 Durable Object
+ * 处理上传完成 - 使用 KV Storage
  */
 async function handleUploadComplete(request: Request, env: Env): Promise<Response> {
   try {
     const body = await safeJSONParse<UploadCompleteRequest>(request);
-
     if (!body) {
       throw new ValidationError('Invalid JSON body');
     }
 
     const { fileId, fileName, mimeType } = body;
 
-    // 构建 Durable Object URL（使用相对路径）
-    const durableObjectUrl = `/?action=mergeChunks&fileId=${encodeURIComponent(fileId)}`;
+    const chunkStorage = new ChunkStorage(env.CHUNK_STORAGE);
 
-    // 调用 Durable Object 合并分片（创建 Request 对象）
-    const durableRequest = new Request(durableObjectUrl, {
-      method: 'POST',
-    });
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
-
-    if (!durableResponse.ok) {
-      const error = await durableResponse.text();
-      throw new ValidationError(`Durable Object error: ${error}`);
+    // 检查是否所有分片都已上传
+    const isComplete = await chunkStorage.isComplete(fileId);
+    if (!isComplete) {
+      throw new ValidationError('Not all chunks received yet');
     }
 
-    const result = await durableResponse.json();
+    // 合并分片
+    const result = await chunkStorage.mergeChunks(fileId);
 
-    // 检查是否合并成功
     if (!result.success) {
       throw new ValidationError(result.error || 'Merge failed');
     }
 
     // 解码 Base64 数据
-    const textContent = atob(result.data);
+    const textContent = atob(result.data!);
 
     // 检查文件内容是否为空
     if (!textContent || textContent.length === 0) {
@@ -333,7 +315,10 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
       size: result.size,
     };
 
-    logger.info('File upload completed via Durable Object', {
+    // 删除分片
+    await chunkStorage.deleteFile(fileId);
+
+    logger.info('File upload completed via KV Storage', {
       fileId,
       fileName,
       contentLength: textContent.length,
@@ -351,7 +336,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 }
 
 /**
- * 查询上传状态 - 使用 Durable Object
+ * 查询上传状态 - 使用 KV Storage
  */
 async function handleUploadStatus(request: Request, env: Env): Promise<Response> {
   try {
@@ -362,22 +347,17 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
       throw new ValidationError('Missing fileId parameter');
     }
 
-    // 构建 Durable Object URL（使用相对路径）
-    const durableObjectUrl = `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`;
+    const chunkStorage = new ChunkStorage(env.CHUNK_STORAGE);
+    const metadata = await chunkStorage.getMetadata(fileId);
 
-    // 调用 Durable Object 获取元数据（创建 Request 对象）
-    const durableRequest = new Request(durableObjectUrl, {
-      method: 'GET',
-    });
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
-
-    if (!durableResponse.ok) {
+    if (!metadata) {
       throw new NotFoundError(`File ${fileId} not found`);
     }
 
-    const metadata = await durableResponse.json();
+    const percentage = metadata.totalChunks > 0
+      ? Math.round((metadata.receivedChunks / metadata.totalChunks) * 100)
+      : 0;
 
-    // 构建响应
     return createJSONResponse<UploadStatusResponse>({
       fileId,
       fileName: metadata.fileName,
@@ -385,9 +365,7 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
       totalChunks: metadata.totalChunks,
       receivedChunks: metadata.receivedChunks,
       receivedIndices: metadata.receivedIndices,
-      percentage: metadata.totalChunks > 0
-        ? Math.round((metadata.receivedChunks / metadata.totalChunks) * 100)
-        : 0,
+      percentage,
       isComplete: metadata.receivedChunks >= metadata.totalChunks,
     });
   } catch (error) {
