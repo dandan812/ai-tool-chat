@@ -318,8 +318,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
       size: result.size,
     };
 
-    // 删除分片
-    await chunkStorage.deleteFile(fileId);
+    // 注意：不删除分片和元数据，保留用于调试
 
     logger.info('File upload completed via Memory Storage', {
       fileId,

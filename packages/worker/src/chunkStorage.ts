@@ -85,7 +85,7 @@ export class ChunkStorage {
   async isComplete(fileId: string): Promise<boolean> {
     const metadata = await this.getMetadata(fileId);
     if (!metadata) return false;
-    return metadata.receivedChunks >= metadata.totalChunks;
+    return metadata.receivedChunks === metadata.totalChunks;
   }
 
   /**
