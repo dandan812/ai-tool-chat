@@ -4,13 +4,3 @@ compatibility_date = "2024-01-01"
 
 [observability]
 enabled = true
-
-# KV Storage for chunked upload (simpler alternative to Durable Objects)
-[[kv_namespaces]]
-binding = "CHUNK_STORAGE"
-id = "chunks_kv"
-
-[env.dev]
-[[env.dev.kv_namespaces]]
-binding = "CHUNK_STORAGE"
-id = "chunks_kv"

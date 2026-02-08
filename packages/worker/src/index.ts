@@ -1,7 +1,7 @@
 /**
  * Worker Entry Point
  * Task → Step → Skill + MCP Client 架构
- * SSE 流式返回 + 文件上传端点（使用 KV Storage）
+ * SSE 流式返回 + 文件上传端点（使用全局内存存储）
  */
 import type { Env, ChatRequest, UploadCompleteRequest, UploadCompleteResponse, UploadStatusResponse } from "./types";
 import { ValidationError, NotFoundError } from './types';
@@ -223,7 +223,7 @@ async function handleStatsRequest(
 }
 
 /**
- * 处理分片上传 - 使用 KV Storage
+ * 处理分片上传 - 使用全局内存存储
  */
 async function handleUploadChunk(request: Request, env: Env): Promise<Response> {
   try {
@@ -242,7 +242,7 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
     const arrayBuffer = await chunk.arrayBuffer();
     const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-    const chunkStorage = new ChunkStorage(env.CHUNK_STORAGE);
+    const chunkStorage = new ChunkStorage();
     const result = await chunkStorage.storeChunk(
       fileId,
       chunkIndex,
@@ -257,11 +257,14 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
       throw new ValidationError(result.error || 'Failed to store chunk');
     }
 
+    const metadata = await chunkStorage.getMetadata(fileId);
+    const receivedChunks = metadata?.receivedChunks || 1;
+
     return createJSONResponse({
       success: true,
       chunkIndex,
       fileId,
-      receivedChunks: (await chunkStorage.getMetadata(fileId))?.receivedChunks || 1,
+      receivedChunks,
     });
   } catch (error) {
     logger.error('Upload chunk error', error);
@@ -270,7 +273,7 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
 }
 
 /**
- * 处理上传完成 - 使用 KV Storage
+ * 处理上传完成 - 使用全局内存存储
  */
 async function handleUploadComplete(request: Request, env: Env): Promise<Response> {
   try {
@@ -281,7 +284,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 
     const { fileId, fileName, mimeType } = body;
 
-    const chunkStorage = new ChunkStorage(env.CHUNK_STORAGE);
+    const chunkStorage = new ChunkStorage();
 
     // 检查是否所有分片都已上传
     const isComplete = await chunkStorage.isComplete(fileId);
@@ -318,7 +321,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
     // 删除分片
     await chunkStorage.deleteFile(fileId);
 
-    logger.info('File upload completed via KV Storage', {
+    logger.info('File upload completed via Memory Storage', {
       fileId,
       fileName,
       contentLength: textContent.length,
@@ -336,7 +339,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 }
 
 /**
- * 查询上传状态 - 使用 KV Storage
+ * 查询上传状态 - 使用全局内存存储
  */
 async function handleUploadStatus(request: Request, env: Env): Promise<Response> {
   try {
@@ -347,7 +350,7 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
       throw new ValidationError('Missing fileId parameter');
     }
 
-    const chunkStorage = new ChunkStorage(env.CHUNK_STORAGE);
+    const chunkStorage = new ChunkStorage();
     const metadata = await chunkStorage.getMetadata(fileId);
 
     if (!metadata) {

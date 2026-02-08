@@ -298,8 +298,6 @@ export interface Env {
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;
-  // KV Storage 绑定
-  CHUNK_STORAGE: KVNamespace;
   // 可选配置
   LOG_LEVEL?: 'debug' | 'info' | 'warn' | 'error';
   MAX_REQUEST_SIZE?: string;

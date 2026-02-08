@@ -1,17 +1,8 @@
 /**
- * ChunkStorage - 使用 KV Storage 存储分片
+ * ChunkStorage - 全局内存存储（用于测试）
  *
- * 使用 KV Storage 作为持久化存储（更简单可靠）
+ * 使用全局 Map 作为临时存储方案
  */
-
-interface ChunkEntry {
-  data: string; // Base64 编码的分片数据
-  fileName?: string;
-  fileHash?: string;
-  totalChunks?: number;
-  mimeType?: string;
-  createdAt?: number;
-}
 
 interface FileMetadata {
   fileName: string;
@@ -24,8 +15,14 @@ interface FileMetadata {
   createdAt: number;
 }
 
+// 全局分片存储：fileId -> Map<chunkIndex, string (Base64)>
+const chunksMap = new Map<string, Map<number, string>>();
+
+// 全局元数据存储：fileId -> FileMetadata
+const metadataMap = new Map<string, FileMetadata>();
+
 export class ChunkStorage {
-  constructor(private kv: KVNamespace) {}
+  constructor() {}
 
   /**
    * 存储分片
@@ -33,33 +30,34 @@ export class ChunkStorage {
   async storeChunk(
     fileId: string,
     chunkIndex: number,
-    data: string,
-    fileName?: string,
-    fileHash?: string,
-    totalChunks?: number,
-    mimeType?: string
+    data: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const key = `chunk:${fileId}:${chunkIndex}`;
-      await this.kv.put(key, data);
+      // 初始化文件分片存储
+      if (!chunksMap.has(fileId)) {
+        chunksMap.set(fileId, new Map());
+      }
+
+      const fileChunks = chunksMap.get(fileId)!;
+      fileChunks.set(chunkIndex, data);
 
       // 更新元数据
-      const existingMeta = await this.getMetadata(fileId);
+      const existingMeta = metadataMap.get(fileId);
       const currentCount = existingMeta?.receivedChunks || 0;
       const currentIndices = existingMeta?.receivedIndices || [];
 
       const metadata: FileMetadata = {
-        fileName: existingMeta?.fileName || fileName || '',
-        fileHash: existingMeta?.fileHash || fileHash || '',
+        fileName: existingMeta?.fileName || '',
+        fileHash: existingMeta?.fileHash || '',
         totalSize: existingMeta?.totalSize || data.length,
-        totalChunks: existingMeta?.totalChunks || totalChunks || 1,
+        totalChunks: existingMeta?.totalChunks || 1,
         receivedChunks: currentCount + 1,
         receivedIndices: [...currentIndices, chunkIndex],
-        mimeType: existingMeta?.mimeType || mimeType || 'text/plain',
+        mimeType: existingMeta?.mimeType || 'text/plain',
         createdAt: existingMeta?.createdAt || Date.now(),
       };
 
-      await this.setMetadata(fileId, metadata);
+      metadataMap.set(fileId, metadata);
 
       return { success: true };
     } catch (error) {
@@ -71,17 +69,14 @@ export class ChunkStorage {
    * 获取元数据
    */
   async getMetadata(fileId: string): Promise<FileMetadata | null> {
-    const key = `meta:${fileId}`;
-    const value = await this.kv.get<FileMetadata>(key);
-    return value;
+    return metadataMap.get(fileId) || null;
   }
 
   /**
    * 设置元数据
    */
   async setMetadata(fileId: string, metadata: FileMetadata): Promise<void> {
-    const key = `meta:${fileId}`;
-    await this.kv.put(key, metadata);
+    metadataMap.set(fileId, metadata);
   }
 
   /**
@@ -90,7 +85,6 @@ export class ChunkStorage {
   async isComplete(fileId: string): Promise<boolean> {
     const metadata = await this.getMetadata(fileId);
     if (!metadata) return false;
-
     return metadata.receivedChunks >= metadata.totalChunks;
   }
 
@@ -105,19 +99,21 @@ export class ChunkStorage {
       }
 
       const { totalChunks } = metadata;
+      const fileChunks = chunksMap.get(fileId);
 
-      // 收集所有分片
+      if (!fileChunks) {
+        return { success: false, error: 'No chunks found' };
+      }
+
+      // 收集所有分片并合并
       const chunks: string[] = [];
       let totalSize = 0;
 
       for (let i = 0; i < totalChunks; i++) {
-        const key = `chunk:${fileId}:${i}`;
-        const chunk = await this.kv.get<string>(key);
-
+        const chunk = fileChunks.get(i);
         if (!chunk) {
           return { success: false, error: `Chunk ${i} not found` };
         }
-
         chunks.push(chunk);
         totalSize += chunk.length;
       }
@@ -125,13 +121,13 @@ export class ChunkStorage {
       // 合并所有分片
       const merged = chunks.join('');
 
-      // 删除分片
-      for (let i = 0; i < totalChunks; i++) {
-        const key = `chunk:${fileId}:${i}`;
-        await this.kv.delete(key);
-      }
+      // 解码 Base64 数据
+      const textContent = atob(merged);
 
-      return { success: true, data: merged, size: totalSize };
+      // 删除分片
+      chunksMap.delete(fileId);
+
+      return { success: true, data: textContent, size: totalSize };
     } catch (error) {
       return { success: false, error: String(error) };
     }
@@ -141,20 +137,8 @@ export class ChunkStorage {
    * 删除文件
    */
   async deleteFile(fileId: string): Promise<void> {
-    // 删除分片
-    const metadata = await this.getMetadata(fileId);
-    if (metadata) {
-      const { totalChunks } = metadata;
-
-      for (let i = 0; i < totalChunks; i++) {
-        const key = `chunk:${fileId}:${i}`;
-        await this.kv.delete(key);
-      }
-    }
-
-    // 删除元数据
-    const metaKey = `meta:${fileId}`;
-    await this.kv.delete(metaKey);
+    chunksMap.delete(fileId);
+    metadataMap.delete(fileId);
   }
 
   /**
@@ -165,12 +149,10 @@ export class ChunkStorage {
     const timeout = 5 * 60 * 1000; // 5 分钟
 
     let deletedCount = 0;
-    const metadataList = await this.kv.list<FileMetadata>({ prefix: 'meta:' });
 
-    for (const { key } of metadataList.keys) {
-      const metadata = await this.kv.get<FileMetadata>(key);
-      if (metadata && now - metadata.createdAt > timeout) {
-        await this.deleteFile(key.substring(5)); // 去掉 'meta:' 前缀
+    for (const [fileId, metadata] of metadataMap.entries()) {
+      if (now - metadata.createdAt > timeout) {
+        await this.deleteFile(fileId);
         deletedCount++;
       }
     }
