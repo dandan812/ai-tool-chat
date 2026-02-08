@@ -232,13 +232,10 @@ export class ChunkStorage implements DurableObject {
         offset += chunk.byteLength;
       }
 
-      // 转换为 Base64（分块处理避免溢出）
-      let base64 = '';
-      const chunkSize = 0x8000; // 32KB 每块
-      for (let i = 0; i < merged.length; i += chunkSize) {
-        const slice = merged.subarray(i, Math.min(i + chunkSize, merged.length));
-        base64 += btoa(String.fromCharCode(...slice));
-      }
+      // 转换为 Base64（使用 TextDecoder 正确处理）
+      const textDecoder = new TextDecoder();
+      const textContent = textDecoder.decode(merged);
+      const base64 = btoa(textContent);
 
       // 删除分片
       for (let i = 0; i < metadata.totalChunks; i++) {
