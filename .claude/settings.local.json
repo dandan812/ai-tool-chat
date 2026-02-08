@@ -19,7 +19,8 @@
       "Bash(npx tsc:*)",
       "Bash(npx wrangler deploy:*)",
       "Bash(curl:*)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(git push:*)"
     ]
   }
 }
