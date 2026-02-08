@@ -256,6 +256,12 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 
     logger.info('Upload complete request', { fileId, fileName });
 
+    // 先检查元数据状态（调试）
+    const checkDurableUrl = `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`;
+    const checkResponse = await env.CHUNK_STORAGE.fetch(checkDurableUrl);
+    const checkData = await checkResponse.json();
+    logger.info('Metadata check before merge', { fileId, checkData });
+
     const durableObjectUrl = `/?action=mergeChunks&fileId=${encodeURIComponent(fileId)}`;
     const durableRequest = new Request(durableObjectUrl, {
       method: 'POST',

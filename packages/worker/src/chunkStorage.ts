@@ -101,7 +101,7 @@ export class ChunkStorage implements DurableObject {
           fileName: '',
           fileHash,
           totalSize: arrayBuffer.byteLength,
-          totalChunks,
+          totalChunks: parseInt(totalChunks as string) || 1,
           receivedChunks: 0,
           receivedIndices: [],
           mimeType,
