@@ -2,13 +2,11 @@
  * 文件处理 Skill
  *
  * 处理文本类文件（txt, md, csv, json, 代码文件等）
- * 对于大文件（>100K tokens），采用 Map-Reduce 风格的分块处理：
- *   1. 将文件分成多个小块
- *   2. 并行提取每个分块的摘要
- *   3. 合并所有摘要，生成最终答案
+ * 集成了两种 Token 节省策略：
+ *   1. 代码压缩：只保留函数签名、类定义等关键结构
+ *   2. RAG 检索：根据用户问题智能选择相关代码片段
  *
- * 注意：DeepSeek 本身不直接支持文件上传，
- * 这个 Skill 是将文件内容作为文本插入到对话中
+ * 对于大文件（>100K tokens），采用 Map-Reduce 风格的分块处理
  */
 import type {
   Skill,
@@ -25,12 +23,50 @@ import {
   splitByTokens,
   addContextToChunks,
 } from "../utils/chunker";
+import { compressCode, type CompressResult } from "../utils/codeCompressor";
+import {
+  retrieveRelevantCode,
+  formatRetrievedCode,
+  detectLanguage,
+} from "../utils/ragRetriever";
 
 /**
  * 最大 token 阈值，超过此值则分块处理
  * DeepSeek 限制为 131,072 tokens，留 30k 余量
  */
 const MAX_TOKEN_THRESHOLD = 100000;
+
+/**
+ * 支持的代码文件扩展名
+ */
+const CODE_EXTENSIONS = [
+  'js', 'jsx', 'mjs',
+  'ts', 'tsx',
+  'py',
+  'java',
+  'go',
+  'rs',
+  'c', 'cpp', 'cc', 'h', 'hpp',
+  'cs',
+  'php',
+  'rb',
+  'swift',
+  'kt',
+  'scala',
+  'dart',
+  'lua',
+  'r',
+  'sql',
+  'sh', 'bash',
+];
+
+/**
+ * 检查是否是代码文件
+ */
+function isCodeFile(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  return CODE_EXTENSIONS.includes(ext);
+}
 
 /**
  * 分块摘要提示词
@@ -59,7 +95,7 @@ ${summaries}
 export const fileSkill: Skill = {
   name: "file-chat",
   type: "text", // 最终还是文本对话
-  description: "处理文本文件对话（txt, md, csv, json, 代码文件等）",
+  description: "处理文本文件对话（txt, md, csv, json, 代码文件等），支持代码压缩和智能检索",
 
   async *execute(
     input: SkillInput,
@@ -77,6 +113,7 @@ export const fileSkill: Skill = {
         mimeType: file.mimeType,
         size: file.size,
         estimatedTokens: estimateTokens(file.content || ""),
+        isCodeFile: isCodeFile(file.name),
       });
     }
 
@@ -84,36 +121,51 @@ export const fileSkill: Skill = {
     const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
     const userQuestion = lastUserMsg?.content || "请分析这些文件";
 
-    // 合并所有文件内容
-    const allFileContents = files
-      .map((file) => {
-        const ext = file.name.split(".").pop() || "";
-        return `### 文件: ${file.name}\n\`\`\`${ext}\n${file.content}\n\`\`\``;
-      })
-      .join("\n\n");
+    // 判断是否所有文件都是代码文件
+    const allCodeFiles = files.length > 0 && files.every(f => isCodeFile(f.name));
+    const hasCodeFiles = files.some(f => isCodeFile(f.name));
 
-    // 估算总 token 数
-    const totalTokens = estimateTokens(allFileContents);
-
-    logger.info("File token estimation", {
-      totalTokens,
-      threshold: MAX_TOKEN_THRESHOLD,
-      needsChunking: totalTokens > MAX_TOKEN_THRESHOLD,
+    logger.info("File type analysis", {
+      allCodeFiles,
+      hasCodeFiles,
+      fileTypes: files.map(f => ({ name: f.name, isCode: isCodeFile(f.name) })),
     });
 
-    // 判断是否需要分块处理
-    if (totalTokens <= MAX_TOKEN_THRESHOLD) {
-      // 小文件：直接处理
-      yield* processSmallFiles(allFileContents, userQuestion, input, context);
+    // 处理策略选择
+    if (hasCodeFiles && allCodeFiles) {
+      // 全是代码文件：使用 RAG 检索
+      yield* processCodeFilesWithRAG(files, userQuestion, input, context);
+    } else if (hasCodeFiles) {
+      // 混合文件：代码用压缩，其他用原内容
+      yield* processMixedFiles(files, userQuestion, input, context);
     } else {
-      // 大文件：分块处理
-      yield* processLargeFiles(
-        files,
-        allFileContents,
-        userQuestion,
-        input,
-        context,
-      );
+      // 纯文本文件：使用原有分块策略
+      const allFileContents = files
+        .map((file) => {
+          const ext = file.name.split(".").pop() || "";
+          return `### 文件: ${file.name}\n\`\`\`${ext}\n${file.content}\n\`\`\``;
+        })
+        .join("\n\n");
+
+      const totalTokens = estimateTokens(allFileContents);
+
+      logger.info("File token estimation", {
+        totalTokens,
+        threshold: MAX_TOKEN_THRESHOLD,
+        needsChunking: totalTokens > MAX_TOKEN_THRESHOLD,
+      });
+
+      if (totalTokens <= MAX_TOKEN_THRESHOLD) {
+        yield* processSmallFiles(allFileContents, userQuestion, input, context);
+      } else {
+        yield* processLargeFiles(
+          files,
+          allFileContents,
+          userQuestion,
+          input,
+          context,
+        );
+      }
     }
   },
 };
@@ -300,6 +352,240 @@ async function extractSingleChunkSummary(
     summaryLength: summary.length,
   });
   return summary;
+}
+
+// ==================== 新增：代码文件 RAG 检索处理 ====================
+
+/**
+ * 使用 RAG 检索处理代码文件
+ * 根据用户问题智能选择相关代码片段
+ */
+async function* processCodeFilesWithRAG(
+  files: FileData[],
+  userQuestion: string,
+  input: SkillInput,
+  context: SkillContext,
+): AsyncIterable<SkillStreamChunk> {
+  yield {
+    type: "progress",
+    progress: {
+      message: "正在使用智能检索分析代码...",
+      current: 0,
+      total: 2,
+    },
+  };
+
+  const allRetrievedCode: string[] = [];
+  let totalOriginalTokens = 0;
+  let totalRetrievedTokens = 0;
+
+  for (const file of files) {
+    const language = detectLanguage(file.name);
+    const originalTokens = estimateTokens(file.content || "");
+    totalOriginalTokens += originalTokens;
+
+    logger.info("RAG retrieval for code file", {
+      filename: file.name,
+      language,
+      originalTokens,
+      query: userQuestion.substring(0, 100),
+    });
+
+    // 使用 RAG 检索
+    const retrievalResult = retrieveRelevantCode(
+      file.content || "",
+      userQuestion,
+      language,
+      {
+        maxSnippets: 8,
+        contextLines: 15,
+        minRelevance: 0.1,
+        includeImports: true,
+        includeComments: false,
+      }
+    );
+
+    const formattedCode = formatRetrievedCode(retrievalResult);
+    const retrievedTokens = estimateTokens(formattedCode);
+    totalRetrievedTokens += retrievedTokens;
+
+    // 添加文件头
+    const fileHeader = `\n// ========== 文件: ${file.name} (${language}) ==========`;
+    allRetrievedCode.push(fileHeader + formattedCode);
+
+    logger.info("RAG retrieval result", {
+      filename: file.name,
+      extractedKeywords: retrievalResult.extractedKeywords,
+      matchedSnippets: retrievalResult.matchedSnippets.length,
+      coverageRatio: retrievalResult.coverageRatio,
+      originalTokens,
+      retrievedTokens,
+      reductionRatio: 1 - (retrievedTokens / originalTokens),
+    });
+  }
+
+  yield {
+    type: "progress",
+    progress: {
+      message: `已检索 ${files.length} 个代码文件`,
+      current: 1,
+      total: 2,
+    },
+  };
+
+  // 构建消息
+  const codeContent = allRetrievedCode.join('\n\n');
+  const reductionRatio = 1 - (totalRetrievedTokens / totalOriginalTokens);
+
+  const systemMessage = `你是一个代码分析助手。用户上传了代码文件，系统已使用智能检索技术，根据用户问题筛选了最相关的代码片段。
+
+原始代码总大小: ${totalOriginalTokens} tokens
+检索后大小: ${totalRetrievedTokens} tokens
+Token 节省率: ${(reductionRatio * 100).toFixed(1)}%
+
+请基于以下检索到的代码片段回答用户问题。如果信息不足，请告知用户需要查看更多代码。`;
+
+  const messages: Message[] = [
+    {
+      role: "system",
+      content: systemMessage,
+    },
+    {
+      role: "user",
+      content: `${codeContent}\n\n我的问题是：${userQuestion}`,
+    },
+  ];
+
+  logger.info("RAG processing summary", {
+    fileCount: files.length,
+    totalOriginalTokens,
+    totalRetrievedTokens,
+    totalSaved: totalOriginalTokens - totalRetrievedTokens,
+    reductionRatio: reductionRatio,
+  });
+
+  const textInput = { ...input, messages };
+  yield* glmSkill.execute(textInput, context);
+}
+
+/**
+ * 处理混合文件（代码 + 文本）
+ * 代码文件使用压缩，文本文件保持原样
+ */
+async function* processMixedFiles(
+  files: FileData[],
+  userQuestion: string,
+  input: SkillInput,
+  context: SkillContext,
+): AsyncIterable<SkillStreamChunk> {
+  yield {
+    type: "progress",
+    progress: {
+      message: "正在处理混合文件类型...",
+      current: 0,
+      total: 2,
+    },
+  };
+
+  const allFileContents: string[] = [];
+  let totalOriginalTokens = 0;
+  let totalProcessedTokens = 0;
+
+  for (const file of files) {
+    const ext = file.name.split(".").pop() || "";
+    const originalTokens = estimateTokens(file.content || "");
+    totalOriginalTokens += originalTokens;
+
+    if (isCodeFile(file.name)) {
+      // 代码文件：使用压缩
+      const language = detectLanguage(file.name);
+      const compressResult = compressCode(file.content || "", language);
+
+      allFileContents.push(
+        `### 代码文件: ${file.name} (${language})\n` +
+        `// Token 节省: ${(compressResult.stats.reductionRatio * 100).toFixed(1)}% ` +
+        `(${compressResult.stats.originalTokens} -> ${compressResult.stats.compressedTokens} tokens)\n` +
+        `\`\`\`${ext}\n${compressResult.compressedCode}\n\`\`\``
+      );
+
+      totalProcessedTokens += compressResult.stats.compressedTokens;
+
+      logger.info("Code compression result", {
+        filename: file.name,
+        language,
+        originalTokens: compressResult.stats.originalTokens,
+        compressedTokens: compressResult.stats.compressedTokens,
+        reductionRatio: compressResult.stats.reductionRatio,
+        functionsFound: compressResult.stats.functionsFound,
+        classesFound: compressResult.stats.classesFound,
+      });
+    } else {
+      // 非代码文件：保持原样
+      allFileContents.push(
+        `### 文件: ${file.name}\n\`\`\`${ext}\n${file.content}\n\`\`\``
+      );
+
+      totalProcessedTokens += originalTokens;
+    }
+  }
+
+  const fileContents = allFileContents.join("\n\n");
+  const reductionRatio = 1 - (totalProcessedTokens / totalOriginalTokens);
+
+  // 估算总 token 数
+  const totalTokens = estimateTokens(fileContents);
+
+  yield {
+    type: "progress",
+    progress: {
+      message: "生成回答中...",
+      current: 1,
+      total: 2,
+    },
+  };
+
+  logger.info("Mixed files processing", {
+    codeFileCount: files.filter(f => isCodeFile(f.name)).length,
+    textFileCount: files.filter(f => !isCodeFile(f.name)).length,
+    totalOriginalTokens,
+    totalProcessedTokens,
+    reductionRatio,
+  });
+
+  // 构建消息
+  const systemMessage = `你是一个文件分析助手。用户上传了混合类型的文件（代码和文本）。
+
+代码文件已使用智能压缩技术，只保留关键结构（函数签名、类定义等）。
+原始代码总大小: ${totalOriginalTokens} tokens
+处理后大小: ${totalProcessedTokens} tokens
+Token 节省率: ${(reductionRatio * 100).toFixed(1)}%
+
+请基于以下文件内容回答用户问题。`;
+
+  const messages: Message[] = [
+    {
+      role: "system",
+      content: systemMessage,
+    },
+    {
+      role: "user",
+      content: `以下是我上传的文件内容：\n\n${fileContents}\n\n我的问题是：${userQuestion}`,
+    },
+  ];
+
+  // 检查是否需要分块处理
+  if (totalTokens > MAX_TOKEN_THRESHOLD) {
+    yield* processLargeFiles(
+      files,
+      fileContents,
+      userQuestion,
+      input,
+      context,
+    );
+  } else {
+    const textInput = { ...input, messages };
+    yield* glmSkill.execute(textInput, context);
+  }
 }
 
 /**

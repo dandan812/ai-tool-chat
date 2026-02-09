@@ -30,7 +30,10 @@
       "Bash(then kill $TAIL_PID)",
       "Bash(fi:*)",
       "Bash(npx wrangler dev:*)",
-      "Bash(npx --package=typescript tsc:*)"
+      "Bash(npx --package=typescript tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(npx:*)"
     ]
   }
 }
