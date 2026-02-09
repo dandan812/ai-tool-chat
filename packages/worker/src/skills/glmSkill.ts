@@ -55,7 +55,7 @@ export const glmSkill: Skill = {
        * 使用 fetch 发送 POST 请求到 GLM 的聊天接口
        */
       const requestBody = {
-        model: "glm-4.6", // 使用的模型：GLM-4.6
+        model: "glm-4-flash", // 使用最快的模型：GLM-4-Flash
         messages: messages as Message[], // 消息历史
         stream: true, // 启用流式响应
         temperature: temperature ?? 1, // 默认温度 1.0
@@ -211,15 +211,27 @@ function parseSSELine(line: string): SkillStreamChunk | null {
     // 解析 JSON 数据
     const json = JSON.parse(data);
 
-    // 提取内容（OpenAI 兼容格式）
-    const content = json.choices?.[0]?.delta?.content;
+    // 记录原始响应用于调试
+    logger.debug("GLM API SSE data", { data, parsed: json });
+
+    // 支持多种响应格式
+    // 格式1: OpenAI 兼容 {"choices":[{"delta":{"content":"..."}}]}
+    const content1 = json.choices?.[0]?.delta?.content;
+    // 格式2: 直接 {"content":"..."}
+    const content2 = json.content;
+    // 格式3: {"data":{"content":"..."}}
+    const content3 = json.data?.content;
+
+    const content = content1 ?? content2 ?? content3;
 
     // 如果内容存在，返回内容块
-    if (content !== undefined && content !== null) {
+    if (content !== undefined && content !== null && content !== "") {
       return { type: "content", content: String(content) };
+    } else {
+      logger.debug("No content found in SSE line", { json, extracted: { content1, content2, content3 } });
     }
-  } catch {
-    // JSON 解析失败，忽略这行数据
+  } catch (e) {
+    logger.warn("Failed to parse SSE line", { line, error: String(e) });
   }
 
   return null;
