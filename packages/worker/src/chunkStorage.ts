@@ -3,6 +3,7 @@
  *
  * 正确实现 Durable Object 接口
  */
+import { logger } from './utils/logger';
 
 interface ChunkEntry {
   fileId: string;
@@ -195,7 +196,7 @@ export class ChunkStorage implements DurableObject {
   private async handleMergeChunks(): Promise<Response> {
     const result = await this.state.transaction(async (txn) => {
       const files = await this.state.list<FileMetadata>({ prefix: 'meta:' });
-      const fileList: Array<{ fileId: string; metadata: FileMetadata }>[];
+      const fileList: Array<{ fileId: string; metadata: FileMetadata }> = [];
 
       // 找出所有文件
       for await (const [key, value] of files) {
@@ -204,7 +205,7 @@ export class ChunkStorage implements DurableObject {
 
       // 获取用户上传的文件（需要通过其他方式传递）
       // 这里简化为返回第一个文件的数据作为示例
-      if (fileList.length > 0) {
+      if (fileList.length === 0) {
         return {
           success: false,
           error: 'Please call upload/complete with the correct fileId first'

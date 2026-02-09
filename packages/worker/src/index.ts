@@ -325,14 +325,8 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
 
     logger.info('Upload status request', { fileId });
 
-    // 先获取元数据并记录
+    // 获取元数据
     const durableObjectUrl = `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`;
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl);
-    const metadata = await durableResponse.json();
-    logger.info('Got metadata', { fileId, metadata });
-
-    const durableObjectUrl = `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`;
-
     const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl);
 
     if (!durableResponse.ok) {

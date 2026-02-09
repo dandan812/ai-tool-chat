@@ -261,7 +261,7 @@ export class TaskManager {
     );
     yield { type: 'step', data: { step, event: 'start' } };
 
-    const skill = selectSkill(request);
+    const skill = selectSkill(request, this.env);
     const mcpClient = createMCPClient();
     let fullContent = '';
 

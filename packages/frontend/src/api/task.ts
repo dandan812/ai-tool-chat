@@ -13,32 +13,32 @@
  * @package frontend/src/api
  */
 
-import type { ChatMessage } from './ai';
-import type { Task, Step, SSEEvent, ImageData, FileData } from '../types/task';
-import { API_BASE_URL } from '../config';
-import { getUserFriendlyError } from '../utils/error';
+import type { ChatMessage } from './ai'
+import type { Task, Step, SSEEvent, ImageData, FileData } from '../types/task'
+import { API_BASE_URL } from '../config'
+import { getUserFriendlyError } from '../utils/error'
 
 export interface TaskRequest {
   /** 消息列表 */
-  messages: ChatMessage[];
+  messages: ChatMessage[]
   /** 图片数据（多模态） */
-  images?: ImageData[];
+  images?: ImageData[]
   /** 文件数据 */
-  files?: FileData[];
+  files?: FileData[]
   /** 温度参数 */
-  temperature?: number;
+  temperature?: number
   /** 是否启用工具调用 */
-  enableTools?: boolean;
+  enableTools?: boolean
 }
 
 export interface TaskCallbacks {
-  onTaskStart?: (task: Task) => void;
-  onTaskUpdate?: (task: Task) => void;
-  onStepStart?: (step: Step) => void;
-  onStepComplete?: (step: Step) => void;
-  onContent?: (content: string) => void;
-  onError?: (error: string) => void;
-  onComplete?: (task: Task) => void;
+  onTaskStart?: (task: Task) => void
+  onTaskUpdate?: (task: Task) => void
+  onStepStart?: (step: Step) => void
+  onStepComplete?: (step: Step) => void
+  onContent?: (content: string) => void
+  onError?: (error: string) => void
+  onComplete?: (task: Task) => void
 }
 
 /**
@@ -50,56 +50,60 @@ export async function sendTaskRequest(
   signal?: AbortSignal
 ): Promise<void> {
   try {
-    console.log('[TaskAPI] Sending request to:', API_BASE_URL);
+    console.log('[TaskAPI] Sending request to:', API_BASE_URL)
     // 调试：打印文件信息
     if (request.files && request.files.length > 0) {
-      console.log('[TaskAPI] Sending files:', request.files.map(f => ({
-        name: f.name,
-        contentLength: f.content?.length || 0,
-        contentPreview: f.content?.substring(0, 100) || '(empty)',
-        mimeType: f.mimeType,
-        size: f.size
-      })));
+      console.log(
+        '[TaskAPI] Sending files:',
+        request.files.map((f) => ({
+          name: f.name,
+          contentLength: f.content?.length || 0,
+          contentPreview: f.content?.substring(0, 100) || '(empty)',
+          mimeType: f.mimeType,
+          size: f.size
+        }))
+      )
     }
     const requestBody = {
       ...request,
-      stream: true,
-    };
+      stream: true
+    }
     // 调试：检查序列化后的数据
-    const serialized = JSON.stringify(requestBody);
-    console.log('[TaskAPI] Request body size:', serialized.length);
+    const serialized = JSON.stringify(requestBody)
+    console.log('[TaskAPI] Request body size:', serialized.length)
     const response = await fetch(API_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
-      signal,
-    });
-    console.log('[TaskAPI] Response received:', response.status, response.ok);
+      signal
+    })
+    console.log('[TaskAPI] Response received:', response.status, response.ok)
 
     if (!response.ok) {
-      const errorText = await response.text();
-      const error = new Error(`HTTP ${response.status}`);
-      const userError = getUserFriendlyError(error, `服务器错误 (${response.status})`);
-      throw new Error(userError);
+      const errorText = await response.text()
+      console.error('[TaskAPI] Server error response:', errorText)
+      const error = new Error(`HTTP ${response.status}`)
+      const userError = getUserFriendlyError(error, `服务器错误 (${response.status})`)
+      throw new Error(userError)
     }
 
     if (!response.body) {
-      throw new Error(getUserFriendlyError(new Error('No response body'), '服务器响应异常'));
+      throw new Error(getUserFriendlyError(new Error('No response body'), '服务器响应异常'))
     }
 
-    console.log('[TaskAPI] Starting stream processing');
-    await processTaskStream(response.body, callbacks);
-    console.log('[TaskAPI] Stream processing completed');
-
+    console.log('[TaskAPI] Starting stream processing')
+    await processTaskStream(response.body, callbacks)
+    console.log('[TaskAPI] Stream processing completed')
   } catch (error) {
-    console.error('[TaskAPI] Error caught:', error);
+    // 忽略用户主动取消的请求
     if (error instanceof DOMException && error.name === 'AbortError') {
-      console.log('Request aborted by user');
-      // 用户主动取消，不触发错误回调
-      return;
+      console.log('[TaskAPI] Request aborted by user')
+      return
     }
-    const userError = getUserFriendlyError(error as Error, '请求失败');
-    callbacks.onError?.(userError);
+
+    console.error('[TaskAPI] Error caught:', error)
+    const userError = getUserFriendlyError(error as Error, '请求失败')
+    callbacks.onError?.(userError)
   }
 }
 
@@ -110,25 +114,25 @@ async function processTaskStream(
   body: ReadableStream<Uint8Array>,
   callbacks: TaskCallbacks
 ): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const { done, value } = await reader.read()
+      if (done) break
 
-      buffer += decoder.decode(value, { stream: true });
-      buffer = processSSEBuffer(buffer, callbacks);
+      buffer += decoder.decode(value, { stream: true })
+      buffer = processSSEBuffer(buffer, callbacks)
     }
 
     // 处理剩余数据
     if (buffer.trim()) {
-      processSSELine(buffer.trim(), callbacks);
+      processSSELine(buffer.trim(), callbacks)
     }
   } finally {
-    reader.releaseLock();
+    reader.releaseLock()
   }
 }
 
@@ -136,37 +140,37 @@ async function processTaskStream(
  * 处理 SSE 缓冲区
  */
 function processSSEBuffer(buffer: string, callbacks: TaskCallbacks): string {
-  const lines = buffer.split('\n');
-  const remaining = lines.pop() ?? '';
+  const lines = buffer.split('\n')
+  const remaining = lines.pop() ?? ''
 
   for (const line of lines) {
-    processSSELine(line, callbacks);
+    processSSELine(line, callbacks)
   }
 
-  return remaining;
+  return remaining
 }
 
 /**
  * 处理单行 SSE 数据
  */
 function processSSELine(line: string, callbacks: TaskCallbacks): void {
-  const trimmed = line.trim();
+  const trimmed = line.trim()
 
   if (!trimmed || !trimmed.startsWith('data: ')) {
-    return;
+    return
   }
 
-  const data = trimmed.slice(6);
+  const data = trimmed.slice(6)
 
   if (data === '[DONE]') {
-    return;
+    return
   }
 
   try {
-    const event: SSEEvent = JSON.parse(data);
-    handleSSEEvent(event, callbacks);
+    const event: SSEEvent = JSON.parse(data)
+    handleSSEEvent(event, callbacks)
   } catch (e) {
-    console.warn('Failed to parse SSE data:', e);
+    console.warn('Failed to parse SSE data:', e)
   }
 }
 
@@ -176,42 +180,42 @@ function processSSELine(line: string, callbacks: TaskCallbacks): void {
 function handleSSEEvent(event: SSEEvent, callbacks: TaskCallbacks): void {
   switch (event.type) {
     case 'task': {
-      const { task, event: taskEvent } = event.data as { task: Task; event: string };
+      const { task, event: taskEvent } = event.data as { task: Task; event: string }
       if (taskEvent === 'started') {
-        callbacks.onTaskStart?.(task);
+        callbacks.onTaskStart?.(task)
       } else {
-        callbacks.onTaskUpdate?.(task);
+        callbacks.onTaskUpdate?.(task)
       }
-      break;
+      break
     }
 
     case 'step': {
-      const { step, event: stepEvent } = event.data as { step: Step; event: string };
+      const { step, event: stepEvent } = event.data as { step: Step; event: string }
       if (stepEvent === 'start') {
-        callbacks.onStepStart?.(step);
+        callbacks.onStepStart?.(step)
       } else if (stepEvent === 'complete') {
-        callbacks.onStepComplete?.(step);
+        callbacks.onStepComplete?.(step)
       }
-      break;
+      break
     }
 
     case 'content': {
-      const { content } = event.data as { content: string };
-      console.log('[TaskAPI] Received content:', JSON.stringify(content));
-      callbacks.onContent?.(content);
-      break;
+      const { content } = event.data as { content: string }
+      console.log('[TaskAPI] Received content:', JSON.stringify(content))
+      callbacks.onContent?.(content)
+      break
     }
 
     case 'error': {
-      const { error } = event.data as { error: string };
-      callbacks.onError?.(error);
-      break;
+      const { error } = event.data as { error: string }
+      callbacks.onError?.(error)
+      break
     }
 
     case 'complete': {
-      const { task } = event.data as { task: Task };
-      callbacks.onComplete?.(task);
-      break;
+      const { task } = event.data as { task: Task }
+      callbacks.onComplete?.(task)
+      break
     }
   }
 }

@@ -298,11 +298,13 @@ export interface Env {
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;
+  GLM_API_KEY?: string;  // 智谱 AI GLM API Key
   // 可选配置
   LOG_LEVEL?: 'debug' | 'info' | 'warn' | 'error';
   MAX_REQUEST_SIZE?: string;
   REQUEST_TIMEOUT?: string;
   ENABLE_CACHE?: string;
+  DEFAULT_MODEL?: string;  // 默认使用的模型
 }
 
 // ==================== API 请求/响应 ====================

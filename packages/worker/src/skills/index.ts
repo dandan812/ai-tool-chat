@@ -16,6 +16,7 @@ import type { Skill, SkillType } from '../types';
 import { textSkill } from './textSkill';
 import { multimodalSkill } from './multimodalSkill';
 import { fileSkill, isSupportedTextFile } from './fileSkill';
+import { glmSkill } from './glmSkill';
 
 /**
  * Skill 注册表
@@ -35,6 +36,8 @@ const skillRegistry = new Map<string, Skill>();
 export function registerDefaultSkills(): void {
   registerSkill(textSkill);       // 注册文本对话技能
   registerSkill(multimodalSkill); // 注册图文对话技能
+  registerSkill(fileSkill);       // 注册文件处理技能
+  registerSkill(glmSkill);        // 注册 GLM 对话技能
 }
 
 /**
@@ -68,33 +71,47 @@ export function getSkill(name: string): Skill | undefined {
 
 /**
  * 根据输入自动选择合适的 Skill（核心智能选择逻辑）
- * @param input - 输入数据，包含 images（图片数组）、files（文件数组）
+ * @param input - 输入数据，包含 images（图片数组）、files（文件数组）、model（指定模型）
+ * @param env - 环境变量，包含 DEFAULT_MODEL 配置
  * @returns 最适合处理该输入的 Skill
  * 
  * 选择策略（优先级）：
- *   1. 如果有图片 → 使用 multimodalSkill（多模态）
- *   2. 如果有文件 → 未来可以使用 fileSkill
- *   3. 默认 → textSkill（纯文本）
+ *   1. 如果指定了 model → 使用对应的 Skill
+ *   2. 如果有图片 → 使用 multimodalSkill（多模态）
+ *   3. 如果有文件 → 使用 fileSkill
+ *   4. 根据 DEFAULT_MODEL 环境变量选择默认 Skill
+ *   5. 默认 → textSkill（纯文本）
  * 
  * 为什么这样设计？
  *   自动选择让用户无需关心底层使用哪个 AI 模型，
  *   系统根据输入类型智能匹配最佳处理能力
  */
-export function selectSkill(input: { images?: unknown[]; files?: unknown[] }): Skill {
-  const { images = [], files = [] } = input;
+export function selectSkill(
+  input: { images?: unknown[]; files?: unknown[]; model?: string },
+  env?: { DEFAULT_MODEL?: string; GLM_API_KEY?: string }
+): Skill {
+  const { images = [], files = [], model } = input;
 
-  // 规则 1：如果有图片，使用多模态 Skill
+  // 规则 1：如果指定了 model，使用对应的 Skill
+  if (model) {
+    if (model.startsWith('glm')) {
+      return glmSkill;
+    }
+    // 可以添加其他模型的判断
+  }
+
+  // 规则 2：如果有图片，使用多模态 Skill
   if (images.length > 0) {
     return multimodalSkill;
   }
 
-  // 规则 2：如果有文件，使用文件处理 Skill
+  // 规则 3：如果有文件，使用文件处理 Skill
   if (files.length > 0) {
     return fileSkill;
   }
 
-  // 默认规则：纯文本对话
-  return textSkill;
+  // 规则 4：默认使用 GLM Skill（不再使用 DeepSeek）
+  return glmSkill;
 }
 
 /**

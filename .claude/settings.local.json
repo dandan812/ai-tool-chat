@@ -21,7 +21,16 @@
       "Bash(curl:*)",
       "Bash(ping:*)",
       "Bash(git push:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(wrangler deployments list:*)",
+      "Bash(npx wrangler deployments list:*)",
+      "Bash(npx wrangler rollback:*)",
+      "Bash(if:*)",
+      "Bash(then kill $TAIL_PID)",
+      "Bash(fi:*)",
+      "Bash(npx wrangler dev:*)",
+      "Bash(npx --package=typescript tsc:*)"
     ]
   }
 }
