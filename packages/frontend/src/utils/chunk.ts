@@ -16,8 +16,9 @@ import { generateId } from './file';
 
 /**
  * 分片大小配置
+ * 改小为 1MB，避免 Cloudflare Workers 堆栈溢出问题
  */
-const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+const DEFAULT_CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
 
 /**
  * 使用 SparkMD5 计算文件哈希
@@ -271,7 +272,7 @@ export function formatUploadProgress(progress: UploadProgress): string {
 /**
  * 检查是否应该使用分片上传
  */
-export function shouldUseChunking(file: File, threshold = 2 * 1024 * 1024): boolean {
-  // 默认 2MB 以上使用分片上传
+export function shouldUseChunking(file: File, threshold = 500 * 1024): boolean {
+  // 改为 500KB 以上使用分片上传，避免大文件直接读取导致内存问题
   return file.size > threshold;
 }

@@ -264,7 +264,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 
     const durableObjectUrl = `/?action=mergeChunks&fileId=${encodeURIComponent(fileId)}`;
     const durableRequest = new Request(durableObjectUrl, {
-      method: 'POST',
+      method: 'GET',  // 改为 GET，因为现在通过 URL 传递参数
     });
 
     const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);

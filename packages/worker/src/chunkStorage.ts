@@ -90,34 +90,34 @@ export class ChunkStorage implements DurableObject {
 
     const arrayBuffer = await chunk.arrayBuffer();
 
-    // 使用事务确保原子性
-    const result = await this.state.transaction(async (txn) => {
-      // 获取或创建元数据
-      const metadataKey = `meta:${fileId}`;
-      let metadata = await txn.get<FileMetadata>(metadataKey);
+    // 先在事务外获取或创建元数据
+    const metadataKey = `meta:${fileId}`;
+    let metadata = await this.state.get<FileMetadata>(metadataKey);
 
-      if (!metadata) {
-        // 初始化元数据
-        metadata = {
-          fileName: '',
-          fileHash,
-          totalSize: arrayBuffer.byteLength,
-          totalChunks: parseInt(totalChunks as string) || 1,
-          receivedChunks: 0,
-          receivedIndices: [],
-          mimeType,
-          createdAt: Date.now(),
-        };
-        await txn.put(metadataKey, metadata);
-      }
-
-      // 更新元数据
+    if (!metadata) {
+      // 初始化元数据
       metadata = {
-        ...metadata,
-        receivedChunks: metadata.receivedChunks + 1,
-        receivedIndices: [...metadata.receivedIndices, chunkIndex],
+        fileName: '',
+        fileHash,
+        totalSize: arrayBuffer.byteLength,
+        totalChunks: parseInt(totalChunks as string) || 1,
+        receivedChunks: 0,
+        receivedIndices: [],
+        mimeType,
+        createdAt: Date.now(),
       };
-      await txn.put(metadataKey, metadata);
+    }
+
+    // 更新元数据计数
+    const updatedMetadata: FileMetadata = {
+      ...metadata,
+      receivedChunks: metadata.receivedChunks + 1,
+      receivedIndices: [...metadata.receivedIndices, chunkIndex],
+    };
+
+    // 使用事务确保原子性
+    await this.state.transaction(async (txn) => {
+      await txn.put(metadataKey, updatedMetadata);
 
       // 存储分片
       const chunkKey = `chunk:${fileId}:${chunkIndex}`;
@@ -128,7 +128,7 @@ export class ChunkStorage implements DurableObject {
       success: true,
       chunkIndex,
       fileId,
-      receivedChunks: metadata.receivedChunks,
+      receivedChunks: updatedMetadata.receivedChunks,
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -193,28 +193,38 @@ export class ChunkStorage implements DurableObject {
   /**
    * 合并分片
    */
-  private async handleMergeChunks(): Promise<Response> {
+  private async handleMergeChunks(url: URL): Promise<Response> {
+    const fileId = url.searchParams.get('fileId');
+    if (!fileId) {
+      return new Response(JSON.stringify({ error: 'Missing fileId' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // 先在事务外获取元数据，避免在事务内使用 list() 导致堆栈溢出
+    const metadataKey = `meta:${fileId}`;
+    const metadata = await this.state.get<FileMetadata>(metadataKey);
+
+    if (!metadata) {
+      return new Response(JSON.stringify({ error: 'File not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // 检查是否所有分片都已上传
+    if (metadata.receivedChunks < metadata.totalChunks) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Incomplete upload: ${metadata.receivedChunks}/${metadata.totalChunks} chunks received`
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // 收集所有分片并在事务内合并
     const result = await this.state.transaction(async (txn) => {
-      const files = await this.state.list<FileMetadata>({ prefix: 'meta:' });
-      const fileList: Array<{ fileId: string; metadata: FileMetadata }> = [];
-
-      // 找出所有文件
-      for await (const [key, value] of files) {
-        fileList.push({ fileId: key.substring(5), metadata: value });
-      }
-
-      // 获取用户上传的文件（需要通过其他方式传递）
-      // 这里简化为返回第一个文件的数据作为示例
-      if (fileList.length === 0) {
-        return {
-          success: false,
-          error: 'Please call upload/complete with the correct fileId first'
-        };
-      }
-
-      const { fileId, metadata } = fileList[0];
-
-      // 收集所有分片
       const chunks: ArrayBuffer[] = [];
       for (let i = 0; i < metadata.totalChunks; i++) {
         const chunkKey = `chunk:${fileId}:${i}`;
@@ -295,20 +305,25 @@ export class ChunkStorage implements DurableObject {
    * 清理过期文件（5 分钟）
    */
   private async handleCleanup(): Promise<Response> {
-    const result = await this.state.transaction(async (txn) => {
-      const files = await this.state.list<FileMetadata>({ prefix: 'meta:' });
-      const now = Date.now();
-      const timeout = 5 * 60 * 1000; // 5 分钟
+    // 先在事务外列出所有文件
+    const files = await this.state.list<FileMetadata>({ prefix: 'meta:' });
+    const now = Date.now();
+    const timeout = 5 * 60 * 1000; // 5 分钟
 
-      let deletedCount = 0;
-
-      for (const [key, value] of files) {
-        if (now - value.createdAt > timeout) {
-          await txn.delete(key);
-          deletedCount++;
-        }
+    const keysToDelete: string[] = [];
+    for (const [key, value] of files) {
+      if (now - value.createdAt > timeout) {
+        keysToDelete.push(key);
       }
+    }
 
+    // 在事务内删除
+    const result = await this.state.transaction(async (txn) => {
+      let deletedCount = 0;
+      for (const key of keysToDelete) {
+        await txn.delete(key);
+        deletedCount++;
+      }
       return { deletedCount };
     });
 
