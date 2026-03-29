@@ -1,347 +1,254 @@
-# AI Tool Chat Platform
+# AI Tool Chat
 
-AI 对话与工具平台，基于 Vue 3 构建的现代化前端应用，支持多种 AI 模型和先进的 UI/UX 设计系统。
+一个基于 `pnpm monorepo` 的 AI 对话平台，前端使用 Vue 3，后端运行在 Cloudflare Workers。项目支持：
 
-## 功能特性
+- 纯文本对话
+- 图片理解
+- 文件上传与大文件分块处理
+- SSE 流式返回
+- Task → Step → Skill 编排
 
-- 🤖 **多模型支持**：集成 DeepSeek、GLM、Qwen 等多种 AI 模型
-- 💬 **AI 智能对话**：与 AI 助手进行实时对话，获取智能回答
-- 💾 **对话历史管理**：查看、切换和删除对话历史，支持本地持久化
-- 🌙 **主题切换**：支持浅色和深色主题，适应不同使用场景
-- 📱 **响应式设计**：适配不同屏幕尺寸，在手机和电脑上都有良好表现
-- ⚙️ **助手人设设置**：自定义 AI 助手的系统提示词，调整助手行为
-- 🖼️ **多模态支持**：支持图片上传和处理，与 AI 进行图文交互
-- 📁 **文件上传**：支持文本文件上传（txt, md, csv, json, 代码文件等），大文件采用 Map-Reduce 风格分块处理
-- 📝 **Markdown 渲染**：支持 Markdown 格式的消息内容，包括代码块高亮
-- 📋 **代码复制**：一键复制代码块内容，方便使用
-- 🔥 **热门提问**：提供热门问题推荐，快速开始对话
-- 📊 **步骤指示器**：显示 AI 处理过程的详细步骤
-- 🔄 **自动滚动**：智能自动滚动到最新消息，提升阅读体验
-- 🛠️ **技能架构**：Task → Step → Skill 三层架构，支持可插拔的技能模块
-- 🧠 **智能技能路由**：根据输入内容（文本/图片/文件）自动选择最佳处理技能
-- 🧪 **工具扩展预留**：已预留 MCP/工具能力扩展点，当前仍处于实验阶段
-- 🎨 **现代化设计**：精心设计的 UI/UX 系统
-- 🚀 **高性能渲染**：优化的渲染性能，流畅的用户体验
-- 🔒 **数据安全**：对话数据存储在本地，确保数据安全和隐私保护
+当前仓库已经收口到单一 Task 主链路，前端通过 Store 发起请求，后端统一按任务流执行并把步骤事件实时推回 UI。
+
+## 项目结构
+
+```text
+ai-tool-chat/
+├─ packages/
+│  ├─ frontend/   # Vue 3 + TypeScript + Pinia + Vite
+│  └─ worker/     # Cloudflare Worker + SSE + Task/Step/Skill
+├─ docs/
+│  ├─ adr/
+│  └─ plans/
+├─ ERROR_LOG.md
+├─ AGENTS.md
+└─ README.md
+```
+
+## 核心能力
+
+- 会话管理：本地持久化会话、消息、当前会话状态
+- 流式回复：前端实时显示 `content` 片段
+- 步骤可视化：前端消费 `task`、`step`、`error`、`complete` 事件并展示步骤状态
+- 多模型路由：按文本、图片、文件自动选择 Skill
+- 文件处理：支持文本类文件上传、分块、合并、分析
+- 模型兜底：不同环境变量组合下自动回退到可用模型
 
 ## 技术栈
 
 ### 前端
 
-- **框架**：Vue 3 + TypeScript
-- **状态管理**：Pinia
-- **路由**：Vue Router
-- **构建工具**：Vite 7
-- **代码规范**：ESLint + Prettier
-- **样式**：原生 CSS + CSS 变量 + ui-ux-pro-max 设计系统
-- **Markdown 渲染**：Markdown-It
-- **多模态支持**：FileReader API + Canvas API
-- **性能优化**：组件懒加载、虚拟列表、代码分割
-
-### 设计系统
-
-- **ui-ux-pro-max**：集成先进的设计系统，提供反主流美学设计
-- **响应式布局**：自适应各种屏幕尺寸
-- **主题系统**：支持自定义主题和动态主题切换
-- **无障碍设计**：考虑键盘导航和屏幕阅读器支持
+- Vue 3
+- TypeScript
+- Pinia
+- Vue Router
+- Vite
+- Markdown-It
 
 ### 后端
 
-- **运行环境**：Cloudflare Workers
-- **架构模式**：Task → Step → Skill 三层架构
-- **流式响应**：服务器发送事件（SSE）
-- **分块处理**：支持大文件 Map-Reduce 风格分块处理
-- **技能系统**：可插拔的技能模块
+- Cloudflare Workers
+- Wrangler
+- SSE
+- Durable Objects（分片上传）
 
-### 开发工具
+## 架构说明
 
-- **包管理**：pnpm
-- **CI/CD**：GitHub Actions
-- **部署平台**：Cloudflare Pages + Workers
+### 前端主链路
 
-## 项目结构
+前端已经统一到单一发送入口：
 
-```
-ai-tool-chat/
-├── packages/
-│   ├── frontend/         # 前端应用
-│   │   ├── src/
-│   │   │   ├── api/      # API 调用
-│   │   │   ├── components/  # Vue 组件
-│   │   │   │   ├── ChatHeader.vue        # 聊天头部
-│   │   │   │   ├── ChatInput.vue         # 聊天输入
-│   │   │   │   ├── ChatMessage.vue       # 单条消息
-│   │   │   │   ├── ChatMessages.vue      # 消息列表
-│   │   │   │   ├── FileUploader.vue      # 文件上传
-│   │   │   │   ├── ImageUploader.vue     # 图片上传
-│   │   │   │   ├── Sidebar.vue           # 侧边栏
-│   │   │   │   └── StepIndicator.vue     # 步骤指示器
-│   │   │   ├── composables/ # 组合式函数
-│   │   │   │   ├── useScroll.ts          # 滚动管理
-│   │   │   │   └── useTheme.ts          # 主题管理
-│   │   │   ├── router/   # 路由配置
-│   │   │   ├── stores/   # Pinia 存储
-│   │   │   │   └── chat.ts               # 聊天状态
-│   │   │   ├── types/    # TypeScript 类型
-│   │   │   ├── views/    # 页面视图
-│   │   │   ├── App.vue   # 根组件
-│   │   │   ├── main.ts   # 入口文件
-│   │   │   └── style.css # 全局样式
-│   │   └── vite.config.ts # Vite 配置
-│   └── worker/           # Cloudflare Worker 后端
-│       ├── src/
-│       │   ├── chunkStorage.ts    # 分块存储
-│       │   ├── core/              # 核心功能
-│       │   │   ├── taskManager.ts # 任务管理器
-│       │   │   └── ...
-│       │   ├── mcp/               # 模型调用协议
-│       │   ├── skills/            # 技能模块
-│       │   │   ├── textSkill.ts     # 文本对话（OpenAI / DeepSeek / Qwen）
-│       │   │   ├── multimodalSkill.ts # 多模态（Qwen3.5）
-│       │   │   ├── glmSkill.ts      # GLM 模型对话
-│       │   │   ├── fileSkill.ts     # 文件处理
-│       │   │   └── index.ts         # 技能注册中心
-│       │   ├── types/             # 类型定义
-│       │   ├── utils/             # 工具函数
-│       │   │   ├── chunker.ts      # 分块处理
-│       │   │   └── logger.ts       # 日志工具
-│       │   └── index.ts            # Worker 入口
-│       └── wrangler.toml # Worker 配置
-├── .github/workflows/    # GitHub Actions 工作流
-├── ERROR_LOG.md          # 错误记录文档
-├── README.md             # 项目说明文档
-├── package.json          # 根项目配置
-└── pnpm-workspace.yaml   # pnpm 工作区配置
-```
+`UI -> ChatStore -> sendTaskRequest -> Worker`
+
+核心文件：
+
+- [packages/frontend/src/stores/chat.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/frontend/src/stores/chat.ts)
+- [packages/frontend/src/api/task.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/frontend/src/api/task.ts)
+- [packages/frontend/src/views/Chat.vue](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/frontend/src/views/Chat.vue)
+
+当前前端会维护：
+
+- 会话列表
+- 消息列表
+- 当前任务
+- 当前步骤
+- 流式内容
+- 中断控制
+
+### 后端执行模型
+
+后端采用 `Task -> Step -> Skill` 三层结构：
+
+1. `Task`：一次聊天请求的生命周期
+2. `Step`：`plan`、`skill`、`respond`
+3. `Skill`：具体能力模块
+
+核心文件：
+
+- [packages/worker/src/core/taskManager.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/worker/src/core/taskManager.ts)
+- [packages/worker/src/skills/index.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/worker/src/skills/index.ts)
+- [packages/worker/src/index.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/worker/src/index.ts)
+
+## 当前模型路由
+
+### 纯文本
+
+- 默认文本 Skill：`glmSkill`
+- 仅配置 `QWEN_API_KEY` 时：回退到 `textSkill + qwen3-max-2026-01-23`
+- 仅配置 `OPENAI_API_KEY` 时：回退到 `textSkill + gpt-4.1-mini`
+- 配置 `DEEPSEEK_API_KEY` 时：可兼容走 DeepSeek
+
+### 图片理解
+
+- 当前多模态模型：`qwen3.5-plus`
+
+### 文件处理
+
+- 当前文件处理主链路：`fileSkill`
+- 文件分析默认依赖 GLM 路由和文件处理逻辑
+
+## API 事件
+
+Worker 流式返回 SSE，前端目前消费这些事件：
+
+- `task`
+- `step`
+- `content`
+- `error`
+- `complete`
+
+主要接口：
+
+- `POST /`
+- `POST /chat`
+- `POST /upload/chunk`
+- `POST /upload/complete`
+- `GET /upload/status`
+- `GET /health`
+- `GET /stats`
 
 ## 快速开始
 
-### 前置条件
-
-- Node.js 18.0 或更高版本
-- pnpm 8.0 或更高版本
-- Git 版本控制系统
-
-### 安装依赖
+### 1. 安装依赖
 
 ```bash
-# 安装所有项目依赖
 pnpm install
 ```
 
-### 启动开发服务器
+### 2. 配置本地 Worker 环境变量
+
+参考示例文件：
+
+- [packages/worker/.dev.vars.example](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/worker/.dev.vars.example)
+
+本地通常至少需要一个可用模型 Key：
 
 ```bash
-# 启动前端开发服务器
-pnpm --filter @ai-tool-chat/frontend dev
+DEFAULT_MODEL=qwen3-max-2026-01-23
+QWEN_API_KEY=your_qwen_key
+```
 
-# 启动 Worker 开发服务器（可选）
+可选变量：
+
+- `GLM_API_KEY`
+- `QWEN_API_KEY`
+- `OPENAI_API_KEY`
+- `DEEPSEEK_API_KEY`
+- `DEFAULT_MODEL`
+
+### 3. 启动本地开发服务
+
+启动前端：
+
+```bash
+pnpm --filter @ai-tool-chat/frontend dev
+```
+
+启动 Worker：
+
+```bash
 pnpm --filter @ai-tool-chat/worker dev
 ```
 
-前端应用将在 `http://localhost:5173/` 启动。
+默认地址：
 
-### 构建生产版本
+- 前端：[http://localhost:5173](http://localhost:5173)
+- Worker：[http://127.0.0.1:8787](http://127.0.0.1:8787)
 
-```bash
-# 构建前端应用
-pnpm build
+## 常用命令
 
-# 部署 Worker（可选）
-pnpm deploy:worker
-```
-
-## 开发指南
-
-### 代码规范
-
-项目使用 ESLint 和 Prettier 确保代码质量和一致性：
+### 根目录
 
 ```bash
-# 运行代码检查
 pnpm lint
-
-# 自动格式化代码
 pnpm format
-```
-
-### 提交规范
-
-项目使用 Commitlint 确保提交信息符合规范：
-
-```bash
-# 提交信息格式：<type>(<scope>): <description>
-# 示例：feat(frontend): 添加主题切换功能
-```
-
-### 组件开发
-
-1. 在 `packages/frontend/src/components/` 目录下创建新组件
-2. 使用 Vue 3 的 Composition API 和 TypeScript
-3. 确保组件命名遵循 PascalCase 规范
-
-### API 调用
-
-主聊天链路封装在 `packages/frontend/src/api/task.ts` 中，通过 `sendTaskRequest` 函数与 Worker 通信。
-
-API 端点：
-- 开发环境默认：`http://127.0.0.1:8787`
-- 生产环境默认：`https://api.i-tool-chat.store`
-
-请求格式：
-```typescript
-{
-  messages: ChatMessage[],
-  images?: ImageData[],
-  files?: FileData[],
-  enableTools?: boolean,
-  temperature?: number,
-  stream?: boolean
-}
-```
-
-响应格式：SSE 流式响应，包含事件类型：
-- `task` - 任务开始
-- `step` - 步骤更新
-- `content` - 内容片段
-- `error` - 错误信息
-- `complete` - 完成信号
-
-## 部署指南
-
-项目使用 GitHub Actions 自动部署：
-
-1. **前端部署**：推送到 `main` 分支时，自动构建并部署到 Cloudflare Pages
-2. **Worker 部署**：推送到 `main` 分支时，自动部署到 Cloudflare Workers
-
-### 已部署地址
-
-- **前端**：https://i-tool-chat.store
-- **API**：https://api.i-tool-chat.store
-
-### 手动部署
-
-#### 部署前端到 Cloudflare Pages
-
-1. 登录 Cloudflare 控制台
-2. 创建新的 Pages 项目
-3. 连接 GitHub 仓库
-4. 配置构建命令：`pnpm install && pnpm build`
-5. 配置构建输出目录：`packages/frontend/dist`
-6. 点击 "部署" 按钮
-
-#### 部署 Worker 到 Cloudflare Workers
-
-```bash
-# 使用 Wrangler 部署
+pnpm build
+pnpm build:frontend
 pnpm deploy:worker
 ```
-
-配置环境变量：
-```bash
-# 在 Cloudflare Workers 控制台或 wrangler.toml 中配置
-DEEPSEEK_API_KEY=your_key_here
-QWEN_API_KEY=your_key_here  # 可选
-GLM_API_KEY=your_key_here   # 可选
-```
-
-## 环境变量
 
 ### 前端
 
-前端应用需要配置以下环境变量（可选）：
-
-- `VITE_API_URL`：API 服务器地址。未配置时，开发环境默认使用 `http://127.0.0.1:8787`，生产环境默认使用 `https://api.i-tool-chat.store`
+```bash
+pnpm --filter @ai-tool-chat/frontend dev
+pnpm --filter @ai-tool-chat/frontend build
+pnpm --filter @ai-tool-chat/frontend preview
+pnpm --filter @ai-tool-chat/frontend lint
+pnpm --filter @ai-tool-chat/frontend format
+```
 
 ### Worker
 
-Worker 需要配置以下环境变量（至少配置一个）：
-
-- `DEEPSEEK_API_KEY`：DeepSeek API 密钥（可选，保留兼容）
-- `QWEN_API_KEY`：通义千问 API 密钥（可选，可用于文本兜底和多模态图片处理）
-- `GLM_API_KEY`：智谱 GLM API 密钥（推荐，当前默认文本路由使用 GLM）
-- `OPENAI_API_KEY`：OpenAI API 密钥（可选，当前可作为本地文本兜底）
-
-### GLM 模型配置
-
-智谱 GLM 模型配置说明：
-
 ```bash
-# 在 Cloudflare Workers 环境变量或 wrangler.toml 中配置
-GLM_API_KEY=your_glm_api_key_here
+pnpm --filter @ai-tool-chat/worker dev
+pnpm --filter @ai-tool-chat/worker deploy
 ```
 
-API 端点：`https://open.bigmodel.cn/api/paas/v4/chat/completions`
+## 部署
 
-当前默认模型：
-- `glm-4-flash` - 默认文本路由
-- `qwen3.5-plus` - 图片/图文请求
-- `gpt-4.1-mini` - 当仅配置 OpenAI Key 时的本地文本兜底模型
-- `qwen3-max-2026-01-23` - 当仅配置 QWEN Key 时的本地文本默认模型
+项目当前按下面的方式部署：
 
-获取 API Key：访问 [智谱 AI 开放平台](https://open.bigmodel.cn/) 注册并创建 API Key
+- 前端：Cloudflare Pages
+- 后端：Cloudflare Workers
+- CI/CD：GitHub Actions
 
-## 技能架构
+生产地址：
 
-Worker 采用 **Task → Step → Skill** 三层架构：
+- 前端：[https://i-tool-chat.store](https://i-tool-chat.store)
+- API：[https://api.i-tool-chat.store](https://api.i-tool-chat.store)
 
-### Task（任务）
-- 表示单个聊天请求，管理任务的生命周期
-- 处理 SSE 流式响应
+## 设计边界
 
-### Steps（步骤）
-- `plan` - 规划阶段，确定执行路径
-- `skill` - 技能执行阶段，调用具体技能
-- `respond` - 响应阶段，返回结果给前端
+### 工具调用
 
-### Skills（技能）
-可插拔的技能模块，当前支持的技能：
+`enableTools` 当前是实验能力标记，不代表完整工具链已经闭环。仓库里已经预留 MCP 相关结构，但目前仍以普通聊天主链路为主。
 
-| 技能名称 | 文件 | 功能 | 支持模型 |
-|---------|------|------|---------|
-| textSkill | textSkill.ts | 兼容保留的纯文本对话技能 | OpenAI / DeepSeek / Qwen |
-| glmSkill | glmSkill.ts | 默认文本对话 | GLM-4-Flash |
-| multimodalSkill | multimodalSkill.ts | 图片+文本处理 | Qwen3.5 |
-| fileSkill | fileSkill.ts | 文件上传处理 | GLM |
+### Task 生命周期
 
-技能路由规则：
-- 有文件上传 → fileSkill
-- 有图片上传 → multimodalSkill
-- 纯文本 → 默认走 glmSkill
-- 仅配置 `QWEN_API_KEY` 时，纯文本会回退到 textSkill + `qwen3-max-2026-01-23`
+Task 状态当前保存在 Worker 实例内存里，适用于单次请求过程中的实时展示，不承诺：
 
-### 工具能力说明
+- 跨实例一致性
+- 长期任务持久化查询
+- 跨实例任务恢复
 
-- `enableTools` 当前用于标记任务需要工具能力，但仍属于实验能力
-- Worker 内部已经预留 MCP client 和工具调用接口
-- 当前尚未形成完整的“模型发起 tool_call → Worker 执行工具 → 结果回填模型”闭环
+详细说明见：
 
-### Task 生命周期边界
+- [docs/adr/2026-03-29-task-lifecycle-boundary.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/docs/adr/2026-03-29-task-lifecycle-boundary.md)
 
-- 当前 Task 状态存储在 Worker 实例内存中
-- 适用于单次 SSE 请求中的实时状态展示
-- `/stats` 仅反映当前实例的近似状态，不保证跨实例一致性
-- 当前不承诺持久化任务查询或跨实例恢复
+## 相关文档
 
-## 贡献指南
+- [AGENTS.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/AGENTS.md)
+- [ERROR_LOG.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/ERROR_LOG.md)
+- [docs/plans/2026-03-29-task-pipeline-unification.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/docs/plans/2026-03-29-task-pipeline-unification.md)
 
-1. Fork 本仓库
-2. 创建新分支：`git checkout -b feature/your-feature`
-3. 提交更改：`git commit -m "feat: your feature description"`
-4. 推送分支：`git push origin feature/your-feature`
-5. 创建 Pull Request
+## 贡献
+
+```bash
+git checkout -b feature/your-feature
+git commit -m "feat: your change"
+git push origin feature/your-feature
+```
 
 ## 许可证
 
-MIT License
-
-## 联系方式
-
-如有问题或建议，欢迎通过以下方式联系：
-
-- GitHub Issues：在本仓库创建 Issue
-- Email：hu_liang2027@163.com
-
----
-
-**感谢使用 AI Tool Chat Platform！** 🚀
+MIT
