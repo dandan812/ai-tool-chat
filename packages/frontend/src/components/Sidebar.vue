@@ -13,7 +13,6 @@
  * @package frontend/src/components
  */
 
-import { ref } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useTheme } from '../composables/useTheme'
 

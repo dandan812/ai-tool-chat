@@ -11,9 +11,11 @@
 
 /**
  * 后端 API 基础 URL
- * 部署在 Cloudflare Workers
+ * 开发环境默认指向本地 Worker，生产环境默认指向 Cloudflare Workers
  */
-export const API_BASE_URL = 'https://api.i-tool-chat.store'
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? 'http://127.0.0.1:8787' : 'https://api.i-tool-chat.store')
 
 /**
  * API 端点路径

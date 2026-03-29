@@ -13,8 +13,7 @@
  * @package frontend/src/api
  */
 
-import type { ChatMessage } from './ai'
-import type { Task, Step, SSEEvent, ImageData, FileData } from '../types/task'
+import type { ChatMessage, Task, Step, SSEEvent, ImageData, FileData } from '../types/task'
 import { API_BASE_URL } from '../config'
 import { getUserFriendlyError } from '../utils/error'
 
@@ -36,6 +35,7 @@ export interface TaskCallbacks {
   onTaskUpdate?: (task: Task) => void
   onStepStart?: (step: Step) => void
   onStepComplete?: (step: Step) => void
+  onStepError?: (step: Step) => void
   onContent?: (content: string) => void
   onError?: (error: string) => void
   onComplete?: (task: Task) => void
@@ -195,6 +195,8 @@ function handleSSEEvent(event: SSEEvent, callbacks: TaskCallbacks): void {
         callbacks.onStepStart?.(step)
       } else if (stepEvent === 'complete') {
         callbacks.onStepComplete?.(step)
+      } else if (stepEvent === 'error') {
+        callbacks.onStepError?.(step)
       }
       break
     }

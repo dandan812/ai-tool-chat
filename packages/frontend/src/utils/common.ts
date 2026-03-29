@@ -266,14 +266,14 @@ export function set<T extends object>(
   value: unknown
 ): T {
   const keys = path.split('.')
-  let result: any = obj
+  let result: Record<string, unknown> = obj as Record<string, unknown>
 
   for (let i = 0; i < keys.length - 1; i++) {
     const key = keys[i]!
-    if (!result[key]) {
+    if (typeof result[key] !== 'object' || result[key] === null || Array.isArray(result[key])) {
       result[key] = {}
     }
-    result = result[key]
+    result = result[key] as Record<string, unknown>
   }
 
   const lastKey = keys[keys.length - 1]

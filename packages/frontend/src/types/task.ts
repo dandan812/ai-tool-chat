@@ -15,6 +15,15 @@
 // ==================== Task 任务类型 ====================
 
 /**
+ * 聊天消息接口
+ * 前后端统一使用的最小消息结构
+ */
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+/**
  * 任务状态枚举
  * 表示任务在执行过程中的不同阶段
  */
@@ -55,6 +64,8 @@ export interface Task {
   createdAt: number;
   /** 任务最后更新时间戳（毫秒） */
   updatedAt: number;
+  /** 任务元数据（如模型、温度等） */
+  metadata?: Record<string, unknown>;
 }
 
 // ==================== Step 步骤类型 ====================
@@ -121,6 +132,8 @@ export interface Step {
   startedAt?: number;
   /** 步骤完成时间戳（毫秒） */
   completedAt?: number;
+  /** 步骤元数据 */
+  metadata?: Record<string, unknown>;
 }
 
 // ==================== SSE 事件类型 ====================

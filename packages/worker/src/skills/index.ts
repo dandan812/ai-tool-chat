@@ -12,10 +12,10 @@
  *   - multimodalSkill：处理图文对话
  *   - codeSkill：处理代码相关任务（未来可扩展）
  */
-import type { Skill, SkillType } from '../types';
+import type { Skill, ToolingMode } from '../types';
 import { textSkill } from './textSkill';
 import { multimodalSkill } from './multimodalSkill';
-import { fileSkill, isSupportedTextFile } from './fileSkill';
+import { fileSkill } from './fileSkill';
 import { glmSkill } from './glmSkill';
 
 /**
@@ -26,6 +26,14 @@ import { glmSkill } from './glmSkill';
  *   Map 有更好的性能，支持任意类型的 key，API 更清晰
  */
 const skillRegistry = new Map<string, Skill>();
+
+export interface SelectedSkill {
+  skill: Skill;
+  model: string;
+  label: string;
+  description: string;
+  toolingMode: ToolingMode;
+}
 
 /**
  * 注册默认的 Skills
@@ -88,30 +96,102 @@ export function getSkill(name: string): Skill | undefined {
  */
 export function selectSkill(
   input: { images?: unknown[]; files?: unknown[]; model?: string },
-  env?: { DEFAULT_MODEL?: string; GLM_API_KEY?: string }
-): Skill {
+  env?: {
+    DEFAULT_MODEL?: string;
+    GLM_API_KEY?: string;
+    OPENAI_API_KEY?: string;
+    DEEPSEEK_API_KEY?: string;
+    QWEN_API_KEY?: string;
+  }
+): SelectedSkill {
   const { images = [], files = [], model } = input;
+  const toolingMode: ToolingMode = 'disabled';
+
+  const createSelection = (
+    skill: Skill,
+    selectedModel: string,
+    label: string,
+    description: string
+  ): SelectedSkill => ({
+    skill,
+    model: selectedModel,
+    label,
+    description,
+    toolingMode,
+  });
 
   // 规则 1：如果指定了 model，使用对应的 Skill
   if (model) {
     if (model.startsWith('glm')) {
-      return glmSkill;
+      return createSelection(glmSkill, model, 'GLM 文本对话', `调用 ${model} 生成回复`);
+    }
+    if (model.startsWith('gpt-') || model.startsWith('o')) {
+      return createSelection(textSkill, model, 'OpenAI 文本对话', `调用 ${model} 生成回复`);
+    }
+    if (model.startsWith('deepseek')) {
+      return createSelection(textSkill, model, 'DeepSeek 文本对话', `调用 ${model} 生成回复`);
+    }
+    if (model.startsWith('qwen')) {
+      return createSelection(textSkill, model, 'Qwen 文本对话', `调用 ${model} 生成回复`);
     }
     // 可以添加其他模型的判断
   }
 
   // 规则 2：如果有图片，使用多模态 Skill
   if (images.length > 0) {
-    return multimodalSkill;
+    return createSelection(multimodalSkill, 'qwen3.5-plus', '多模态处理', '调用 Qwen3.5 处理图文');
   }
 
   // 规则 3：如果有文件，使用文件处理 Skill
   if (files.length > 0) {
-    return fileSkill;
+    return createSelection(fileSkill, 'glm-4-flash', '文件分析', '调用文件处理技能分析上传内容');
+  }
+
+  if (env?.DEFAULT_MODEL?.startsWith('glm')) {
+    return createSelection(
+      glmSkill,
+      env.DEFAULT_MODEL,
+      'GLM 文本对话',
+      `调用 ${env.DEFAULT_MODEL} 生成回复`
+    );
+  }
+
+  if (env?.DEFAULT_MODEL && (env.DEFAULT_MODEL.startsWith('gpt-') || env.DEFAULT_MODEL.startsWith('o'))) {
+    return createSelection(
+      textSkill,
+      env.DEFAULT_MODEL,
+      'OpenAI 文本对话',
+      `调用 ${env.DEFAULT_MODEL} 生成回复`
+    );
+  }
+
+  if (env?.DEFAULT_MODEL?.startsWith('qwen')) {
+    return createSelection(
+      textSkill,
+      env.DEFAULT_MODEL,
+      'Qwen 文本对话',
+      `调用 ${env.DEFAULT_MODEL} 生成回复`
+    );
+  }
+
+  if (env?.GLM_API_KEY) {
+    return createSelection(glmSkill, 'glm-4-flash', 'GLM 文本对话', '调用 GLM 生成回复');
+  }
+
+  if (env?.OPENAI_API_KEY) {
+    return createSelection(textSkill, 'gpt-4.1-mini', 'OpenAI 文本对话', '调用 OpenAI 生成回复');
+  }
+
+  if (env?.DEEPSEEK_API_KEY) {
+    return createSelection(textSkill, 'deepseek-chat', 'DeepSeek 文本对话', '调用 DeepSeek 生成回复');
+  }
+
+  if (env?.QWEN_API_KEY) {
+    return createSelection(textSkill, 'qwen3-max-2026-01-23', 'Qwen 文本对话', '调用 Qwen 生成回复');
   }
 
   // 规则 4：默认使用 GLM Skill（不再使用 DeepSeek）
-  return glmSkill;
+  return createSelection(glmSkill, 'glm-4-flash', 'GLM 文本对话', '调用 GLM 生成回复');
 }
 
 /**

@@ -1,5 +1,4 @@
 import MarkdownIt from 'markdown-it'
-import type Token from 'markdown-it'
 
 /**
  * Markdown 处理工具 - 优化版
@@ -12,6 +11,9 @@ let mdInstance: MarkdownIt | null = null
 // 渲染结果缓存
 const renderCache = new Map<string, string>()
 const MAX_CACHE_SIZE = 100
+
+type FenceRenderer = NonNullable<MarkdownIt['renderer']['rules']['fence']>
+type LinkOpenRenderer = NonNullable<MarkdownIt['renderer']['rules']['link_open']>
 
 /**
  * 获取 MarkdownIt 实例（单例模式）
@@ -32,11 +34,7 @@ export function getMarkdownRenderer(): MarkdownIt {
   })
 
   // 自定义代码块渲染
-  const defaultRender = mdInstance.renderer.rules.fence || function(tokens: Token[], idx: number, options: object, env: object, self: any) {
-    return self.renderToken(tokens, idx, options)
-  }
-
-  mdInstance.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  mdInstance.renderer.rules.fence = ((tokens, idx) => {
     const token = tokens[idx]
     if (!token) return ''
     const code = token.content
@@ -51,19 +49,21 @@ export function getMarkdownRenderer(): MarkdownIt {
         <pre><code class="language-${lang || 'plaintext'}">${escapeHtml(code)}</code></pre>
       </div>
     `
-  }
+  }) as FenceRenderer
+
+  const defaultLinkRender: LinkOpenRenderer =
+    mdInstance.renderer.rules.link_open ||
+    ((tokens, idx, options, _env, self) => {
+      return self.renderToken(tokens, idx, options)
+    })
 
   // 自定义链接渲染（添加安全属性）
-  const defaultLinkRender = mdInstance.renderer.rules.link_open || function(tokens, idx, options, env, self) {
-    return self.renderToken(tokens, idx, options)
-  }
-
-  mdInstance.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  mdInstance.renderer.rules.link_open = ((tokens, idx, options, env, self) => {
     if (!tokens[idx]) return ''
     tokens[idx].attrSet('target', '_blank')
     tokens[idx].attrSet('rel', 'noopener noreferrer')
     return defaultLinkRender(tokens, idx, options, env, self)
-  }
+  }) as LinkOpenRenderer
 
   return mdInstance
 }

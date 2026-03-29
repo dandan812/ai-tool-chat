@@ -56,6 +56,8 @@ const router = createRouter({
  * 每次导航前触发
  */
 router.beforeEach((to, from, next) => {
+  void to
+  void from
   // 可以在这里添加权限检查、登录状态验证等
   // 示例：
   // if (!isAuthenticated && to.meta.requiresAuth) {
@@ -71,7 +73,7 @@ router.beforeEach((to, from, next) => {
  * 全局后置钩子
  * 每次导航后触发
  */
-router.afterEach((to, from) => {
+router.afterEach(() => {
   // 可以在这里设置页面标题、发送页面访问统计等
   // 示例：
   // document.title = to.meta.title || 'AI Chat'

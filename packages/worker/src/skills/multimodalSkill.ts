@@ -1,9 +1,9 @@
 /**
- * 多模态 Skill - 基于 Qwen-VL (通义千问视觉大模型)
+ * 多模态 Skill - 基于 Qwen3.5 视觉理解模型
  * 
  * 作用：处理图文对话，支持用户上传图片让 AI 分析
  * 特点：
- *   - 使用阿里云的 Qwen-VL 模型
+ *   - 使用阿里云的 Qwen3.5 视觉理解模型
  *   - 支持 Base64 编码的图片传输
  *   - 同样支持流式响应
  */
@@ -24,7 +24,7 @@ import { logger } from '../utils/logger';
 export const multimodalSkill: Skill = {
   name: 'multimodal-chat',    // 技能名
   type: 'multimodal',         // 技能类型：多模态（图文）
-  description: '基于 Qwen-VL 的图文对话技能',
+  description: '基于 Qwen3.5 的图文对话技能',
 
   /**
    * 执行多模态对话
@@ -47,7 +47,7 @@ export const multimodalSkill: Skill = {
       logger.info('Calling Qwen API', { imageCount: images.length });
 
       /**
-       * 构建 Qwen-VL 格式的消息
+       * 构建 Qwen 多模态格式的消息
        * 
        * Qwen 使用 OpenAI 兼容的消息格式，但内容可以是数组（包含图片和文本）
        * 示例：
@@ -71,7 +71,7 @@ export const multimodalSkill: Skill = {
             'Authorization': `Bearer ${env.QWEN_API_KEY}`,
           },
           body: JSON.stringify({
-            model: 'qwen-vl-plus',    // Qwen 视觉模型
+            model: 'qwen3.5-plus',    // 当前默认图片理解模型
             messages: qwenMessages,   // 构建好的消息列表
             stream: true,
             temperature,
@@ -139,7 +139,7 @@ export const multimodalSkill: Skill = {
 };
 
 /**
- * 构建 Qwen-VL 格式的消息
+ * 构建 Qwen 多模态格式的消息
  * 
  * 将标准消息格式转换为 Qwen 支持的多模态格式
  * 关键：如果有图片，将消息内容转为数组，包含 image_url 和 text

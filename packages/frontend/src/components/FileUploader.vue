@@ -19,8 +19,7 @@ import type { FileData, UploadProgress } from '../types/task'
 import { fileToFileData, isSupportedTextFile, formatFileSize, getFileIcon } from '../utils/file'
 import {
   uploadChunkedFile,
-  shouldUseChunking,
-  formatUploadProgress
+  shouldUseChunking
 } from '../utils/chunk'
 
 /**

@@ -19,7 +19,6 @@ import {
 import { logger } from './utils/logger';
 import { ChunkStorage } from "./chunkStorage";
 
-export { Env } from "./types";
 export { ChunkStorage };
 
 /**

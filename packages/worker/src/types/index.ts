@@ -9,6 +9,7 @@ export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type StepType = 'plan' | 'skill' | 'mcp' | 'think' | 'respond';
 export type SkillType = 'text' | 'multimodal' | 'code' | 'tool';
+export type ToolingMode = 'disabled' | 'experimental' | 'active';
 
 // ==================== 错误类型 ====================
 
@@ -84,9 +85,11 @@ export interface Task {
 
 export interface TaskMetadata {
   model?: string;
+  skill?: string;
   temperature?: number;
   tokenCount?: number;
   processingTime?: number;
+  toolingMode?: ToolingMode;
   [key: string]: unknown;
 }
 

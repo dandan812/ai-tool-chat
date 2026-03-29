@@ -57,13 +57,21 @@ const modelNames: Record<string, string> = {
  * 从 skill 步骤的输出中提取模型信息
  */
 const currentModel = computed(() => {
+  const taskModel = props.task?.metadata?.model
+  if (typeof taskModel === 'string' && taskModel) {
+    return modelNames[taskModel] || taskModel
+  }
+
   const skillStep = props.steps.find((s) => s.type === 'skill')
   if (skillStep?.output && typeof skillStep.output === 'object') {
     const output = skillStep.output as Record<string, unknown>
     const model = output.model as string
-    return modelNames[model] || model || 'AI 模型'
+    if (model) {
+      return modelNames[model] || model
+    }
   }
-  return 'AI 模型'
+
+  return skillStep?.name || 'AI 模型'
 })
 
 /**

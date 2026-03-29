@@ -2,9 +2,12 @@
  * Task Manager - 优化版
  * 管理 Task 生命周期，协调 Step 执行
  * 添加超时控制、内存管理、错误处理、性能监控
+ *
+ * 当前 Task 状态仅在单个 Worker 实例生命周期内有效。
+ * 适用于单次 SSE 请求内的实时状态展示，不适用于跨实例持久化查询。
  */
-import type { Task, Step, TaskStatus, StepType, ChatRequest, Env } from '../types';
-import { selectSkill, getSkill } from '../skills';
+import type { Task, Step, StepType, ChatRequest, Env, ToolingMode } from '../types';
+import { selectSkill, type SelectedSkill } from '../skills';
 import { createMCPClient } from '../mcp/client';
 import { generateId, now } from '../utils/id';
 import { logger } from '../utils/logger';
@@ -13,7 +16,6 @@ import { Cache } from '../utils/cache';
 // 常量配置
 const TASK_TIMEOUT_MS = 5 * 60 * 1000; // 5分钟超时
 const MAX_TASKS_CACHE = 100; // 最大缓存任务数
-const STEP_TIMEOUT_MS = 2 * 60 * 1000; // 每个 step 2分钟超时
 
 interface TaskStreamEvent {
   type: 'task' | 'step' | 'content' | 'error' | 'complete';
@@ -40,6 +42,7 @@ export class TaskManager {
   createTask(request: ChatRequest): Task {
     const taskId = generateId();
     const currentTime = now();
+    const toolingMode: ToolingMode = request.enableTools ? 'experimental' : 'disabled';
 
     const task: Task = {
       id: taskId,
@@ -49,6 +52,10 @@ export class TaskManager {
       steps: [],
       createdAt: currentTime,
       updatedAt: currentTime,
+      metadata: {
+        temperature: request.temperature ?? 0.7,
+        toolingMode,
+      },
     };
 
     // 内存管理：限制任务缓存数量
@@ -191,12 +198,20 @@ export class TaskManager {
     request: ChatRequest
   ): AsyncIterable<TaskStreamEvent> {
     const taskId = task.id;
+    const selectedSkill = selectSkill(request, this.env);
+
+    task.metadata = {
+      ...task.metadata,
+      model: selectedSkill.model,
+      skill: selectedSkill.skill.name,
+      toolingMode: request.enableTools ? 'experimental' : 'disabled',
+    };
 
     // Step 1: 规划 (Plan)
-    yield* this.runPlanStep(taskId, request);
+    yield* this.runPlanStep(taskId, request, selectedSkill);
 
     // Step 2: 执行 Skill
-    const skillResult = yield* this.runSkillStep(taskId, request);
+    const skillResult = yield* this.runSkillStep(task, request, selectedSkill);
     if (!skillResult.success) {
       throw new Error(skillResult.error);
     }
@@ -206,6 +221,10 @@ export class TaskManager {
 
     // 完成
     task.result = skillResult.content;
+    task.metadata = {
+      ...task.metadata,
+      processingTime: now() - task.createdAt,
+    };
     task.updatedAt = now();
     yield { type: 'complete', data: { task } };
 
@@ -217,7 +236,8 @@ export class TaskManager {
    */
   private async *runPlanStep(
     taskId: string,
-    request: ChatRequest
+    request: ChatRequest,
+    selectedSkill: SelectedSkill
   ): AsyncIterable<TaskStreamEvent> {
     const step = this.createStep(
       taskId,
@@ -232,7 +252,13 @@ export class TaskManager {
       const needsTools = !!request.enableTools;
 
       step.status = 'completed';
-      step.output = { needsMultimodal, needsTools };
+      step.output = {
+        needsMultimodal,
+        needsTools,
+        toolingMode: needsTools ? 'experimental' : 'disabled',
+        selectedSkill: selectedSkill.skill.name,
+        model: selectedSkill.model,
+      };
       step.completedAt = now();
       yield { type: 'step', data: { step, event: 'complete' } };
     } catch (error) {
@@ -246,22 +272,22 @@ export class TaskManager {
    * Skill Step
    */
   private async *runSkillStep(
-    taskId: string,
-    request: ChatRequest
+    task: Task,
+    request: ChatRequest,
+    selectedSkill: SelectedSkill
   ): AsyncIterable<
     TaskStreamEvent,
     { success: boolean; content: string; error?: string }
   > {
-    const needsMultimodal = !!(request.images?.length);
     const step = this.createStep(
-      taskId,
+      task.id,
       'skill',
-      needsMultimodal ? '多模态处理' : '文本对话',
-      needsMultimodal ? '调用 Qwen-VL 处理图文' : '调用 DeepSeek 生成回复'
+      selectedSkill.label,
+      selectedSkill.description
     );
     yield { type: 'step', data: { step, event: 'start' } };
 
-    const skill = selectSkill(request, this.env);
+    const skill = selectedSkill.skill;
     const mcpClient = createMCPClient();
     let fullContent = '';
 
@@ -272,9 +298,10 @@ export class TaskManager {
           images: request.images,
           files: request.files,
           temperature: request.temperature,
+          model: selectedSkill.model,
         },
         {
-          taskId,
+          taskId: task.id,
           stepId: step.id,
           env: this.env,
           mcpClient,
@@ -291,7 +318,12 @@ export class TaskManager {
       }
 
       step.status = 'completed';
-      step.output = { content: fullContent };
+      step.output = {
+        content: fullContent,
+        model: selectedSkill.model,
+        skill: skill.name,
+        toolingMode: selectedSkill.toolingMode,
+      };
       step.completedAt = now();
       yield { type: 'step', data: { step, event: 'complete' } };
 

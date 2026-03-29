@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef } from 'vue'
-import { type ChatMessage, sendChatRequest } from '../api/ai'
+import { sendTaskRequest } from '../api/task'
+import type { ChatMessage, Task, Step, ImageData, FileData } from '../types/task'
 import { getUserFriendlyError } from '../utils/error'
-
-// ==================== 类型定义 ====================
 
 export interface ChatSession {
   id: string
@@ -18,8 +17,6 @@ interface StorageData {
   currentSessionId: string
 }
 
-// ==================== 常量定义 ====================
-
 const STORAGE_KEYS = {
   SESSION_LIST: 'chat_session_list',
   MESSAGES_MAP: 'chat_messages_map',
@@ -27,11 +24,9 @@ const STORAGE_KEYS = {
 } as const
 
 const STORAGE_VERSION = 'v1'
-const MAX_STORAGE_SIZE = 4 * 1024 * 1024 // 4MB 限制
+const MAX_STORAGE_SIZE = 4 * 1024 * 1024
 const TITLE_MAX_LENGTH = 50
 const DEBOUNCE_MS = 300
-
-// ==================== 工具函数 ====================
 
 function generateId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
@@ -49,34 +44,39 @@ function estimateSize(data: unknown): number {
   return new Blob([JSON.stringify(data)]).size
 }
 
-// ==================== Store 定义 ====================
+function generateFallbackTitle(content: string): string {
+  return content.trim().replace(/\s+/g, ' ').slice(0, TITLE_MAX_LENGTH) || '新对话'
+}
+
+function buildUserMessageContent(content: string, images: ImageData[], files: FileData[]): string {
+  const trimmed = content.trim()
+  if (trimmed) return trimmed
+  if (images.length > 0) return '[图片]'
+  if (files.length > 0) return `[文件: ${files.map((file) => file.name).join(', ')}]`
+  return ''
+}
 
 export const useChatStore = defineStore('chat', () => {
-  // State
   const sessionList = ref<ChatSession[]>([])
   const messagesMap = ref<Record<string, ChatMessage[]>>({})
   const currentSessionId = ref<string>('')
   const isLoading = ref(false)
   const abortController = shallowRef<AbortController | null>(null)
   const storageError = ref<string | null>(null)
-  
-  // 按会话的 loading 状态
+
   const sessionLoadingMap = ref<Record<string, boolean>>({})
-  
-  // 流式内容追踪 - 用于实时显示AI生成内容
+  const currentTaskMap = ref<Record<string, Task | null>>({})
+  const stepMap = ref<Record<string, Step[]>>({})
   const streamingContent = ref<{ sessionId: string; index: number; content: string } | null>(null)
 
-  // Getters
   const sessions = computed(() => sessionList.value)
   const currentSession = computed(() =>
-    sessionList.value.find((s) => s.id === currentSessionId.value)
+    sessionList.value.find((session) => session.id === currentSessionId.value)
   )
   const messages = computed(() => {
     if (!currentSessionId.value) return []
     return messagesMap.value[currentSessionId.value] ?? []
   })
-
-  // ==================== 存储管理 ====================
 
   const saveToStorage = debounce(() => {
     try {
@@ -86,9 +86,7 @@ export const useChatStore = defineStore('chat', () => {
         version: STORAGE_VERSION
       }
 
-      // 检查存储大小
       if (estimateSize(data) > MAX_STORAGE_SIZE) {
-        // 清理旧消息
         cleanupOldMessages()
       }
 
@@ -104,20 +102,13 @@ export const useChatStore = defineStore('chat', () => {
   }, DEBOUNCE_MS)
 
   function cleanupOldMessages(): void {
-    const sessions = sessionList.value
-    if (sessions.length <= 3) return
+    if (sessionList.value.length <= 3) return
 
-    // 保留最近3个会话的完整消息
-    const recentIds = new Set(sessions.slice(0, 3).map(s => s.id))
+    const recentIds = new Set(sessionList.value.slice(0, 3).map((session) => session.id))
     const newMap: Record<string, ChatMessage[]> = {}
 
-    for (const [id, msgs] of Object.entries(messagesMap.value)) {
-      if (recentIds.has(id)) {
-        newMap[id] = msgs
-      } else {
-        // 旧会话只保留最近10条
-        newMap[id] = msgs.slice(-10)
-      }
+    for (const [id, sessionMessages] of Object.entries(messagesMap.value)) {
+      newMap[id] = recentIds.has(id) ? sessionMessages : sessionMessages.slice(-10)
     }
 
     messagesMap.value = newMap
@@ -134,7 +125,6 @@ export const useChatStore = defineStore('chat', () => {
       const sessions: ChatSession[] = JSON.parse(sessionListData)
       const messages: Record<string, ChatMessage[]> = JSON.parse(messagesMapData)
 
-      // 数据验证
       if (!Array.isArray(sessions)) return null
 
       return {
@@ -147,8 +137,6 @@ export const useChatStore = defineStore('chat', () => {
       return null
     }
   }
-
-  // ==================== 会话管理 ====================
 
   function createSession(title?: string, initialMessages?: ChatMessage[]): string {
     const id = generateId()
@@ -163,6 +151,8 @@ export const useChatStore = defineStore('chat', () => {
 
     sessionList.value.unshift(newSession)
     messagesMap.value = { ...messagesMap.value, [id]: initialMessages ?? [] }
+    currentTaskMap.value = { ...currentTaskMap.value, [id]: null }
+    stepMap.value = { ...stepMap.value, [id]: [] }
     currentSessionId.value = id
     saveToStorage()
 
@@ -170,20 +160,50 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function switchSession(id: string): boolean {
-    if (!sessionList.value.some((s) => s.id === id)) return false
+    if (!sessionList.value.some((session) => session.id === id)) return false
     currentSessionId.value = id
+    clearStreamingContent()
     saveToStorage()
     return true
   }
 
+  function clearSessionRuntimeState(sessionId: string): void {
+    const nextTaskMap = { ...currentTaskMap.value }
+    const nextStepMap = { ...stepMap.value }
+    const nextLoadingMap = { ...sessionLoadingMap.value }
+
+    nextTaskMap[sessionId] = null
+    nextStepMap[sessionId] = []
+    nextLoadingMap[sessionId] = false
+
+    currentTaskMap.value = nextTaskMap
+    stepMap.value = nextStepMap
+    sessionLoadingMap.value = nextLoadingMap
+
+    if (streamingContent.value?.sessionId === sessionId) {
+      streamingContent.value = null
+    }
+  }
+
   function deleteSession(id: string): void {
-    const index = sessionList.value.findIndex((s) => s.id === id)
+    const index = sessionList.value.findIndex((session) => session.id === id)
     if (index === -1) return
 
     sessionList.value.splice(index, 1)
-    const newMap = { ...messagesMap.value }
-    delete newMap[id]
-    messagesMap.value = newMap
+
+    const newMessagesMap = { ...messagesMap.value }
+    delete newMessagesMap[id]
+    messagesMap.value = newMessagesMap
+
+    const newTaskMap = { ...currentTaskMap.value }
+    const newStepMap = { ...stepMap.value }
+    const newLoadingMap = { ...sessionLoadingMap.value }
+    delete newTaskMap[id]
+    delete newStepMap[id]
+    delete newLoadingMap[id]
+    currentTaskMap.value = newTaskMap
+    stepMap.value = newStepMap
+    sessionLoadingMap.value = newLoadingMap
 
     if (id === currentSessionId.value) {
       if (sessionList.value.length > 0) {
@@ -198,22 +218,21 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function updateSessionTitle(id: string, title: string): void {
-    const session = sessionList.value.find((s) => s.id === id)
+    const session = sessionList.value.find((item) => item.id === id)
     if (!session || !title.trim()) return
 
     session.title = title.trim().slice(0, TITLE_MAX_LENGTH)
     saveToStorage()
   }
 
-  // ==================== 消息管理 ====================
-
   function addMessage(sessionId: string, message: ChatMessage): void {
     if (!messagesMap.value[sessionId]) {
       messagesMap.value = { ...messagesMap.value, [sessionId]: [] }
     }
+
     messagesMap.value[sessionId]!.push(message)
 
-    const session = sessionList.value.find((s) => s.id === sessionId)
+    const session = sessionList.value.find((item) => item.id === sessionId)
     if (session) {
       session.updatedAt = Date.now()
     }
@@ -223,11 +242,12 @@ export const useChatStore = defineStore('chat', () => {
 
   function deleteMessage(index: number): void {
     if (!currentSessionId.value) return
-    const sessionId = currentSessionId.value
-    const msgs = messagesMap.value[sessionId]
-    if (!msgs) return
 
-    msgs.splice(index, 1)
+    const sessionId = currentSessionId.value
+    const sessionMessages = messagesMap.value[sessionId]
+    if (!sessionMessages) return
+
+    sessionMessages.splice(index, 1)
     messagesMap.value = { ...messagesMap.value }
     saveToStorage()
   }
@@ -237,131 +257,192 @@ export const useChatStore = defineStore('chat', () => {
     if (!currentSessionId.value) return
 
     messagesMap.value = { ...messagesMap.value, [currentSessionId.value]: [] }
+    clearSessionRuntimeState(currentSessionId.value)
     saveToStorage()
   }
 
-  // ==================== AI 交互 ====================
-
-  async function generateSmartTitle(
-    sessionId: string,
-    userMsg: string,
-    aiMsg: string
-  ): Promise<void> {
-    if (!userMsg.trim() || !aiMsg.trim()) return
-
-    const prompt = `请根据以下对话生成一个简短的标题（10字以内），直接返回标题内容，不要包含标点符号和引号：
-
-用户：${userMsg.slice(0, 300)}
-AI：${aiMsg.slice(0, 300)}`
-
-    let titleBuffer = ''
-
-    try {
-      await sendChatRequest(
-        [{ role: 'user', content: prompt }],
-        (chunk) => { titleBuffer += chunk },
-        () => {}, // 忽略错误
-        () => {
-          const finalTitle = titleBuffer
-            .trim()
-            .replace(/^["']|["']$/g, '')
-            .replace(/[。，.]$/, '')
-          if (finalTitle) {
-            updateSessionTitle(sessionId, finalTitle)
-          }
-        }
-      )
-    } catch {
-      // 静默失败，标题不重要
-    }
+  function setStreamingContent(sessionId: string, index: number, content: string) {
+    streamingContent.value = { sessionId, index, content }
   }
 
-  async function sendMessage(content: string, isReGenerate = false): Promise<void> {
-    if (isLoading.value || (!content.trim() && !isReGenerate)) return
+  function clearStreamingContent() {
+    streamingContent.value = null
+  }
+
+  function getMessageContent(sessionId: string, index: number, originalContent: string): string {
+    if (streamingContent.value?.sessionId === sessionId && streamingContent.value?.index === index) {
+      return streamingContent.value.content
+    }
+    return originalContent
+  }
+
+  function setSessionLoading(sessionId: string, loading: boolean) {
+    sessionLoadingMap.value = { ...sessionLoadingMap.value, [sessionId]: loading }
+  }
+
+  function isSessionLoading(sessionId: string): boolean {
+    return sessionLoadingMap.value[sessionId] || false
+  }
+
+  function setCurrentTask(sessionId: string, task: Task | null) {
+    currentTaskMap.value = { ...currentTaskMap.value, [sessionId]: task }
+  }
+
+  function getCurrentTask(sessionId: string): Task | null {
+    return currentTaskMap.value[sessionId] ?? null
+  }
+
+  function setSteps(sessionId: string, steps: Step[]) {
+    stepMap.value = { ...stepMap.value, [sessionId]: steps }
+  }
+
+  function upsertStep(sessionId: string, step: Step) {
+    const currentSteps = stepMap.value[sessionId] ?? []
+    const index = currentSteps.findIndex((item) => item.id === step.id)
+    const nextSteps = [...currentSteps]
+
+    if (index === -1) {
+      nextSteps.push(step)
+    } else {
+      nextSteps[index] = { ...nextSteps[index], ...step }
+    }
+
+    stepMap.value = { ...stepMap.value, [sessionId]: nextSteps }
+  }
+
+  function getSteps(sessionId: string): Step[] {
+    return stepMap.value[sessionId] ?? []
+  }
+
+  async function sendTaskMessage(
+    content: string,
+    images: ImageData[] = [],
+    files: FileData[] = []
+  ): Promise<void> {
     if (!currentSessionId.value) return
 
     const sessionId = currentSessionId.value
-    const sessionMessages = messagesMap.value[sessionId] ?? []
+    if (isSessionLoading(sessionId)) return
 
-    if (!isReGenerate) {
-      addMessage(sessionId, { role: 'user', content: content.trim() })
+    const userContent = buildUserMessageContent(content, images, files)
+    if (!userContent && images.length === 0 && files.length === 0) return
+
+    const historyMessages = (messagesMap.value[sessionId] ?? [])
+      .filter((message) => message.role !== 'system' && message.content.trim().length > 0)
+      .map((message) => ({ role: message.role, content: message.content }))
+
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: userContent || '[消息]'
     }
 
-    const assistantIndex = sessionMessages.push({ role: 'assistant', content: '' }) - 1
+    const requestMessages = [...historyMessages, userMessage]
+
+    addMessage(sessionId, userMessage)
+    addMessage(sessionId, { role: 'assistant', content: '' })
+
+    const assistantIndex = (messagesMap.value[sessionId] ?? []).length - 1
+
+    if (abortController.value) {
+      abortController.value.abort()
+    }
+
+    abortController.value = new AbortController()
+    const requestSignal = abortController.value.signal
 
     isLoading.value = true
-    abortController.value = new AbortController()
+    setSessionLoading(sessionId, true)
+    setCurrentTask(sessionId, null)
+    setSteps(sessionId, [])
+    clearStreamingContent()
 
     try {
-      const apiMessages = buildApiMessages(sessionMessages, isReGenerate)
-      if (apiMessages.length === 0) {
-        isLoading.value = false
-        return
-      }
-
-      await sendChatRequest(
-        apiMessages,
-        (chunk) => {
-          if (sessionMessages[assistantIndex]) {
-            const msg = sessionMessages[assistantIndex]
-            sessionMessages[assistantIndex] = { ...msg, content: msg.content + chunk }
-          }
+      await sendTaskRequest(
+        {
+          messages: requestMessages,
+          images: images.length > 0 ? images : undefined,
+          files: files.length > 0 ? files : undefined,
+          temperature: 0.7
         },
-        (error) => {
-          console.error('Chat error:', error)
-          const errorMsg = getUserFriendlyError(error as Error, '出错了，请重试')
-          if (sessionMessages[assistantIndex]) {
-            const msg = sessionMessages[assistantIndex]
-            sessionMessages[assistantIndex] = { ...msg, content: msg.content + '\n\n' + errorMsg }
-          }
-        },
-        () => {
-          isLoading.value = false
-          abortController.value = null
-          saveToStorage()
+        {
+          onTaskStart: (task) => {
+            setCurrentTask(sessionId, task)
+            setSteps(sessionId, [])
+          },
+          onTaskUpdate: (task) => {
+            setCurrentTask(sessionId, task)
+          },
+          onStepStart: (step) => {
+            upsertStep(sessionId, step)
+          },
+          onStepComplete: (step) => {
+            upsertStep(sessionId, step)
+          },
+          onStepError: (step) => {
+            upsertStep(sessionId, step)
+          },
+          onContent: (chunk) => {
+            const sessionMessages = messagesMap.value[sessionId]
+            if (!sessionMessages?.[assistantIndex]) return
 
-          // 生成智能标题（前3条消息后）
-          if (sessionMessages.length === 3) {
-            const userMsgIndex = isReGenerate ? assistantIndex - 2 : assistantIndex - 1
-            const userMsg = sessionMessages[userMsgIndex]?.content || content
-            const aiMsg = sessionMessages[assistantIndex]?.content || ''
-            if (userMsg && aiMsg) {
-              generateSmartTitle(sessionId, userMsg, aiMsg)
+            sessionMessages[assistantIndex].content += chunk
+            if (currentSessionId.value === sessionId) {
+              setStreamingContent(sessionId, assistantIndex, sessionMessages[assistantIndex].content)
+            }
+          },
+          onError: (error) => {
+            const sessionMessages = messagesMap.value[sessionId]
+            if (!sessionMessages?.[assistantIndex]) return
+
+            const errorMessage = getUserFriendlyError(new Error(error), '出错了，请重试')
+            if (sessionMessages[assistantIndex].content.trim()) {
+              sessionMessages[assistantIndex].content += `\n\n${errorMessage}`
+            } else {
+              sessionMessages[assistantIndex].content = errorMessage
+            }
+
+            if (currentSessionId.value === sessionId) {
+              setStreamingContent(sessionId, assistantIndex, sessionMessages[assistantIndex].content)
+            }
+          },
+          onComplete: (task) => {
+            setCurrentTask(sessionId, task)
+
+            if (historyMessages.length === 0) {
+              updateSessionTitle(sessionId, generateFallbackTitle(userMessage.content))
             }
           }
         },
-        abortController.value.signal
+        requestSignal
       )
-    } catch {
+    } finally {
+      if (abortController.value?.signal === requestSignal) {
+        abortController.value = null
+      }
+
       isLoading.value = false
-      abortController.value = null
+      setSessionLoading(sessionId, false)
+
+      if (currentSessionId.value === sessionId) {
+        clearStreamingContent()
+      }
+
+      saveToStorage()
     }
-  }
-
-  function buildApiMessages(messages: ChatMessage[], isReGenerate: boolean): ChatMessage[] {
-    const sliceEnd = isReGenerate ? -2 : -1
-    const apiMessages = messages
-      .slice(0, sliceEnd)
-      .filter((m) => m.role !== 'system')
-      .map((m) => ({ ...m }))
-
-    // 移除开头的 assistant 消息
-    if (apiMessages[0]?.role === 'assistant') {
-      apiMessages.shift()
-    }
-
-    return apiMessages
   }
 
   function stopGeneration(): void {
     if (abortController.value) {
       abortController.value.abort()
       abortController.value = null
-      isLoading.value = false
     }
-  }
 
-  // ==================== 初始化 ====================
+    isLoading.value = false
+    if (currentSessionId.value) {
+      setSessionLoading(currentSessionId.value, false)
+    }
+    clearStreamingContent()
+  }
 
   function init(): void {
     const data = loadFromStorage()
@@ -375,39 +456,9 @@ AI：${aiMsg.slice(0, 300)}`
     }
   }
 
-  // ==================== 流式内容辅助函数 ====================
-  
-  function setStreamingContent(sessionId: string, index: number, content: string) {
-    streamingContent.value = { sessionId, index, content }
-  }
-  
-  function clearStreamingContent() {
-    streamingContent.value = null
-  }
-  
-  function getMessageContent(sessionId: string, index: number, originalContent: string): string {
-    if (streamingContent.value?.sessionId === sessionId && streamingContent.value?.index === index) {
-      return streamingContent.value.content
-    }
-    return originalContent
-  }
-  
-  // ==================== 按会话 loading 状态 ====================
-  
-  function setSessionLoading(sessionId: string, loading: boolean) {
-    sessionLoadingMap.value[sessionId] = loading
-  }
-  
-  function isSessionLoading(sessionId: string): boolean {
-    return sessionLoadingMap.value[sessionId] || false
-  }
-
   init()
 
-  // ==================== 导出 ====================
-
   return {
-    // State
     sessions,
     currentSession,
     messages,
@@ -417,13 +468,12 @@ AI：${aiMsg.slice(0, 300)}`
     isLoading,
     storageError,
 
-    // Actions
     createSession,
     switchSession,
     deleteSession,
     addMessage,
     deleteMessage,
-    sendMessage,
+    sendTaskMessage,
     stopGeneration,
     clearChat: clearMessages,
     cleanupOldMessages,
@@ -431,6 +481,8 @@ AI：${aiMsg.slice(0, 300)}`
     clearStreamingContent,
     getMessageContent,
     setSessionLoading,
-    isSessionLoading
+    isSessionLoading,
+    getCurrentTask,
+    getSteps
   }
 })

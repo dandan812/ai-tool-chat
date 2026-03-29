@@ -1,1 +1,7 @@
 node_modules
+packages/worker/.dev.vars
+packages/worker/.wrangler/
+frontend-dev.out.log
+frontend-dev.err.log
+worker-dev.out.log
+worker-dev.err.log
