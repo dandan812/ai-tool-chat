@@ -95,6 +95,15 @@ Worker 遵循 **Task → Step → Skill** 架构模式：
 - **组件命名**: Vue 组件使用 PascalCase
 - **文件组织**: 按功能领域分组
 
+## Git 提交信息规则
+
+- 生成 Git commit message 时，默认使用中文。
+- 必须保留 Conventional Commits 前缀，例如：`feat`、`fix`、`refactor`、`docs`、`chore`、`test`、`build`、`ci`。
+- 格式固定为：`type: 中文描述`
+- 冒号后必须使用简洁明确的中文，不要输出英文描述。
+- 默认只输出一行提交信息，不要额外附加解释。
+- 只有在用户明确要求英文提交信息时，才允许输出英文 commit message。
+
 ## 部署
 
 前端和 worker 在推送到 `main` 分支时通过 GitHub Actions 自动部署到 Cloudflare。
