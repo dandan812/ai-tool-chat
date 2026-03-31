@@ -1,4 +1,5 @@
 node_modules
+dist/
 packages/worker/.dev.vars
 packages/worker/.wrangler/
 frontend-dev.out.log

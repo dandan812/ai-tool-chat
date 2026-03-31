@@ -19,8 +19,8 @@ ai-tool-chat/
 │  └─ worker/     # Cloudflare Worker + SSE + Task/Step/Skill
 ├─ docs/
 │  ├─ adr/
-│  └─ plans/
-├─ ERROR_LOG.md
+│  ├─ plans/
+│  └─ reference/
 ├─ AGENTS.md
 └─ README.md
 ```
@@ -244,7 +244,7 @@ Task 状态当前保存在 Worker 实例内存里，适用于单次请求过程�
 ## 相关文档
 
 - [AGENTS.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/AGENTS.md)
-- [ERROR_LOG.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/ERROR_LOG.md)
+- [docs/reference/ERROR_LOG.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/docs/reference/ERROR_LOG.md)
 - [docs/plans/2026-03-29-task-pipeline-unification.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/docs/plans/2026-03-29-task-pipeline-unification.md)
 
 ## 贡献

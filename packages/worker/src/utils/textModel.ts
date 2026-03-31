@@ -70,3 +70,23 @@ export function isDeepSeekTextModel(model: string): boolean {
 export function isGlmTextModel(model: string): boolean {
   return model.startsWith("glm");
 }
+
+export function getTextModelProviderLabel(model: string): string {
+  if (isGlmTextModel(model)) {
+    return 'GLM';
+  }
+
+  if (isOpenAITextModel(model)) {
+    return 'OpenAI';
+  }
+
+  if (isDeepSeekTextModel(model)) {
+    return 'DeepSeek';
+  }
+
+  if (isQwenTextModel(model)) {
+    return 'Qwen';
+  }
+
+  return '文本';
+}

@@ -16,8 +16,6 @@ import type {
   Message,
   ResolvedFileContent,
 } from "../types";
-import { glmSkill } from "./glmSkill";
-import { textSkill } from "./textSkill";
 import { logger } from "../utils/logger";
 import {
   estimateTokens,
@@ -31,111 +29,20 @@ import {
   detectLanguage,
 } from "../utils/ragRetriever";
 import { getUploadedFileContent } from "../utils/uploadedFileStorage";
-import { isGlmTextModel, resolveDefaultTextModel } from "../utils/textModel";
-
-/**
- * 最大 token 阈值，超过此值则分块处理
- * DeepSeek 限制为 131,072 tokens，留 30k 余量
- */
-const MAX_TOKEN_THRESHOLD = 100000;
-
-/**
- * 支持的代码文件扩展名
- */
-const CODE_EXTENSIONS = [
-  'js', 'jsx', 'mjs',
-  'ts', 'tsx',
-  'py',
-  'java',
-  'go',
-  'rs',
-  'c', 'cpp', 'cc', 'h', 'hpp',
-  'cs',
-  'php',
-  'rb',
-  'swift',
-  'kt',
-  'scala',
-  'dart',
-  'lua',
-  'r',
-  'sql',
-  'sh', 'bash',
-];
-
-/**
- * 检查是否是代码文件
- */
-function isCodeFile(filename: string): boolean {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  return CODE_EXTENSIONS.includes(ext);
-}
-
-/**
- * 分块摘要提示词
- */
-const CHUNK_SUMMARY_PROMPT = `请分析以下文件片段，提取其核心内容和结构。返回格式：
-1. 主要内容/功能概述
-2. 关键概念/术语
-3. 重要数据/配置项
-
-文件片段：`;
-
-/**
- * 最终答案生成提示词模板
- */
-const FINAL_ANSWER_PROMPT = (
-  summaries: string,
-  userQuestion: string,
-) => `我有一个大文件，已经分块分析。以下是各分块的摘要：
-
-${summaries}
-
-用户的问题是：${userQuestion}
-
-请基于以上摘要回答用户问题。`;
-
-function selectFileTextExecutor(input: SkillInput, context: SkillContext): {
-  execute: typeof glmSkill.execute;
-  model: string;
-} {
-  const requestedModel = typeof input.model === "string" ? input.model : "";
-  const { env } = context;
-
-  if (requestedModel.startsWith("glm")) {
-    return { execute: glmSkill.execute, model: requestedModel };
-  }
-
-  if (
-    requestedModel.startsWith("gpt-") ||
-    requestedModel.startsWith("o") ||
-    requestedModel.startsWith("deepseek") ||
-    requestedModel.startsWith("qwen")
-  ) {
-    return { execute: textSkill.execute, model: requestedModel };
-  }
-
-  if (env.DEFAULT_MODEL?.startsWith("glm")) {
-    return { execute: glmSkill.execute, model: env.DEFAULT_MODEL };
-  }
-
-  if (
-    env.DEFAULT_MODEL &&
-    (
-      env.DEFAULT_MODEL.startsWith("gpt-") ||
-      env.DEFAULT_MODEL.startsWith("o") ||
-      env.DEFAULT_MODEL.startsWith("deepseek") ||
-      env.DEFAULT_MODEL.startsWith("qwen")
-    )
-  ) {
-    return { execute: textSkill.execute, model: env.DEFAULT_MODEL };
-  }
-
-  const defaultModel = resolveDefaultTextModel(env);
-  return isGlmTextModel(defaultModel)
-    ? { execute: glmSkill.execute, model: defaultModel }
-    : { execute: textSkill.execute, model: defaultModel };
-}
+import {
+  buildCompressedCodeSection,
+  buildResolvedFileSection,
+  createChunkSummaryMessages,
+  createLargeFileAnswerMessages,
+  createMixedFileMessages,
+  createRagMessages,
+  createSmallFileMessages,
+  isCodeFile,
+  isSupportedTextFile,
+  MAX_TOKEN_THRESHOLD,
+  resolveFileUserQuestion,
+  selectFileTextExecutor,
+} from "./fileSkillSupport";
 
 export const fileSkill: Skill = {
   name: "file-chat",
@@ -166,9 +73,7 @@ export const fileSkill: Skill = {
       });
     }
 
-    // 获取最后一条用户消息
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    const userQuestion = lastUserMsg?.content || "请分析这些文件";
+    const userQuestion = resolveFileUserQuestion(messages);
 
     // 判断是否所有文件都是代码文件
     const allCodeFiles = resolvedFiles.length > 0 && resolvedFiles.every(f => isCodeFile(f.fileName));
@@ -190,10 +95,7 @@ export const fileSkill: Skill = {
     } else {
       // 纯文本文件：使用原有分块策略
       const allFileContents = resolvedFiles
-        .map((file) => {
-          const ext = file.fileName.split(".").pop() || "";
-          return `### 文件: ${file.fileName}\n\`\`\`${ext}\n${file.content}\n\`\`\``;
-        })
+        .map(buildResolvedFileSection)
         .join("\n\n");
 
       const totalTokens = estimateTokens(allFileContents);
@@ -229,19 +131,7 @@ async function* processSmallFiles(
   context: SkillContext,
 ): AsyncIterable<SkillStreamChunk> {
   const textExecutor = selectFileTextExecutor(input, context);
-
-  // 构建新的消息列表，将文件内容作为上下文
-  const enhancedMessages: Message[] = [
-    {
-      role: "system",
-      content:
-        "你是一个文件分析助手。用户会上传一些文本文件，请根据文件内容回答用户的问题。",
-    },
-    {
-      role: "user",
-      content: `以下是我上传的文件内容：\n\n${fileContents}\n\n我的问题是：${userQuestion}`,
-    },
-  ];
+  const enhancedMessages = createSmallFileMessages(fileContents, userQuestion);
 
   // 复用 glmSkill 进行对话
   const textInput = { ...input, messages: enhancedMessages, model: textExecutor.model };
@@ -308,22 +198,7 @@ async function* processLargeFiles(
     },
   };
 
-  const finalPrompt = FINAL_ANSWER_PROMPT(
-    summaries.map((s, i) => `### 分块 ${i + 1} 摘要:\n${s}`).join("\n\n"),
-    userQuestion,
-  );
-
-  const finalMessages: Message[] = [
-    {
-      role: "system",
-      content:
-        "你是一个文件分析助手。用户上传了一个大文件，已经分块提取了摘要。请基于这些摘要回答用户问题。",
-    },
-    {
-      role: "user",
-      content: finalPrompt,
-    },
-  ];
+  const finalMessages = createLargeFileAnswerMessages(summaries, userQuestion);
 
   const textInput = { ...input, messages: finalMessages, model: textExecutor.model };
   yield* textExecutor.execute(textInput, context);
@@ -376,17 +251,7 @@ async function extractSingleChunkSummary(
   const textExecutor = selectFileTextExecutor(input, context);
   logger.info(`Extracting summary for chunk ${chunkIndex}/${totalChunks}`);
 
-  const messages: Message[] = [
-    {
-      role: "system",
-      content:
-        "你是一个文件分析助手。用户上传了一个大文件，已经分块。请提取当前分块的核心内容和结构。",
-    },
-    {
-      role: "user",
-      content: `${CHUNK_SUMMARY_PROMPT}\n\n${chunk}`,
-    },
-  ];
+  const messages = createChunkSummaryMessages(chunk);
 
   const textInput = { ...input, messages, maxTokens: 2000, model: textExecutor.model };
 
@@ -491,24 +356,11 @@ async function* processCodeFilesWithRAG(
   const codeContent = allRetrievedCode.join('\n\n');
   const reductionRatio = 1 - (totalRetrievedTokens / totalOriginalTokens);
 
-  const systemMessage = `你是一个代码分析助手。用户上传了代码文件，系统已使用智能检索技术，根据用户问题筛选了最相关的代码片段。
-
-原始代码总大小: ${totalOriginalTokens} tokens
-检索后大小: ${totalRetrievedTokens} tokens
-Token 节省率: ${(reductionRatio * 100).toFixed(1)}%
-
-请基于以下检索到的代码片段回答用户问题。如果信息不足，请告知用户需要查看更多代码。`;
-
-  const messages: Message[] = [
-    {
-      role: "system",
-      content: systemMessage,
-    },
-    {
-      role: "user",
-      content: `${codeContent}\n\n我的问题是：${userQuestion}`,
-    },
-  ];
+  const messages = createRagMessages(codeContent, userQuestion, {
+    totalOriginalTokens,
+    totalProcessedTokens: totalRetrievedTokens,
+    reductionRatio,
+  });
 
   logger.info("RAG processing summary", {
     fileCount: files.length,
@@ -556,12 +408,7 @@ async function* processMixedFiles(
       const language = detectLanguage(file.fileName);
       const compressResult = compressCode(file.content || "", language);
 
-      allFileContents.push(
-        `### 代码文件: ${file.fileName} (${language})\n` +
-        `// Token 节省: ${(compressResult.stats.reductionRatio * 100).toFixed(1)}% ` +
-        `(${compressResult.stats.originalTokens} -> ${compressResult.stats.compressedTokens} tokens)\n` +
-        `\`\`\`${ext}\n${compressResult.compressedCode}\n\`\`\``
-      );
+      allFileContents.push(buildCompressedCodeSection(file, language, compressResult));
 
       totalProcessedTokens += compressResult.stats.compressedTokens;
 
@@ -576,9 +423,7 @@ async function* processMixedFiles(
       });
     } else {
       // 非代码文件：保持原样
-      allFileContents.push(
-        `### 文件: ${file.fileName}\n\`\`\`${ext}\n${file.content}\n\`\`\``
-      );
+      allFileContents.push(buildResolvedFileSection(file));
 
       totalProcessedTokens += originalTokens;
     }
@@ -608,25 +453,11 @@ async function* processMixedFiles(
   });
 
   // 构建消息
-  const systemMessage = `你是一个文件分析助手。用户上传了混合类型的文件（代码和文本）。
-
-代码文件已使用智能压缩技术，只保留关键结构（函数签名、类定义等）。
-原始代码总大小: ${totalOriginalTokens} tokens
-处理后大小: ${totalProcessedTokens} tokens
-Token 节省率: ${(reductionRatio * 100).toFixed(1)}%
-
-请基于以下文件内容回答用户问题。`;
-
-  const messages: Message[] = [
-    {
-      role: "system",
-      content: systemMessage,
-    },
-    {
-      role: "user",
-      content: `以下是我上传的文件内容：\n\n${fileContents}\n\n我的问题是：${userQuestion}`,
-    },
-  ];
+  const messages = createMixedFileMessages(fileContents, userQuestion, {
+    totalOriginalTokens,
+    totalProcessedTokens,
+    reductionRatio,
+  });
 
   // 检查是否需要分块处理
   if (totalTokens > MAX_TOKEN_THRESHOLD) {
@@ -643,49 +474,4 @@ Token 节省率: ${(reductionRatio * 100).toFixed(1)}%
   }
 }
 
-/**
- * 检查是否是支持的文本文件
- */
-export function isSupportedTextFile(filename: string): boolean {
-  const supportedExts = [
-    "txt",
-    "md",
-    "markdown",
-    "csv",
-    "json",
-    "xml",
-    "yaml",
-    "yml",
-    "js",
-    "ts",
-    "jsx",
-    "tsx",
-    "py",
-    "java",
-    "c",
-    "cpp",
-    "h",
-    "hpp",
-    "html",
-    "css",
-    "scss",
-    "less",
-    "go",
-    "rs",
-    "rb",
-    "php",
-    "swift",
-    "kt",
-    "sql",
-    "sh",
-    "bash",
-    "ps1",
-    "log",
-    "conf",
-    "ini",
-    "env",
-  ];
-
-  const ext = filename.split(".").pop()?.toLowerCase() || "";
-  return supportedExts.includes(ext);
-}
+export { isSupportedTextFile } from "./fileSkillSupport";

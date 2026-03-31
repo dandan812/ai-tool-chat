@@ -18,10 +18,7 @@ import { multimodalSkill } from './multimodalSkill';
 import { fileSkill } from './fileSkill';
 import { glmSkill } from './glmSkill';
 import {
-  isDeepSeekTextModel,
-  isGlmTextModel,
-  isOpenAITextModel,
-  isQwenTextModel,
+  getTextModelProviderLabel,
   resolveDefaultMultimodalModel,
   resolveDefaultTextModel,
 } from "../utils/textModel";
@@ -115,76 +112,50 @@ export function selectSkill(
   const { images = [], files = [], model } = input;
   const toolingMode: ToolingMode = 'disabled';
 
-  const createSelection = (
+  function createSelection(
     skill: Skill,
     selectedModel: string,
     label: string,
     description: string
-  ): SelectedSkill => ({
-    skill,
-    model: selectedModel,
-    label,
-    description,
-    toolingMode,
-  });
-
-  const selectDefaultTextRoute = (): Pick<SelectedSkill, 'model' | 'label' | 'description'> => {
-    const model = resolveDefaultTextModel(env);
-
-    if (isGlmTextModel(model)) {
-      return {
-        model,
-        label: '文件分析',
-        description: `调用 ${model} 分析上传内容`,
-      };
-    }
-
-    if (isOpenAITextModel(model)) {
-      return {
-        model,
-        label: '文件分析',
-        description: `调用 ${model} 分析上传内容`,
-      };
-    }
-
-    if (isDeepSeekTextModel(model)) {
-      return {
-        model,
-        label: '文件分析',
-        description: `调用 ${model} 分析上传内容`,
-      };
-    }
-
-    if (isQwenTextModel(model)) {
-      return {
-        model,
-        label: '文件分析',
-        description: `调用 ${model} 分析上传内容`,
-      };
-    }
-
+  ): SelectedSkill {
     return {
-      model,
-      label: '文件分析',
-      description: `调用 ${model} 分析上传内容`,
+      skill,
+      model: selectedModel,
+      label,
+      description,
+      toolingMode,
     };
-  };
+  }
+
+  function createTextSelection(selectedModel: string): SelectedSkill {
+    const providerLabel = getTextModelProviderLabel(selectedModel);
+    const skill = providerLabel === 'GLM' ? glmSkill : textSkill;
+
+    return createSelection(
+      skill,
+      selectedModel,
+      `${providerLabel} 文本对话`,
+      `调用 ${selectedModel} 生成回复`
+    );
+  }
+
+  function hasKnownTextProvider(selectedModel: string): boolean {
+    return getTextModelProviderLabel(selectedModel) !== '文本';
+  }
+
+  function createFileSelection(): SelectedSkill {
+    const selectedModel = resolveDefaultTextModel(env);
+    return createSelection(
+      fileSkill,
+      selectedModel,
+      '文件分析',
+      `调用 ${selectedModel} 分析上传内容`
+    );
+  }
 
   // 规则 1：如果指定了 model，使用对应的 Skill
-  if (model) {
-    if (model.startsWith('glm')) {
-      return createSelection(glmSkill, model, 'GLM 文本对话', `调用 ${model} 生成回复`);
-    }
-    if (model.startsWith('gpt-') || model.startsWith('o')) {
-      return createSelection(textSkill, model, 'OpenAI 文本对话', `调用 ${model} 生成回复`);
-    }
-    if (model.startsWith('deepseek')) {
-      return createSelection(textSkill, model, 'DeepSeek 文本对话', `调用 ${model} 生成回复`);
-    }
-    if (model.startsWith('qwen')) {
-      return createSelection(textSkill, model, 'Qwen 文本对话', `调用 ${model} 生成回复`);
-    }
-    // 可以添加其他模型的判断
+  if (model && hasKnownTextProvider(model)) {
+    return createTextSelection(model);
   }
 
   // 规则 2：如果有图片，使用多模态 Skill
@@ -195,50 +166,11 @@ export function selectSkill(
 
   // 规则 3：如果有文件，使用文件处理 Skill
   if (files.length > 0) {
-    const fileRoute = selectDefaultTextRoute();
-    return createSelection(fileSkill, fileRoute.model, fileRoute.label, fileRoute.description);
+    return createFileSelection();
   }
 
   const defaultTextModel = resolveDefaultTextModel(env);
-
-  if (isGlmTextModel(defaultTextModel)) {
-    return createSelection(
-      glmSkill,
-      defaultTextModel,
-      'GLM 文本对话',
-      `调用 ${defaultTextModel} 生成回复`
-    );
-  }
-
-  if (isOpenAITextModel(defaultTextModel)) {
-    return createSelection(
-      textSkill,
-      defaultTextModel,
-      'OpenAI 文本对话',
-      `调用 ${defaultTextModel} 生成回复`
-    );
-  }
-
-  if (isDeepSeekTextModel(defaultTextModel)) {
-    return createSelection(
-      textSkill,
-      defaultTextModel,
-      'DeepSeek 文本对话',
-      `调用 ${defaultTextModel} 生成回复`
-    );
-  }
-
-  if (isQwenTextModel(defaultTextModel)) {
-    return createSelection(
-      textSkill,
-      defaultTextModel,
-      'Qwen 文本对话',
-      `调用 ${defaultTextModel} 生成回复`
-    );
-  }
-
-  // 规则 4：默认使用 GLM Skill（不再使用 DeepSeek）
-  return createSelection(glmSkill, defaultTextModel, 'GLM 文本对话', `调用 ${defaultTextModel} 生成回复`);
+  return createTextSelection(defaultTextModel);
 }
 
 /**

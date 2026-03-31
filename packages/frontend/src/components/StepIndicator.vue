@@ -12,6 +12,15 @@
 
 import { computed, ref } from 'vue'
 import type { Step, Task } from '../types/task'
+import {
+  formatTaskDuration,
+  getActiveStepText,
+  getCompletedStepCount,
+  getStepTypeLabel,
+  getTaskDurationSeconds,
+  getTaskModelLabel,
+  getTaskStatusText,
+} from '../utils/taskPresentation'
 
 interface Props {
   /** 当前任务对象 */
@@ -25,91 +34,20 @@ const props = defineProps<Props>()
 /** 控制明细展开状态 */
 const isExpanded = ref(false)
 
-/** 步骤名称映射 */
-const stepTypeNames: Record<string, string> = {
-  plan: '分析请求',
-  skill: '调用模型',
-  mcp: '执行工具',
-  think: '组织回答',
-  respond: '生成内容'
-}
-
-/** 模型名称映射 */
-const modelNames: Record<string, string> = {
-  'deepseek-chat': 'DeepSeek',
-  'qwen3.5-plus': 'Qwen 3.5 Plus',
-  'qwen3.5-flash': 'Qwen 3.5 Flash',
-  'qwen3.5-flash-2026-02-23': 'Qwen 3.5 Flash',
-  'qwen3.5-122b-a10b': 'Qwen 3.5 122B',
-  'qwen3-vl-flash-2026-01-22': 'Qwen 3 VL Flash',
-  'qwen3-max-2026-01-23': 'Qwen 3 Max',
-  'qwen3-vl-plus': 'Qwen VL Plus',
-  'qwen-vl-plus': 'Qwen VL Plus',
-  'glm-5': 'GLM-5'
-}
-
 /** 当前模型 */
-const currentModel = computed(() => {
-  const taskModel = props.task?.metadata?.model
-  if (typeof taskModel === 'string' && taskModel) {
-    return modelNames[taskModel] || taskModel
-  }
-
-  const skillStep = props.steps.find((step) => step.type === 'skill')
-  const outputModel =
-    skillStep?.output && typeof skillStep.output === 'object'
-      ? (skillStep.output as Record<string, unknown>).model
-      : null
-
-  return typeof outputModel === 'string' && outputModel
-    ? modelNames[outputModel] || outputModel
-    : '等待调度'
-})
-
-/** 当前活跃步骤 */
-const activeStep = computed(() => {
-  return (
-    props.steps.find((step) => step.status === 'running') ??
-    props.steps[props.steps.length - 1] ??
-    null
-  )
-})
+const currentModel = computed(() => getTaskModelLabel(props.task, props.steps))
 
 /** 已完成步骤数量 */
-const completedCount = computed(() => {
-  return props.steps.filter((step) => step.status === 'completed').length
-})
+const completedCount = computed(() => getCompletedStepCount(props.steps))
 
 /** 状态文案 */
-const statusText = computed(() => {
-  if (!props.task) return '等待执行'
-  if (props.task.status === 'failed') return '执行失败'
-  if (props.task.status === 'completed') return '已完成'
-  return activeStep.value ? '执行中' : '准备中'
-})
+const statusText = computed(() => getTaskStatusText(props.task, props.steps))
 
 /** 当前步骤说明 */
-const currentStepText = computed(() => {
-  if (!activeStep.value) return '等待新的任务开始'
-
-  if (activeStep.value.description) {
-    return activeStep.value.description
-  }
-
-  return stepTypeNames[activeStep.value.type] || activeStep.value.name
-})
+const currentStepText = computed(() => getActiveStepText(props.steps))
 
 /** 总耗时（秒） */
-const totalDuration = computed(() => {
-  if (!props.steps.length) return 0
-
-  const firstStep = props.steps[0]
-  const lastStep = props.steps[props.steps.length - 1]
-  const start = firstStep?.startedAt || 0
-  const end = lastStep?.completedAt || Date.now()
-
-  return Math.max(0, Math.round((end - start) / 1000))
-})
+const totalDuration = computed(() => getTaskDurationSeconds(props.steps))
 
 /** 是否可显示耗时 */
 const showDuration = computed(() => totalDuration.value > 0)
@@ -120,18 +58,6 @@ const statusClass = computed(() => {
   if (props.task?.status === 'completed') return 'is-completed'
   return 'is-running'
 })
-
-/**
- * 格式化耗时
- * @param seconds 秒数
- */
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds} 秒`
-
-  const minutes = Math.floor(seconds / 60)
-  const remainSeconds = seconds % 60
-  return `${minutes} 分 ${remainSeconds} 秒`
-}
 
 /** 切换展开状态 */
 function toggleExpand() {
@@ -159,7 +85,7 @@ function toggleExpand() {
 
       <div class="summary-meta">
         <span class="meta-item">{{ completedCount }}/{{ steps.length }} 步</span>
-        <span v-if="showDuration" class="meta-item">{{ formatDuration(totalDuration) }}</span>
+        <span v-if="showDuration" class="meta-item">{{ formatTaskDuration(totalDuration) }}</span>
         <span class="expand-toggle">
           {{ isExpanded ? '收起' : '详情' }}
           <svg
@@ -198,7 +124,7 @@ function toggleExpand() {
               <div class="timeline-title-group">
                 <span class="timeline-index">0{{ index + 1 }}</span>
                 <h3 class="timeline-title">
-                  {{ stepTypeNames[step.type] || step.name }}
+                  {{ getStepTypeLabel(step.type, step.name) }}
                 </h3>
               </div>
 

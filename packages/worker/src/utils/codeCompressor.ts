@@ -9,6 +9,7 @@
  *
  * 目标：节省 60-80% 的 tokens
  */
+import { estimateTokens } from "./chunker";
 
 // ==================== 语言配置 ====================
 
@@ -124,18 +125,9 @@ export interface CompressResult {
 export function compressCode(code: string, language: string): CompressResult {
   const config = getLanguageConfig(language);
   if (!config) {
-    // 不支持的格式，直接返回原始代码
     return {
       compressedCode: code,
-      stats: {
-        originalLines: countLines(code),
-        compressedLines: countLines(code),
-        originalTokens: estimateTokens(code),
-        compressedTokens: estimateTokens(code),
-        reductionRatio: 0,
-        functionsFound: 0,
-        classesFound: 0,
-      },
+      stats: createCompressStats(code, code, 0, 0),
     };
   }
 
@@ -151,22 +143,14 @@ export function compressCode(code: string, language: string): CompressResult {
   // 构建压缩后的代码
   compressed = buildCompressedCode(compressed, structures, config);
 
-  const originalLines = countLines(code);
-  const compressedLines = countLines(compressed);
-  const originalTokens = estimateTokens(code);
-  const compressedTokens = estimateTokens(compressed);
-
   return {
     compressedCode: compressed,
-    stats: {
-      originalLines,
-      compressedLines,
-      originalTokens,
-      compressedTokens,
-      reductionRatio: 1 - (compressedTokens / originalTokens),
-      functionsFound: structures.functions.length,
-      classesFound: structures.classes.length,
-    },
+    stats: createCompressStats(
+      code,
+      compressed,
+      structures.functions.length,
+      structures.classes.length,
+    ),
   };
 }
 
@@ -261,7 +245,6 @@ interface VariableInfo {
  * 提取代码结构
  */
 function extractCodeStructures(code: string, config: LanguageConfig): CodeStructure {
-  const lines = code.split('\n');
   const structures: CodeStructure = {
     functions: [],
     classes: [],
@@ -269,14 +252,14 @@ function extractCodeStructures(code: string, config: LanguageConfig): CodeStruct
   };
 
   // 提取函数
-  structures.functions = extractFunctions(code, lines, config);
+  structures.functions = extractFunctions(code, config);
 
   // 提取类
-  structures.classes = extractClasses(code, lines, config);
+  structures.classes = extractClasses(code, config);
 
   // 提取变量（如果是全局变量）
   if (config.variablePattern) {
-    structures.variables = extractVariables(code, lines, config);
+    structures.variables = extractVariables(code, config);
   }
 
   return structures;
@@ -285,7 +268,7 @@ function extractCodeStructures(code: string, config: LanguageConfig): CodeStruct
 /**
  * 提取函数
  */
-function extractFunctions(code: string, lines: string[], config: LanguageConfig): FunctionInfo[] {
+function extractFunctions(code: string, config: LanguageConfig): FunctionInfo[] {
   const functions: FunctionInfo[] = [];
   let match;
 
@@ -335,7 +318,7 @@ function extractFunctions(code: string, lines: string[], config: LanguageConfig)
 /**
  * 提取类
  */
-function extractClasses(code: string, lines: string[], config: LanguageConfig): ClassInfo[] {
+function extractClasses(code: string, config: LanguageConfig): ClassInfo[] {
   const classes: ClassInfo[] = [];
   let match;
 
@@ -382,7 +365,7 @@ function extractClasses(code: string, lines: string[], config: LanguageConfig): 
 /**
  * 提取变量
  */
-function extractVariables(code: string, lines: string[], config: LanguageConfig): VariableInfo[] {
+function extractVariables(code: string, config: LanguageConfig): VariableInfo[] {
   const variables: VariableInfo[] = [];
   let match;
 
@@ -514,27 +497,26 @@ function countLines(code: string): number {
 }
 
 /**
- * 估算 token 数量
+ * 统一生成压缩统计，避免多处重复估算 token 和行数。
  */
-function estimateTokens(text: string): number {
-  if (!text) return 0;
+function createCompressStats(
+  originalCode: string,
+  compressedCode: string,
+  functionsFound: number,
+  classesFound: number,
+): CompressResult["stats"] {
+  const originalLines = countLines(originalCode);
+  const compressedLines = countLines(compressedCode);
+  const originalTokens = estimateTokens(originalCode);
+  const compressedTokens = estimateTokens(compressedCode);
 
-  // 统计中文字符和 ASCII 字符
-  let chineseChars = 0;
-  let asciiChars = 0;
-
-  for (let i = 0; i < text.length; i++) {
-    const charCode = text.charCodeAt(i);
-    if (charCode > 0x7F) {
-      chineseChars++;
-    } else {
-      asciiChars++;
-    }
-  }
-
-  // 中文约 1.5 字符/token，英文约 4 字符/token
-  const chineseTokens = Math.ceil(chineseChars / 1.5);
-  const asciiTokens = Math.ceil(asciiChars / 4);
-
-  return chineseTokens + asciiTokens;
+  return {
+    originalLines,
+    compressedLines,
+    originalTokens,
+    compressedTokens,
+    reductionRatio: originalTokens > 0 ? 1 - (compressedTokens / originalTokens) : 0,
+    functionsFound,
+    classesFound,
+  };
 }

@@ -112,6 +112,50 @@ const LANGUAGE_PATTERNS: Record<string, LanguagePattern> = {
   },
 };
 
+const CODE_QUERY_KEYWORDS = [
+  'function', 'class', 'method', 'variable', 'import', 'export', 'api', 'endpoint',
+  'error', 'exception', 'try', 'catch', 'async', 'await', 'promise',
+  'array', 'object', 'string', 'number', 'boolean', 'null', 'undefined',
+  'if', 'else', 'for', 'while', 'loop', 'switch', 'case',
+  'call', 'invoke', 'execute', 'run', 'start', 'stop', 'init',
+  'get', 'set', 'add', 'remove', 'delete', 'update', 'create',
+  'list', 'find', 'search', 'filter', 'map', 'reduce',
+  'config', 'setting', 'option', 'parameter', 'arg',
+  'handler', 'callback', 'listener', 'event', 'trigger',
+  'component', 'view', 'page', 'screen', 'route', 'path',
+  'data', 'model', 'entity', 'record', 'item', 'element',
+  'service', 'controller', 'repository', 'factory', 'builder',
+  'helper', 'util', 'common', 'base', 'core', 'shared',
+];
+
+const CHINESE_QUERY_KEYWORDS = [
+  '函数', '类', '方法', '变量', '参数', '返回', '接口',
+  '错误', '异常', '异步', '等待', '数组', '对象',
+  '配置', '设置', '选项', '处理器', '回调', '事件',
+  '组件', '页面', '路由', '路径', '数据', '模型',
+  '服务', '控制器', '仓库', '工厂', '工具', '核心',
+];
+
+const IDENTIFIER_PATTERN = /\b([a-z_][a-z0-9_]*|get[A-Z][a-z]*|set[A-Z][a-z]*|handle[A-Z][a-z]*|on[A-Z][a-z]*)\b/gi;
+const QUOTED_PATTERN = /['"`]([^'"`]+)['"`]/g;
+
+const LANGUAGE_EXTENSION_MAP: Record<string, string> = {
+  'js': 'javascript',
+  'jsx': 'javascript',
+  'mjs': 'javascript',
+  'ts': 'typescript',
+  'tsx': 'typescript',
+  'py': 'python',
+  'java': 'java',
+  'go': 'go',
+  'rs': 'rust',
+  'c': 'c',
+  'cpp': 'cpp',
+  'cc': 'cpp',
+  'h': 'c',
+  'hpp': 'cpp',
+};
+
 // ==================== 主要导出函数 ====================
 
 /**
@@ -233,57 +277,28 @@ function extractKeywords(query: string): string[] {
   // 转换为小写
   const lowerQuery = query.toLowerCase();
 
-  // 常见的编程关键词
-  const codeKeywords = [
-    'function', 'class', 'method', 'variable', 'parameter', 'argument',
-    'return', 'type', 'interface', 'import', 'export', 'api', 'endpoint',
-    'error', 'exception', 'try', 'catch', 'async', 'await', 'promise',
-    'array', 'object', 'string', 'number', 'boolean', 'null', 'undefined',
-    'if', 'else', 'for', 'while', 'loop', 'switch', 'case',
-    'call', 'invoke', 'execute', 'run', 'start', 'stop', 'init',
-    'get', 'set', 'add', 'remove', 'delete', 'update', 'create',
-    'list', 'find', 'search', 'filter', 'map', 'reduce',
-    'config', 'setting', 'option', 'parameter', 'arg',
-    'handler', 'callback', 'listener', 'event', 'trigger',
-    'component', 'view', 'page', 'screen', 'route', 'path',
-    'data', 'model', 'entity', 'record', 'item', 'element',
-    'service', 'controller', 'repository', 'factory', 'builder',
-    'helper', 'util', 'common', 'base', 'core', 'shared',
-  ];
-
-  // 中文关键词
-  const chineseKeywords = [
-    '函数', '类', '方法', '变量', '参数', '返回', '接口',
-    '错误', '异常', '异步', '等待', '数组', '对象',
-    '配置', '设置', '选项', '处理器', '回调', '事件',
-    '组件', '页面', '路由', '路径', '数据', '模型',
-    '服务', '控制器', '仓库', '工厂', '工具', '核心',
-  ];
-
   // 查找代码关键词
-  for (const keyword of codeKeywords) {
+  for (const keyword of CODE_QUERY_KEYWORDS) {
     if (lowerQuery.includes(keyword)) {
       keywords.push(keyword);
     }
   }
 
   // 查找中文关键词
-  for (const keyword of chineseKeywords) {
+  for (const keyword of CHINESE_QUERY_KEYWORDS) {
     if (query.includes(keyword)) {
       keywords.push(keyword);
     }
   }
 
   // 提取看起来像标识符的词（驼峰命名、下划线命名等）
-  const identifierPattern = /\b([a-z_][a-z0-9_]*|get[A-Z][a-z]*|set[A-Z][a-z]*|handle[A-Z][a-z]*|on[A-Z][a-z]*)\b/gi;
-  const identifiers = query.match(identifierPattern);
+  const identifiers = query.match(IDENTIFIER_PATTERN);
   if (identifiers) {
     keywords.push(...identifiers);
   }
 
   // 提取引号中的内容（可能是具体的函数名/类名）
-  const quotedPattern = /['"`]([^'"`]+)['"`]/g;
-  const quoted = query.match(quotedPattern);
+  const quoted = query.match(QUOTED_PATTERN);
   if (quoted) {
     keywords.push(...quoted.map(q => q.replace(/['"`]/g, '')));
   }
@@ -299,7 +314,6 @@ function extractKeywords(query: string): string[] {
  */
 function parseCodeToSnippets(code: string, language: string): CodeSnippet[] {
   const snippets: CodeSnippet[] = [];
-  const lines = code.split('\n');
   const pattern = LANGUAGE_PATTERNS[language.toLowerCase()];
 
   if (!pattern) {
@@ -570,23 +584,5 @@ function findMatchingBrace(code: string, startPos: number): number {
  */
 export function detectLanguage(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
-
-  const langMap: Record<string, string> = {
-    'js': 'javascript',
-    'jsx': 'javascript',
-    'mjs': 'javascript',
-    'ts': 'typescript',
-    'tsx': 'typescript',
-    'py': 'python',
-    'java': 'java',
-    'go': 'go',
-    'rs': 'rust',
-    'c': 'c',
-    'cpp': 'cpp',
-    'cc': 'cpp',
-    'h': 'c',
-    'hpp': 'cpp',
-  };
-
-  return langMap[ext] || 'javascript';
+  return LANGUAGE_EXTENSION_MAP[ext] || 'javascript';
 }

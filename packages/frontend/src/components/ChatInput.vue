@@ -9,14 +9,11 @@
  * @package frontend/src/components
  */
 
-import { computed, ref, toRefs } from 'vue'
-import type { ImageData, UploadedFileRef, UploadProgress } from '../types/task'
+import { toRefs } from 'vue'
+import type { ImageData, UploadedFileRef } from '../types/task'
 import ImageUploader from './ImageUploader.vue'
 import FileUploader from './FileUploader.vue'
-import { useAutoResize } from '../composables/useAutoResize'
-import { fileToImageData } from '../utils/image'
-import { isSupportedTextFile } from '../utils/file'
-import { uploadChunkedFile } from '../utils/chunk'
+import { useChatComposer } from '../composables/useChatComposer'
 
 interface Props {
   /** 是否正在生成回复 */
@@ -33,244 +30,39 @@ const emit = defineEmits<{
   stop: []
 }>()
 
-/** 输入框内容 */
-const input = ref('')
-/** 已选择图片 */
-const images = ref<ImageData[]>([])
-/** 已上传文件 */
-const files = ref<UploadedFileRef[]>([])
-/** 图片托盘是否展开 */
-const showImageUploader = ref(false)
-/** 文件托盘是否展开 */
-const showFileUploader = ref(false)
-/** 上传错误 */
-const uploadError = ref('')
-/** 正在上传的文件 */
-const pendingUploads = ref<Record<string, UploadProgress>>({})
-
-const { textareaRef, resize, reset } = useAutoResize()
-
-/** 是否存在上传中的文件 */
-const hasPendingUploads = computed(() => Object.keys(pendingUploads.value).length > 0)
-
-/** 上传中的文件数组 */
-const pendingUploadList = computed(() => Object.values(pendingUploads.value))
-
-/** 是否存在任意附件 */
-const hasAttachments = computed(() => images.value.length > 0 || files.value.length > 0)
-
-/** 是否显示附件托盘 */
-const showAttachmentTray = computed(() => {
-  return (
-    showImageUploader.value ||
-    showFileUploader.value ||
-    images.value.length > 0 ||
-    files.value.length > 0 ||
-    hasPendingUploads.value
-  )
+const composer = useChatComposer({
+  loading,
+  onSend: (content, images, files) => emit('send', content, images, files),
 })
 
-/** 是否允许发送 */
-const canSend = computed(() => {
-  return (
-    (input.value.trim() || hasAttachments.value) &&
-    !props.loading &&
-    !hasPendingUploads.value
-  )
-})
-
-/** 底部状态文案 */
-const statusText = computed(() => {
-  if (hasPendingUploads.value) {
-    return '文件仍在上传，完成后再发送会更稳定。'
-  }
-
-  if (uploadError.value) {
-    return uploadError.value
-  }
-
-  if (props.loading) {
-    return '模型正在生成内容，可随时停止。'
-  }
-
-  if (hasAttachments.value) {
-    return `已准备 ${images.value.length} 张图片、${files.value.length} 个文件引用。`
-  }
-
-  return 'Enter 发送，Shift + Enter 换行。'
-})
-
-/** 状态类型 */
-const statusTone = computed(() => {
-  if (uploadError.value) return 'is-error'
-  if (hasPendingUploads.value) return 'is-busy'
-  if (props.loading) return 'is-streaming'
-  return 'is-idle'
-})
+const {
+  input,
+  images,
+  files,
+  showImageUploader,
+  showFileUploader,
+  pendingUploadList,
+  hasPendingUploads,
+  showAttachmentTray,
+  canSend,
+  statusText,
+  statusTone,
+  resize,
+  addImage,
+  removeImage,
+  addFile,
+  removeFile,
+  handleUploadProgress,
+  handleUploadError,
+  handleKeydown,
+  handlePaste,
+  sendMessage,
+  clearComposer,
+} = composer
 
 defineExpose({
-  clear: () => {
-    input.value = ''
-    images.value = []
-    files.value = []
-    showImageUploader.value = false
-    showFileUploader.value = false
-    uploadError.value = ''
-    pendingUploads.value = {}
-    reset()
-  }
+  clear: clearComposer,
 })
-
-/**
- * 处理粘贴图片
- * @param event 剪贴板事件
- */
-async function handlePaste(event: ClipboardEvent) {
-  const items = event.clipboardData?.items
-  if (!items) return
-
-  for (const item of items) {
-    if (!item.type.startsWith('image/')) continue
-
-    const file = item.getAsFile()
-    if (!file) continue
-
-    try {
-      const imageData = await fileToImageData(file)
-      addImage(imageData)
-      showImageUploader.value = true
-    } catch (error) {
-      console.error('Failed to paste image:', error)
-    }
-  }
-}
-
-/**
- * 处理粘贴文本文件
- * @param event 剪贴板事件
- */
-async function handleFilePaste(event: ClipboardEvent) {
-  const items = event.clipboardData?.items
-  if (!items) return
-
-  for (const item of items) {
-    const file = item.getAsFile()
-    if (!file || !isSupportedTextFile(file)) continue
-
-    try {
-      showFileUploader.value = true
-      const uploadedFile = await uploadTextFile(file)
-      addFile(uploadedFile)
-    } catch (error) {
-      console.error('Failed to paste file:', error)
-      uploadError.value = error instanceof Error ? error.message : '粘贴文件失败'
-    }
-  }
-}
-
-/**
- * 添加图片
- * @param image 图片数据
- */
-function addImage(image: ImageData) {
-  images.value.push(image)
-}
-
-/**
- * 移除图片
- * @param id 图片 ID
- */
-function removeImage(id: string) {
-  images.value = images.value.filter((image) => image.id !== id)
-}
-
-/**
- * 添加文件引用
- * @param file 文件引用
- */
-function addFile(file: UploadedFileRef) {
-  files.value.push(file)
-  uploadError.value = ''
-  clearPendingUpload(file.fileId)
-}
-
-/**
- * 移除文件引用
- * @param id 文件 ID
- */
-function removeFile(id: string) {
-  files.value = files.value.filter((file) => file.fileId !== id)
-  clearPendingUpload(id)
-}
-
-/**
- * 清理指定上传进度
- * @param fileId 文件 ID
- */
-function clearPendingUpload(fileId: string) {
-  const nextPendingUploads = { ...pendingUploads.value }
-  delete nextPendingUploads[fileId]
-  pendingUploads.value = nextPendingUploads
-}
-
-/**
- * 更新上传进度
- * @param progress 进度信息
- */
-function handleUploadProgress(progress: UploadProgress) {
-  pendingUploads.value = {
-    ...pendingUploads.value,
-    [progress.fileId]: progress
-  }
-}
-
-/**
- * 处理上传错误
- * @param message 错误文案
- */
-function handleUploadError(message: string) {
-  uploadError.value = message
-  pendingUploads.value = {}
-}
-
-/**
- * 上传文本文件
- * @param file 文件对象
- */
-async function uploadTextFile(file: File): Promise<UploadedFileRef> {
-  uploadError.value = ''
-
-  return uploadChunkedFile(file, {
-    onProgress: handleUploadProgress
-  })
-}
-
-/** 发送消息 */
-function handleSend() {
-  if (!canSend.value) return
-
-  emit('send', input.value.trim(), images.value, files.value)
-
-  input.value = ''
-  images.value = []
-  files.value = []
-  showImageUploader.value = false
-  showFileUploader.value = false
-  uploadError.value = ''
-  pendingUploads.value = {}
-  reset()
-}
-
-/**
- * 键盘发送逻辑
- * @param event 键盘事件
- */
-function handleKeydown(event: KeyboardEvent) {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault()
-    handleSend()
-  }
-}
 </script>
 
 <template>
@@ -346,7 +138,7 @@ function handleKeydown(event: KeyboardEvent) {
 
     <div class="composer-body">
       <textarea
-        ref="textareaRef"
+        :ref="composer.textareaRef"
         v-model="input"
         class="message-input"
         :disabled="loading"
@@ -354,7 +146,7 @@ function handleKeydown(event: KeyboardEvent) {
         placeholder="描述任务、补充上下文，或直接贴入你要分析的内容。"
         @keydown="handleKeydown"
         @input="resize"
-        @paste="(event) => { handlePaste(event); handleFilePaste(event) }"
+        @paste="handlePaste"
       />
 
       <div class="composer-actions">
@@ -363,7 +155,7 @@ function handleKeydown(event: KeyboardEvent) {
           class="primary-action send"
           :disabled="!canSend"
           type="button"
-          @click="handleSend"
+          @click="sendMessage"
         >
           <span>发送</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

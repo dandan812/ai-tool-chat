@@ -13,6 +13,7 @@ import type {
   Message,
 } from "../types";
 import { logger } from "../utils/logger";
+import { parseChatCompletionSSELine } from "../utils/sse";
 
 /**
  * GLM 技能定义
@@ -139,7 +140,7 @@ export const glmSkill: Skill = {
 
           // 逐行处理完整的数据
           for (const line of lines) {
-            const chunk = parseSSELine(line); // 解析 SSE 数据行
+            const chunk = parseChatCompletionSSELine(line); // 解析 SSE 数据行
             if (chunk && chunk.type === "content") {
               chunkCount++;
               logger.debug(
@@ -154,7 +155,7 @@ export const glmSkill: Skill = {
 
         // 处理缓冲区中最后剩余的数据
         if (buffer.trim()) {
-          const chunk = parseSSELine(buffer.trim());
+          const chunk = parseChatCompletionSSELine(buffer.trim());
           if (chunk) {
             logger.debug(
               `Yielding final chunk: "${chunk.content?.slice(0, 20)}..."`,
@@ -187,58 +188,3 @@ export const glmSkill: Skill = {
     }
   },
 };
-
-/**
- * 解析 SSE（Server-Sent Events）数据行
- *
- * SSE 格式示例：
- * data: {"choices":[{"delta":{"content":"你好"}}]}
- *
- * @param line - 一行 SSE 数据
- * @returns SkillStreamChunk - 解析后的内容块，或 null 如果无效
- */
-function parseSSELine(line: string): SkillStreamChunk | null {
-  const trimmed = line.trim();
-
-  // 只处理以 "data: " 开头的行
-  if (!trimmed || !trimmed.startsWith("data: ")) {
-    return null;
-  }
-
-  // 去掉 "data: " 前缀
-  const data = trimmed.slice(6);
-
-  // [DONE] 是流式传输结束标记
-  if (data === "[DONE]") {
-    return null;
-  }
-
-  try {
-    // 解析 JSON 数据
-    const json = JSON.parse(data);
-
-    // 记录原始响应用于调试
-    logger.debug("GLM API SSE data", { data, parsed: json });
-
-    // 支持多种响应格式
-    // 格式1: OpenAI 兼容 {"choices":[{"delta":{"content":"..."}}]}
-    const content1 = json.choices?.[0]?.delta?.content;
-    // 格式2: 直接 {"content":"..."}
-    const content2 = json.content;
-    // 格式3: {"data":{"content":"..."}}
-    const content3 = json.data?.content;
-
-    const content = content1 ?? content2 ?? content3;
-
-    // 如果内容存在，返回内容块
-    if (content !== undefined && content !== null && content !== "") {
-      return { type: "content", content: String(content) };
-    } else {
-      logger.debug("No content found in SSE line", { json, extracted: { content1, content2, content3 } });
-    }
-  } catch (e) {
-    logger.warn("Failed to parse SSE line", { line, error: String(e) });
-  }
-
-  return null;
-}

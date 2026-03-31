@@ -16,6 +16,7 @@ import type {
   ImageData,
 } from '../types';
 import { logger } from '../utils/logger';
+import { parseChatCompletionSSELine } from '../utils/sse';
 import { resolveDefaultMultimodalModel } from "../utils/textModel";
 
 /**
@@ -115,7 +116,7 @@ export const multimodalSkill: Skill = {
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            const chunk = parseQwenSSELine(line);
+            const chunk = parseChatCompletionSSELine(line);
             if (chunk) {
               yield chunk;
             }
@@ -124,7 +125,7 @@ export const multimodalSkill: Skill = {
 
         // 处理剩余数据
         if (buffer.trim()) {
-          const chunk = parseQwenSSELine(buffer.trim());
+          const chunk = parseChatCompletionSSELine(buffer.trim());
           if (chunk) {
             yield chunk;
           }
@@ -193,41 +194,4 @@ function buildQwenMessages(
       content: msg.content,
     };
   });
-}
-
-/**
- * 解析 Qwen 的 SSE 数据行
- * 
- * 与 DeepSeek 类似，但响应格式可能略有不同
- * 兼容两种格式：
- *   - 流式：choices[0].delta.content
- *   - 非流式：choices[0].message.content
- */
-function parseQwenSSELine(line: string): SkillStreamChunk | null {
-  const trimmed = line.trim();
-  if (!trimmed || !trimmed.startsWith('data: ')) {
-    return null;
-  }
-
-  const data = trimmed.slice(6);
-  if (data === '[DONE]') {
-    return null;
-  }
-
-  try {
-    const json = JSON.parse(data);
-    
-    // 兼容两种可能的字段路径
-    const content =
-      json.choices?.[0]?.delta?.content ||      // 流式格式
-      json.choices?.[0]?.message?.content;     // 完整消息格式
-
-    if (content) {
-      return { type: 'content', content };
-    }
-  } catch {
-    // 忽略解析错误
-  }
-
-  return null;
 }

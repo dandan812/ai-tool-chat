@@ -16,6 +16,7 @@
 
 import { useChatStore } from '../stores/chat'
 import { computed } from 'vue'
+import { getTaskModelLabel } from '../utils/taskPresentation'
 
 /**
  * 组件事件
@@ -29,10 +30,7 @@ const emit = defineEmits<{
 const store = useChatStore()
 
 const currentTask = computed(() => store.getCurrentTask(store.currentSessionId))
-const currentModel = computed(() => {
-  const model = currentTask.value?.metadata?.model
-  return typeof model === 'string' && model ? model : '等待输入'
-})
+const currentModel = computed(() => getTaskModelLabel(currentTask.value, store.getSteps(store.currentSessionId)))
 
 const currentStatus = computed(() => {
   if (store.isSessionLoading(store.currentSessionId)) return '执行中'

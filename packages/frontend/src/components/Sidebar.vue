@@ -11,6 +11,8 @@
 
 import { useChatStore } from '../stores/chat'
 import { useTheme } from '../composables/useTheme'
+import SidebarSessionItem from './SidebarSessionItem.vue'
+import { SIDEBAR_THEME_OPTIONS } from '../utils/sidebarPresentation'
 
 interface Props {
   /** 侧边栏是否展开（移动端） */
@@ -21,31 +23,6 @@ defineProps<Props>()
 
 const store = useChatStore()
 const { theme, setTheme } = useTheme()
-
-const TIME_CONSTANTS = {
-  ONE_DAY: 24 * 60 * 60 * 1000,
-  TWO_DAYS: 48 * 60 * 60 * 1000
-} as const
-
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-
-  if (diff < TIME_CONSTANTS.ONE_DAY && date.toDateString() === now.toDateString()) {
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  }
-
-  if (diff < TIME_CONSTANTS.TWO_DAYS) {
-    return '昨天'
-  }
-
-  if (date.getFullYear() === now.getFullYear()) {
-    return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-  }
-
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
-}
 </script>
 
 <template>
@@ -68,7 +45,6 @@ function formatTime(timestamp: number): string {
           </svg>
         </div>
         <div class="brand-copy">
-          <span class="brand-kicker">Workspace</span>
           <span class="brand-name">AI Tool Chat</span>
         </div>
       </div>
@@ -88,27 +64,15 @@ function formatTime(timestamp: number): string {
         <span class="list-count">{{ store.sessions.length }}</span>
       </div>
 
-      <div
+      <SidebarSessionItem
         v-for="session in store.sessions"
         :key="session.id"
-        class="session-item"
-        :class="{ active: session.id === store.currentSessionId }"
-        @click="store.switchSession(session.id)"
-      >
-        <div class="session-info">
-          <div class="session-meta">
-            <span class="session-title">{{ session.title }}</span>
-            <span v-if="session.id === store.currentSessionId" class="active-chip">当前</span>
-          </div>
-          <span class="session-time">最近更新 {{ formatTime(session.updatedAt) }}</span>
-        </div>
-        <button class="delete-btn" @click.stop="store.deleteSession(session.id)" aria-label="删除会话">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
+        :title="session.title"
+        :updated-at="session.updatedAt"
+        :active="session.id === store.currentSessionId"
+        @select="store.switchSession(session.id)"
+        @delete="store.deleteSession(session.id)"
+      />
 
       <div v-if="store.sessions.length === 0" class="empty-state">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -124,12 +88,14 @@ function formatTime(timestamp: number): string {
         <span class="setting-label">主题</span>
         <div class="theme-switch">
           <button
+            v-for="option in SIDEBAR_THEME_OPTIONS"
+            :key="option.value"
             class="theme-option"
-            :class="{ active: theme === 'light' }"
-            @click="setTheme('light')"
-            aria-label="浅色主题"
+            :class="{ active: theme === option.value }"
+            @click="setTheme(option.value)"
+            :aria-label="option.label"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-if="option.value === 'light'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="5"></circle>
               <line x1="12" y1="1" x2="12" y2="3"></line>
               <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -140,14 +106,7 @@ function formatTime(timestamp: number): string {
               <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
               <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
             </svg>
-          </button>
-          <button
-            class="theme-option"
-            :class="{ active: theme === 'dark' }"
-            @click="setTheme('dark')"
-            aria-label="深色主题"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
             </svg>
           </button>
@@ -156,7 +115,7 @@ function formatTime(timestamp: number): string {
 
       <div class="footer-meta">
         <span class="version">v1.3.0</span>
-        <span class="footer-caption">Warm Editorial Workspace</span>
+        
       </div>
     </div>
   </aside>
@@ -274,109 +233,6 @@ function formatTime(timestamp: number): string {
   color: var(--text-secondary);
   background: var(--surface-muted);
   border-radius: var(--radius-pill);
-}
-
-.session-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-2);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  overflow: hidden;
-}
-
-.session-item:hover {
-  background: var(--surface-strong);
-  border-color: var(--border-default);
-  box-shadow: var(--shadow-panel);
-  transform: translateY(-1px);
-}
-
-.session-item.active {
-  background: var(--surface-strong);
-  border-color: rgba(201, 106, 23, 0.28);
-  box-shadow: var(--shadow-panel);
-}
-
-.session-item.active::before {
-  content: '';
-  position: absolute;
-  inset: 10px auto 10px 0;
-  width: 4px;
-  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
-  background: var(--accent-primary);
-}
-
-.session-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.session-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.session-title {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.active-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.45rem;
-  border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--accent-primary);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.session-time {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-.delete-btn {
-  opacity: 0;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--text-muted);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.session-item:hover .delete-btn {
-  opacity: 1;
-}
-
-.delete-btn:hover {
-  background: var(--danger-soft);
-  color: var(--error);
 }
 
 .empty-state {

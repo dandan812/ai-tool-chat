@@ -107,4 +107,4 @@ Worker 遵循 **Task → Step → Skill** 架构模式：
 - **网络错误**: 通常表示 worker 未部署或缺少 `DEEPSEEK_API_KEY` 环境变量
 - **浏览器缓存**: 部署后需要强制刷新（Ctrl+Shift+R），必要时清除 Cloudflare 缓存
 
-详细故障排查请参阅 `ERROR_LOG.md`。
+详细故障排查请参阅 `docs/reference/ERROR_LOG.md`。

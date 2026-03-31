@@ -1,43 +1,26 @@
 import { ref, onMounted, onUnmounted, readonly } from 'vue'
+import {
+  applyThemeAttribute,
+  getSystemTheme,
+  readStoredTheme,
+  resolveInitialThemeState,
+  resolveThemeOptions,
+  writeStoredTheme,
+  type Theme,
+  type ThemeOptions,
+  type ThemePreference,
+} from '../utils/themeCore'
 
 /**
  * 主题管理 Composable - 优化版
  * 支持手动切换、系统主题自动适配、持久化存储
  */
 
-type Theme = 'light' | 'dark'
-
-interface UseThemeOptions {
-  /** 默认主题 */
-  defaultTheme?: Theme
-  /** 存储键名 */
-  storageKey?: string
-  /** 数据属性名 */
-  attribute?: string
-  /** 是否监听系统主题变化 */
-  followSystem?: boolean
-}
-
-const DEFAULT_OPTIONS: Required<UseThemeOptions> = {
-  defaultTheme: 'light',
-  storageKey: 'chat_theme',
-  attribute: 'data-theme',
-  followSystem: true
-}
-
-/**
- * 获取系统首选主题
- */
-function getSystemTheme(): Theme {
-  if (typeof window === 'undefined') return 'light'
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
 /**
  * 创建主题管理器
  */
-export function useTheme(options: UseThemeOptions = {}) {
-  const opts = { ...DEFAULT_OPTIONS, ...options }
+export function useTheme(options: ThemeOptions = {}) {
+  const opts = resolveThemeOptions(options)
   
   const theme = ref<Theme>(opts.defaultTheme)
   const systemTheme = ref<Theme>('light')
@@ -50,49 +33,25 @@ export function useTheme(options: UseThemeOptions = {}) {
    * 应用主题到文档
    */
   function applyTheme(value: Theme): void {
-    if (typeof document === 'undefined') return
-    document.documentElement.setAttribute(opts.attribute, value)
-    
-    // 添加过渡类，实现平滑过渡
-    document.documentElement.classList.add('theme-transition')
-    setTimeout(() => {
-      document.documentElement.classList.remove('theme-transition')
-    }, 300)
-  }
-
-  /**
-   * 保存主题到本地存储
-   */
-  function saveTheme(value: Theme | 'system'): void {
-    if (typeof localStorage === 'undefined') return
-    localStorage.setItem(opts.storageKey, value)
-  }
-
-  /**
-   * 从本地存储加载主题
-   */
-  function loadTheme(): Theme | 'system' | null {
-    if (typeof localStorage === 'undefined') return null
-    const saved = localStorage.getItem(opts.storageKey) as Theme | 'system' | null
-    return saved
+    applyThemeAttribute(opts.attribute, value)
   }
 
   /**
    * 设置主题
    */
-  function setTheme(value: Theme | 'system'): void {
+  function setTheme(value: ThemePreference): void {
     if (value === 'system') {
       isFollowingSystem.value = true
       const sysTheme = getSystemTheme()
       theme.value = sysTheme
       systemTheme.value = sysTheme
       applyTheme(sysTheme)
-      saveTheme('system')
+      writeStoredTheme(opts.storageKey, 'system')
     } else {
       isFollowingSystem.value = false
       theme.value = value
       applyTheme(value)
-      saveTheme(value)
+      writeStoredTheme(opts.storageKey, value)
     }
   }
 
@@ -140,18 +99,10 @@ export function useTheme(options: UseThemeOptions = {}) {
 
   onMounted(() => {
     systemTheme.value = getSystemTheme()
-    
-    const savedTheme = loadTheme()
-    
-    if (savedTheme === 'system') {
-      isFollowingSystem.value = true
-      theme.value = systemTheme.value
-    } else if (savedTheme) {
-      theme.value = savedTheme
-    } else {
-      // 未保存过，尝试跟随系统
-      theme.value = opts.followSystem ? systemTheme.value : opts.defaultTheme
-    }
+
+    const initialState = resolveInitialThemeState(opts, systemTheme.value)
+    theme.value = initialState.theme
+    isFollowingSystem.value = initialState.followsSystem
     
     applyTheme(theme.value)
     setupSystemListener()
@@ -180,19 +131,16 @@ export function useTheme(options: UseThemeOptions = {}) {
 /**
  * 初始化主题（用于非 Vue 环境或提前设置）
  */
-export function initTheme(options: UseThemeOptions = {}): void {
-  const opts = { ...DEFAULT_OPTIONS, ...options }
+export function initTheme(options: ThemeOptions = {}): void {
+  const opts = resolveThemeOptions(options)
   
   if (typeof document === 'undefined') return
-  
-  const saved = localStorage.getItem(opts.storageKey) as Theme | 'system' | null
-  let theme: Theme
-  
-  if (saved === 'system' || !saved) {
-    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  } else {
-    theme = saved
-  }
-  
-  document.documentElement.setAttribute(opts.attribute, theme)
+
+  const saved = readStoredTheme(opts.storageKey)
+  const initialTheme =
+    saved && saved !== 'system'
+      ? saved
+      : getSystemTheme()
+
+  applyThemeAttribute(opts.attribute, initialTheme, false)
 }

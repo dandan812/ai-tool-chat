@@ -12,6 +12,7 @@
  */
 import type { Skill, SkillInput, SkillContext, SkillStreamChunk, Message } from '../types';
 import { logger } from '../utils/logger';
+import { parseChatCompletionSSELine } from '../utils/sse';
 import {
   DEFAULT_DEEPSEEK_TEXT_MODEL,
   DEFAULT_OPENAI_TEXT_MODEL,
@@ -190,7 +191,7 @@ export const textSkill: Skill = {
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            const chunk = parseSSELine(line);
+            const chunk = parseChatCompletionSSELine(line);
             if (chunk && chunk.type === 'content') {
               chunkCount++;
               yield chunk;
@@ -201,7 +202,7 @@ export const textSkill: Skill = {
         }
 
         if (buffer.trim()) {
-          const chunk = parseSSELine(buffer.trim());
+          const chunk = parseChatCompletionSSELine(buffer.trim());
           if (chunk) {
             yield chunk;
           }
@@ -222,33 +223,3 @@ export const textSkill: Skill = {
     }
   },
 };
-
-function parseSSELine(line: string): SkillStreamChunk | null {
-  const trimmed = line.trim();
-
-  if (!trimmed || !trimmed.startsWith('data: ')) {
-    return null;
-  }
-
-  const data = trimmed.slice(6);
-  if (data === '[DONE]') {
-    return null;
-  }
-
-  try {
-    const json = JSON.parse(data);
-    const content =
-      json.choices?.[0]?.delta?.content ??
-      json.choices?.[0]?.message?.content ??
-      json.content ??
-      json.data?.content;
-
-    if (content !== undefined && content !== null && content !== '') {
-      return { type: 'content', content: String(content) };
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
