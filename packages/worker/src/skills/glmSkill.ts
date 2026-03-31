@@ -3,7 +3,7 @@
  *
  * 作用：处理纯文本对话，调用 GLM 的聊天接口
  * 特点：支持流式响应（SSE），逐字返回给前端
- * 支持模型：GLM-Coding-Lite 等 GLM 系列模型
+ * 支持模型：glm-5、glm-4-flash 等 GLM 系列模型
  */
 import type {
   Skill,
@@ -37,6 +37,12 @@ export const glmSkill: Skill = {
   ): AsyncIterable<SkillStreamChunk> {
     const { env } = context; // 从上下文获取环境变量
     const { messages, temperature = 0.7 } = input; // 获取消息列表和温度参数
+    const requestedModel = typeof input.model === "string" ? input.model : "";
+    const model = requestedModel.startsWith("glm")
+      ? requestedModel
+      : env.DEFAULT_MODEL?.startsWith("glm")
+        ? env.DEFAULT_MODEL
+        : "glm-5";
 
     try {
       logger.info("Calling GLM API", { messageCount: messages.length });
@@ -55,7 +61,7 @@ export const glmSkill: Skill = {
        * 使用 fetch 发送 POST 请求到 GLM 的聊天接口
        */
       const requestBody = {
-        model: "glm-4-flash", // 使用最快的模型：GLM-4-Flash
+        model, // 优先使用请求指定模型，其次使用默认 GLM 模型
         messages: messages as Message[], // 消息历史
         stream: true, // 启用流式响应
         temperature: temperature ?? 1, // 默认温度 1.0

@@ -1,14 +1,10 @@
 <script setup lang="ts">
 /**
- * 侧边栏组件 - 《反主流》美学
+ * 侧边栏组件
  *
- * 设计理念：温暖、有质感的侧边栏设计
- *
- * 功能特性：
- * - 显示会话列表和切换会话
- * - 创建新对话
- * - 主题切换（亮色/暗色）
- * - 移动端响应式折叠
+ * 目标：
+ * - 让侧边栏更像工作区导航，而不是单纯的列表
+ * - 强化品牌、当前会话和主操作的层级
  *
  * @package frontend/src/components
  */
@@ -16,9 +12,6 @@
 import { useChatStore } from '../stores/chat'
 import { useTheme } from '../composables/useTheme'
 
-/**
- * 组件属性
- */
 interface Props {
   /** 侧边栏是否展开（移动端） */
   isOpen: boolean
@@ -26,24 +19,14 @@ interface Props {
 
 defineProps<Props>()
 
-/** 聊天状态管理 */
 const store = useChatStore()
-/** 主题管理 */
 const { theme, setTheme } = useTheme()
 
-/**
- * 时间常量定义（毫秒）
- */
 const TIME_CONSTANTS = {
   ONE_DAY: 24 * 60 * 60 * 1000,
   TWO_DAYS: 48 * 60 * 60 * 1000
 } as const
 
-/**
- * 格式化时间戳为友好的显示格式
- * @param timestamp 时间戳（毫秒）
- * @returns 格式化后的时间字符串
- */
 function formatTime(timestamp: number): string {
   const date = new Date(timestamp)
   const now = new Date()
@@ -67,22 +50,29 @@ function formatTime(timestamp: number): string {
 
 <template>
   <aside class="sidebar" :class="{ 'is-open': isOpen }">
-    <!-- Logo 区域 -->
     <div class="sidebar-header">
       <div class="brand">
         <div class="brand-mark">
           <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="20" cy="20" r="18" fill="currentColor" opacity="0.1"/>
-            <path d="M12 16C12 13.7909 13.7909 12 16 12H24C26.2091 12 28 13.7909 28 16V22C28 24.2091 26.2091 26 24 26H20L14 30V26H12C9.79086 26 8 24.2091 8 22V16C8 13.7909 9.79086 12 12 12" 
-                  stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="15" cy="19" r="1.5" fill="currentColor"/>
-            <circle cx="20" cy="19" r="1.5" fill="currentColor"/>
-            <circle cx="25" cy="19" r="1.5" fill="currentColor"/>
+            <circle cx="20" cy="20" r="18" fill="currentColor" opacity="0.12" />
+            <path
+              d="M12 16C12 13.7909 13.7909 12 16 12H24C26.2091 12 28 13.7909 28 16V22C28 24.2091 26.2091 26 24 26H20L14 30V26H12C9.79086 26 8 24.2091 8 22V16C8 13.7909 9.79086 12 12 12"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <circle cx="15" cy="19" r="1.5" fill="currentColor" />
+            <circle cx="20" cy="19" r="1.5" fill="currentColor" />
+            <circle cx="25" cy="19" r="1.5" fill="currentColor" />
           </svg>
         </div>
-        <span class="brand-name">Chat</span>
+        <div class="brand-copy">
+          <span class="brand-kicker">Workspace</span>
+          <span class="brand-name">AI Tool Chat</span>
+        </div>
       </div>
-      
+
       <button class="new-chat-btn" @click="store.createSession()">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -92,7 +82,6 @@ function formatTime(timestamp: number): string {
       </button>
     </div>
 
-    <!-- 会话列表 -->
     <div class="session-list">
       <div class="list-header">
         <span class="list-title">对话历史</span>
@@ -107,10 +96,13 @@ function formatTime(timestamp: number): string {
         @click="store.switchSession(session.id)"
       >
         <div class="session-info">
-          <span class="session-title">{{ session.title }}</span>
-          <span class="session-time">{{ formatTime(session.updatedAt) }}</span>
+          <div class="session-meta">
+            <span class="session-title">{{ session.title }}</span>
+            <span v-if="session.id === store.currentSessionId" class="active-chip">当前</span>
+          </div>
+          <span class="session-time">最近更新 {{ formatTime(session.updatedAt) }}</span>
         </div>
-        <button class="delete-btn" @click.stop="store.deleteSession(session.id)">
+        <button class="delete-btn" @click.stop="store.deleteSession(session.id)" aria-label="删除会话">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -118,25 +110,24 @@ function formatTime(timestamp: number): string {
         </button>
       </div>
 
-      <!-- 空状态 -->
       <div v-if="store.sessions.length === 0" class="empty-state">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
         </svg>
-        <p>还没有对话</p>
-        <span>开始新的对话吧</span>
+        <p>还没有会话</p>
+        <span>从一个清晰的问题开始，会更像真正的工作流。</span>
       </div>
     </div>
 
-    <!-- 底部设置 -->
     <div class="sidebar-footer">
       <div class="setting-group">
         <span class="setting-label">主题</span>
         <div class="theme-switch">
-          <button 
-            class="theme-option" 
+          <button
+            class="theme-option"
             :class="{ active: theme === 'light' }"
             @click="setTheme('light')"
+            aria-label="浅色主题"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="5"></circle>
@@ -150,10 +141,11 @@ function formatTime(timestamp: number): string {
               <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
             </svg>
           </button>
-          <button 
-            class="theme-option" 
+          <button
+            class="theme-option"
             :class="{ active: theme === 'dark' }"
             @click="setTheme('dark')"
+            aria-label="深色主题"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
@@ -162,26 +154,30 @@ function formatTime(timestamp: number): string {
         </div>
       </div>
 
-      <div class="version">v1.3.0</div>
+      <div class="footer-meta">
+        <span class="version">v1.3.0</span>
+        <span class="footer-caption">Warm Editorial Workspace</span>
+      </div>
     </div>
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
-  width: 280px;
+  width: var(--layout-sidebar-width);
   height: 100%;
-  background: var(--sidebar-bg);
+  background: linear-gradient(180deg, var(--surface-panel) 0%, var(--sidebar-bg) 100%);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   transition: transform var(--transition-slow);
+  backdrop-filter: blur(18px);
 }
 
-/* Header */
 .sidebar-header {
   padding: var(--space-5);
   border-bottom: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent);
 }
 
 .brand {
@@ -192,14 +188,30 @@ function formatTime(timestamp: number): string {
 }
 
 .brand-mark {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.brand-kicker {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  font-weight: 700;
 }
 
 .brand-name {
   font-family: var(--font-display);
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.02em;
@@ -212,72 +224,94 @@ function formatTime(timestamp: number): string {
   justify-content: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  background: var(--accent-primary);
-  color: white;
+  background: var(--surface-muted);
+  color: var(--text-primary);
   font-size: var(--text-sm);
-  font-weight: 500;
-  border: none;
-  border-radius: var(--radius-lg);
+  font-weight: 600;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
   cursor: pointer;
   transition: all var(--transition-base);
-  box-shadow: var(--shadow-warm);
+  box-shadow: 0 10px 24px rgba(34, 29, 24, 0.06);
 }
 
 .new-chat-btn:hover {
-  background: var(--accent-primary-hover);
+  background: #eee7dd;
+  border-color: var(--message-user-border);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px -4px var(--accent-glow);
+  box-shadow: 0 14px 30px rgba(34, 29, 24, 0.08);
 }
 
-/* Session List */
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-4) var(--space-4);
+  padding: var(--space-4);
 }
 
 .list-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
+  padding: 0 var(--space-2);
   margin-bottom: var(--space-3);
 }
 
 .list-title {
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   color: var(--text-tertiary);
 }
 
 .list-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  padding: 0.2rem 0.5rem;
   font-size: var(--text-xs);
-  color: var(--text-muted);
-  background: var(--bg-tertiary);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  border-radius: var(--radius-pill);
 }
 
 .session-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-1);
-  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
+  overflow: hidden;
 }
 
 .session-item:hover {
-  background: var(--sidebar-hover);
+  background: var(--surface-strong);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-panel);
+  transform: translateY(-1px);
 }
 
 .session-item.active {
-  background: var(--sidebar-active);
-  box-shadow: var(--shadow-sm);
+  background: var(--surface-strong);
+  border-color: rgba(201, 106, 23, 0.28);
+  box-shadow: var(--shadow-panel);
+}
+
+.session-item.active::before {
+  content: '';
+  position: absolute;
+  inset: 10px auto 10px 0;
+  width: 4px;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  background: var(--accent-primary);
 }
 
 .session-info {
@@ -288,13 +322,32 @@ function formatTime(timestamp: number): string {
   gap: var(--space-1);
 }
 
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 .session-title {
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.active-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .session-time {
@@ -322,63 +375,64 @@ function formatTime(timestamp: number): string {
 }
 
 .delete-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--danger-soft);
   color: var(--error);
 }
 
-/* Empty */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--space-10) var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-12) var(--space-4);
   color: var(--text-muted);
   text-align: center;
 }
 
 .empty-state svg {
-  margin-bottom: var(--space-4);
-  opacity: 0.3;
+  opacity: 0.28;
 }
 
 .empty-state p {
   font-size: var(--text-sm);
   color: var(--text-secondary);
-  margin-bottom: var(--space-1);
+  font-weight: 600;
 }
 
 .empty-state span {
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--text-tertiary);
+  line-height: 1.6;
+  max-width: 180px;
 }
 
-/* Footer */
 .sidebar-footer {
   padding: var(--space-5);
   border-top: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.28));
 }
 
 .setting-group {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-4);
+  gap: var(--space-3);
 }
 
 .setting-label {
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   color: var(--text-tertiary);
 }
 
 .theme-switch {
   display: flex;
   gap: var(--space-1);
-  background: var(--bg-tertiary);
   padding: var(--space-1);
-  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  border-radius: var(--radius-pill);
 }
 
 .theme-option {
@@ -390,7 +444,7 @@ function formatTime(timestamp: number): string {
   background: transparent;
   color: var(--text-muted);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -400,33 +454,39 @@ function formatTime(timestamp: number): string {
 }
 
 .theme-option.active {
-  background: var(--sidebar-active);
+  background: var(--surface-strong);
   color: var(--text-primary);
   box-shadow: var(--shadow-sm);
 }
 
+.footer-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-4);
+}
+
 .version {
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--text-secondary);
+  text-align: center;
+  font-weight: 600;
+}
+
+.footer-caption {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
   text-align: center;
 }
 
-/* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Mobile */
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
-    left: 0;
-    top: 0;
+    inset: 0 auto 0 0;
     transform: translateX(-100%);
-    z-index: 50;
+    z-index: 60;
   }
-  
+
   .sidebar.is-open {
     transform: translateX(0);
   }

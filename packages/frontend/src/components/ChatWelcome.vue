@@ -1,136 +1,271 @@
 <script setup lang="ts">
 /**
- * 欢迎页组件 - 《反主流》美学
+ * 工具型欢迎页
  *
- * 设计理念：
- * - 大留白 + 有机圆角
- * - 手绘感的温暖图标
- * - 深灰 + 橙色强调
- *
- * 功能特性：
- * - 显示品牌和欢迎信息
- * - 展示随机建议提问卡片
- * - 支持点击卡片快速开始对话
- * - 可刷新建议列表
+ * 目标：
+ * - 把首页从陪聊入口改成工作流入口
+ * - 明确展示平台支持的输入方式和建议任务
  *
  * @package frontend/src/components
  */
 
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 
-/**
- * 组件事件
- */
+interface SuggestionCard {
+  title: string
+  description: string
+  prompt: string
+}
+
 const emit = defineEmits<{
-  /** 选择建议提问事件 */
+  /** 选择建议提问 */
   select: [suggestion: string]
 }>()
 
-/**
- * 所有可用的建议提问列表
- * 这些问题经过精心设计，更具人情味和创意性
- */
-const allSuggestions = [
-  '帮我设计一个个人网站',
-  '写一段温暖的产品介绍文案',
-  '推荐一本让人平静的书',
-  '用代码画一个会动的太阳',
-  '帮我规划一次治愈系旅行',
-  '写一个关于咖啡的小故事',
-  '如何用设计表达情感？',
-  '帮我写一首给朋友的诗',
-  '什么是好的用户体验？',
-  '推荐一些独立音乐',
-  '如何用色彩传达温暖？',
-  '帮我制定一个晨间routine'
+const allSuggestions: SuggestionCard[] = [
+  {
+    title: '分析一份长文档',
+    description: '上传文本、日志或代码文件，然后让 AI 只针对关键片段回答。',
+    prompt: '帮我概括这份文件的关键结论，并指出最值得继续追问的部分。'
+  },
+  {
+    title: '拆解一个功能方案',
+    description: '把需求拆成结构清晰的实现步骤，而不是泛泛建议。',
+    prompt: '帮我把这个功能需求拆成前端、后端和验证三部分执行清单。'
+  },
+  {
+    title: '理解一张截图',
+    description: '上传图片后，获取界面结构、异常点或文案问题分析。',
+    prompt: '请分析这张截图里的信息结构、视觉层级和可用性问题。'
+  },
+  {
+    title: '整理一段对话',
+    description: '把杂乱输入整理成要点、风险和下一步行动。',
+    prompt: '请把这段信息整理成摘要、待办和需要澄清的问题。'
+  },
+  {
+    title: '快速写一版文案',
+    description: '适合产品介绍、功能说明、发布说明等短文本场景。',
+    prompt: '帮我写一版简洁但专业的产品介绍文案，突出核心价值。'
+  },
+  {
+    title: '阅读一段代码',
+    description: '直接贴代码或上传文件，优先解释结构和风险点。',
+    prompt: '请阅读这段代码，解释它的作用、边界条件和潜在问题。'
+  }
 ]
 
-/** 当前显示的建议列表（随机抽取 4 个） */
-const suggestions = ref<string[]>([])
+/** 当前展示的建议卡片 */
+const suggestions = ref<SuggestionCard[]>([])
 
-/**
- * 生成随机建议列表
- * 从所有建议中随机抽取 4 个展示
- */
+/** 刷新建议列表 */
 function generateSuggestions() {
-  const shuffled = [...allSuggestions].sort(() => 0.5 - Math.random())
+  const shuffled = [...allSuggestions].sort(() => Math.random() - 0.5)
   suggestions.value = shuffled.slice(0, 4)
 }
 
-/** 向父组件暴露刷新方法 */
 defineExpose({
   refresh: generateSuggestions
 })
 
-/** 组件挂载时生成初始建议 */
 onMounted(generateSuggestions)
 </script>
 
 <template>
-  <div class="welcome-container">
-    <!-- 手绘风格图标 -->
-    <div class="welcome-brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <!-- 手绘风格背景圆 -->
-          <circle cx="60" cy="60" r="55" class="icon-bg"/>
-          <!-- 手绘风格对话框 -->
-          <path d="M35 45C35 38.9249 39.9249 34 46 34H74C80.0751 34 85 38.9249 85 45V65C85 71.0751 80.0751 76 74 76H55L40 86V76H35C28.9249 76 24 71.0751 24 65V45C24 38.9249 28.9249 34 35 34" 
-                stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <!-- 温暖的点缀 - 小太阳 -->
-          <circle cx="88" cy="32" r="8" class="sun-icon"/>
-          <path d="M88 20V24M88 40V44M76 32H80M96 32H100M79 23L82 26M94 38L97 41M79 41L82 38M94 26L97 23" 
-                stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          <!-- 对话点 -->
-          <circle cx="48" cy="55" r="4" fill="currentColor"/>
-          <circle cx="60" cy="55" r="4" fill="currentColor"/>
-          <circle cx="72" cy="55" r="4" fill="currentColor"/>
-        </svg>
+  <section class="welcome-shell">
+    <div class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Warm Editorial Workspace</span>
+        <h1 class="hero-title">把一条问题，推进成一条清晰的工作流。</h1>
+        <p class="hero-subtitle">
+          这里不是单纯的聊天窗口。你可以直接输入需求、上传图片、挂载文件，
+          再跟着任务步骤把信息整理、分析和输出收口。
+        </p>
+
+        <div class="capability-row">
+          <span class="capability-chip">文本对话</span>
+          <span class="capability-chip">图片理解</span>
+          <span class="capability-chip">文件引用</span>
+          <span class="capability-chip">步骤追踪</span>
+        </div>
       </div>
-      
-      <h1 class="welcome-title">你好，朋友</h1>
-      <p class="welcome-subtitle">
-        我是你的 AI 伙伴，一个相信技术应该有温度的存在。<br/>
-        有什么想法，我们聊聊？
-      </p>
+
+      <div class="hero-panel">
+        <div class="panel-kicker">推荐起手式</div>
+        <ul class="starter-list">
+          <li>先给一个明确目标，再补充上下文。</li>
+          <li>如果问题依赖文件，请先上传文件再追问。</li>
+          <li>如果你要结论更准，尽量限定范围和输出格式。</li>
+        </ul>
+      </div>
     </div>
 
-    <!-- 快速操作卡片 -->
-    <div class="suggestions-grid">
+    <div class="suggestion-grid">
       <button
         v-for="(suggestion, index) in suggestions"
-        :key="suggestion"
+        :key="suggestion.title"
         class="suggestion-card"
-        :style="{ animationDelay: `${index * 100}ms` }"
-        @click="emit('select', suggestion)"
+        :style="{ animationDelay: `${index * 80}ms` }"
+        @click="emit('select', suggestion.prompt)"
       >
-        <span class="card-text">{{ suggestion }}</span>
+        <span class="suggestion-title">{{ suggestion.title }}</span>
+        <span class="suggestion-description">{{ suggestion.description }}</span>
+        <span class="suggestion-action">直接开始</span>
       </button>
     </div>
-
-    <!-- 底部提示 -->
-    <p class="welcome-hint">
-      <span class="hint-icon">💡</span>
-      点击卡片开始对话，或直接在下方输入你的想法
-    </p>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.welcome-container {
+.welcome-shell {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 70vh;
-  padding: var(--space-8);
-  animation: fadeIn 0.8s ease-out;
+  gap: var(--space-8);
+  min-height: calc(100vh - 260px);
+  padding: var(--space-8) 0 var(--space-12);
 }
 
-@keyframes fadeIn {
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+  gap: var(--space-6);
+  align-items: stretch;
+}
+
+.hero-copy,
+.hero-panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, var(--surface-panel) 0%, var(--surface-strong) 100%);
+  box-shadow: var(--shadow-panel);
+}
+
+.hero-copy {
+  padding: var(--space-8);
+}
+
+.eyebrow {
+  display: inline-flex;
+  margin-bottom: var(--space-4);
+  color: var(--accent-primary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero-title {
+  max-width: 14ch;
+  font-size: clamp(2.2rem, 3vw, 3.4rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.hero-subtitle {
+  margin-top: var(--space-5);
+  max-width: 620px;
+  color: var(--text-secondary);
+  font-size: var(--text-lg);
+  line-height: 1.8;
+}
+
+.capability-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.capability-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.hero-panel {
+  padding: var(--space-6);
+}
+
+.panel-kicker {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.starter-list {
+  margin-top: var(--space-4);
+  padding-left: var(--space-5);
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.starter-list li + li {
+  margin-top: var(--space-3);
+}
+
+.suggestion-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.suggestion-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, var(--surface-strong) 100%);
+  cursor: pointer;
+  text-align: left;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+  animation: card-in var(--transition-slow) ease-out both;
+}
+
+.suggestion-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(201, 106, 23, 0.18);
+  box-shadow: var(--shadow-float);
+}
+
+.suggestion-title {
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.suggestion-description {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+}
+
+.suggestion-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+@keyframes card-in {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -138,146 +273,34 @@ onMounted(generateSuggestions)
   }
 }
 
-/* 品牌区域 */
-.welcome-brand {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-bottom: var(--space-12);
-}
-
-.brand-icon {
-  width: 100px;
-  height: 100px;
-  margin-bottom: var(--space-8);
-  color: var(--accent-primary);
-  animation: gentleFloat 4s ease-in-out infinite;
-}
-
-@keyframes gentleFloat {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
-}
-
-.brand-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.icon-bg {
-  fill: var(--accent-primary);
-  opacity: 0.1;
-}
-
-.sun-icon {
-  fill: var(--amber-400);
-}
-
-/* 标题 - Space Grotesk 个性 */
-.welcome-title {
-  font-family: var(--font-display);
-  font-size: var(--text-4xl);
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.03em;
-  margin-bottom: var(--space-4);
-}
-
-/* 副标题 */
-.welcome-subtitle {
-  font-size: var(--text-lg);
-  color: var(--text-secondary);
-  line-height: 1.7;
-  max-width: 480px;
-}
-
-/* 建议卡片网格 */
-.suggestions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-2);
-  width: 80%;
-  max-width: 640px;
-  margin-bottom: var(--space-10);
-  /* height: 100px; */
-  margin: 40px;
-}
-
-.suggestion-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6) var(--space-6);
-  min-height: 45px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  text-align: center;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.suggestion-card:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--border-default);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.card-text {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
-.suggestion-card:hover .card-text {
-  color: var(--text-primary);
-}
-
-/* 底部提示 */
-.welcome-hint {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-.hint-icon {
-  font-size: var(--text-base);
-}
-
-/* 响应式 */
-@media (max-width: 640px) {
-  .welcome-container {
-    padding: var(--space-6);
-    min-height: 60vh;
-  }
-  
-  .brand-icon {
-    width: 80px;
-    height: 80px;
-  }
-  
-  .welcome-title {
-    font-size: var(--text-3xl);
-  }
-  
-  .welcome-subtitle {
-    font-size: var(--text-base);
-  }
-  
-  .suggestions-grid {
+@media (max-width: 900px) {
+  .hero {
     grid-template-columns: 1fr;
   }
-  
-  .suggestion-card {
-    padding: var(--space-4) var(--space-5);
+}
+
+@media (max-width: 768px) {
+  .welcome-shell {
+    min-height: auto;
+    padding: var(--space-5) 0 var(--space-8);
+  }
+
+  .hero-copy,
+  .hero-panel {
+    padding: var(--space-5);
+  }
+
+  .hero-title {
+    max-width: none;
+    font-size: clamp(1.9rem, 10vw, 2.8rem);
+  }
+
+  .hero-subtitle {
+    font-size: var(--text-base);
+  }
+
+  .suggestion-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -1,8 +1,6 @@
-import type { FileData } from '../types/task'
-
 /**
  * 文件处理工具
- * 支持读取文本文件内容
+ * 提供文件类型判断、图标和展示辅助能力
  */
 
 /**
@@ -63,71 +61,6 @@ export function isSupportedTextFile(file: File): boolean {
  */
 export function getFileExtension(filename: string): string {
   return filename.split('.').pop()?.toLowerCase() || ''
-}
-
-/**
- * 将 File 转换为 FileData
- * 读取文本文件内容
- */
-export async function fileToFileData(file: File): Promise<FileData> {
-  return new Promise((resolve, reject) => {
-    // 检查文件大小（最大 5MB）
-    const MAX_SIZE = 5 * 1024 * 1024
-    if (file.size > MAX_SIZE) {
-      reject(new Error(`文件过大: ${file.name} (${formatFileSize(file.size)})，最大支持 5MB`))
-      return
-    }
-
-    const reader = new FileReader()
-
-    reader.onload = () => {
-      const content = reader.result as string
-
-      // 调试日志
-      console.log('[File] File read successfully:', {
-        name: file.name,
-        size: file.size,
-        contentLength: content?.length || 0,
-        contentPreview: content?.substring(0, 100) || '(empty)'
-      })
-
-      const fileData: FileData = {
-        id: generateId(),
-        name: file.name,
-        content: content,
-        mimeType: file.type || 'text/plain',
-        size: file.size,
-        file: file
-      }
-
-      resolve(fileData)
-    }
-
-    reader.onerror = () => {
-      console.error('[File] File read failed:', file.name)
-      reject(new Error(`读取文件失败: ${file.name}`))
-    }
-
-    // 以文本方式读取
-    reader.readAsText(file)
-  })
-}
-
-/**
- * 批量转换文件
- */
-export async function filesToFileData(files: File[]): Promise<FileData[]> {
-  const results = await Promise.allSettled(
-    files
-      .filter(isSupportedTextFile)
-      .map(file => fileToFileData(file))
-  )
-
-  return results
-    .filter((result): result is PromiseFulfilledResult<FileData> =>
-      result.status === 'fulfilled'
-    )
-    .map(result => result.value)
 }
 
 /**

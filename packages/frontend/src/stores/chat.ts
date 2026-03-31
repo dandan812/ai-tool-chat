@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef } from 'vue'
 import { sendTaskRequest } from '../api/task'
-import type { ChatMessage, Task, Step, ImageData, FileData } from '../types/task'
+import type { ChatMessage, Task, Step, ImageData, UploadedFileRef } from '../types/task'
 import { getUserFriendlyError } from '../utils/error'
 
 export interface ChatSession {
@@ -48,11 +48,11 @@ function generateFallbackTitle(content: string): string {
   return content.trim().replace(/\s+/g, ' ').slice(0, TITLE_MAX_LENGTH) || '新对话'
 }
 
-function buildUserMessageContent(content: string, images: ImageData[], files: FileData[]): string {
+function buildUserMessageContent(content: string, images: ImageData[], files: UploadedFileRef[]): string {
   const trimmed = content.trim()
   if (trimmed) return trimmed
   if (images.length > 0) return '[图片]'
-  if (files.length > 0) return `[文件: ${files.map((file) => file.name).join(', ')}]`
+  if (files.length > 0) return `[文件: ${files.map((file) => file.fileName).join(', ')}]`
   return ''
 }
 
@@ -317,7 +317,7 @@ export const useChatStore = defineStore('chat', () => {
   async function sendTaskMessage(
     content: string,
     images: ImageData[] = [],
-    files: FileData[] = []
+    files: UploadedFileRef[] = []
   ): Promise<void> {
     if (!currentSessionId.value) return
 

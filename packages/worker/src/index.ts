@@ -18,6 +18,7 @@ import {
 } from './utils/middleware';
 import { logger } from './utils/logger';
 import { ChunkStorage } from "./chunkStorage";
+import { createChunkStorageUrl, getChunkStorageStub } from './utils/uploadedFileStorage';
 
 export { ChunkStorage };
 
@@ -212,18 +213,20 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
     }
 
     const arrayBuffer = await chunk.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
     logger.info('Uploading chunk', { fileId, chunkIndex, size: arrayBuffer.byteLength });
 
-    const durableObjectUrl = `/?action=storeChunk&fileId=${encodeURIComponent(fileId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}&fileHash=${encodeURIComponent(fileHash)}&mimeType=${encodeURIComponent(mimeType)}`;
+    const durableObjectUrl = createChunkStorageUrl(
+      `/?action=storeChunk&fileId=${encodeURIComponent(fileId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}&fileHash=${encodeURIComponent(fileHash)}&mimeType=${encodeURIComponent(mimeType)}`
+    );
+    const chunkStorage = getChunkStorageStub(env, fileId);
 
     const durableRequest = new Request(durableObjectUrl, {
       method: 'POST',
       body: formData,
     });
 
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
+    const durableResponse = await chunkStorage.fetch(durableRequest);
 
     if (!durableResponse.ok) {
       const error = await durableResponse.text();
@@ -251,22 +254,23 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
       throw new ValidationError('Invalid JSON body');
     }
 
-    const { fileId, fileName, mimeType } = body;
+    const { fileId, fileName } = body;
 
     logger.info('Upload complete request', { fileId, fileName });
+    const chunkStorage = getChunkStorageStub(env, fileId);
 
     // 先检查元数据状态（调试）
-    const checkDurableUrl = `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`;
-    const checkResponse = await env.CHUNK_STORAGE.fetch(checkDurableUrl);
+    const checkDurableUrl = createChunkStorageUrl(`/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`);
+    const checkResponse = await chunkStorage.fetch(checkDurableUrl);
     const checkData = await checkResponse.json();
     logger.info('Metadata check before merge', { fileId, checkData });
 
-    const durableObjectUrl = `/?action=mergeChunks&fileId=${encodeURIComponent(fileId)}`;
+    const durableObjectUrl = createChunkStorageUrl(`/?action=mergeChunks&fileId=${encodeURIComponent(fileId)}`);
     const durableRequest = new Request(durableObjectUrl, {
       method: 'GET',  // 改为 GET，因为现在通过 URL 传递参数
     });
 
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableRequest);
+    const durableResponse = await chunkStorage.fetch(durableRequest);
 
     if (!durableResponse.ok) {
       const error = await durableResponse.text();
@@ -281,28 +285,9 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
       throw new ValidationError(result.error || 'Merge failed');
     }
 
-    // 解码 Base64 数据
-    const textContent = atob(result.data!);
-
-    if (!textContent || textContent.length === 0) {
-      throw new ValidationError('Uploaded file is empty');
-    }
-
-    const generateId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-
-    const fileData = {
-      id: generateId(),
-      name: fileName,
-      content: textContent,
-      mimeType: mimeType || 'text/plain',
-      size: result.size,
-    };
-
-    logger.info('File upload completed', { fileId, fileName, contentLength: textContent.length });
-
     return createJSONResponse<UploadCompleteResponse>({
       success: true,
-      fileData,
+      file: result.file,
     });
   } catch (error) {
     logger.error('Upload complete error', error);
@@ -323,10 +308,11 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
     }
 
     logger.info('Upload status request', { fileId });
+    const chunkStorage = getChunkStorageStub(env, fileId);
 
     // 获取元数据
-    const durableObjectUrl = `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`;
-    const durableResponse = await env.CHUNK_STORAGE.fetch(durableObjectUrl);
+    const durableObjectUrl = createChunkStorageUrl(`/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`);
+    const durableResponse = await chunkStorage.fetch(durableObjectUrl);
 
     if (!durableResponse.ok) {
       throw new NotFoundError(`File ${fileId} not found`);

@@ -1,265 +1,233 @@
 <script setup lang="ts">
 /**
  * 文件上传组件
- * 支持拖拽上传文本文件
  *
- * 功能特性：
- * - 支持点击选择或拖拽上传
- * - 显示已上传文件列表
- * - 文件类型检查（仅支持文本文件）
- * - 显示文件大小和图标
- * - 支持分片上传大文件
- * - 显示上传进度
+ * 目标：
+ * - 保留现有分片上传与断点续传逻辑
+ * - 让文件列表、进度卡和上传入口更适合放进 composer 托盘
  *
  * @package frontend/src/components
  */
 
 import { ref } from 'vue'
-import type { FileData, UploadProgress } from '../types/task'
-import { fileToFileData, isSupportedTextFile, formatFileSize, getFileIcon } from '../utils/file'
-import {
-  uploadChunkedFile,
-  shouldUseChunking
-} from '../utils/chunk'
+import type { UploadedFileRef, UploadProgress } from '../types/task'
+import { formatFileSize, getFileIcon, isSupportedTextFile } from '../utils/file'
+import { uploadChunkedFile } from '../utils/chunk'
 
-/**
- * 组件属性
- */
 interface Props {
-  /** 已上传的文件列表 */
-  files: FileData[]
+  /** 已上传文件 */
+  files: UploadedFileRef[]
 }
 
 defineProps<Props>()
 
-/**
- * 组件事件
- */
 const emit = defineEmits<{
-  /** 添加文件事件 */
-  add: [file: FileData]
-  /** 移除文件事件 */
+  /** 添加文件 */
+  add: [file: UploadedFileRef]
+  /** 移除文件 */
   remove: [id: string]
-  /** 上传进度事件 */
+  /** 上传进度 */
   uploadProgress: [progress: UploadProgress]
+  /** 上传错误 */
+  uploadError: [message: string]
 }>()
 
-/** 拖拽状态标识 */
+/** 拖拽状态 */
 const isDragging = ref(false)
 /** 文件输入框引用 */
 const inputRef = ref<HTMLInputElement | null>(null)
-
 /** 上传进度映射 */
 const uploadProgressMap = ref<Map<string, UploadProgress>>(new Map())
 
 /**
- * 处理文件选择事件
- * 用户点击上传区域选择文件时触发
+ * 选择文件后处理
+ * @param event change 事件
  */
 async function handleFileSelect(event: Event) {
   const target = event.target as HTMLInputElement
-  const files = target.files
-  if (!files || files.length === 0) return
+  const fileList = target.files
+  if (!fileList || fileList.length === 0) return
 
-  await processFiles(Array.from(files))
+  await processFiles(Array.from(fileList))
 
-  // 清空 input，允许重复选择同一文件
   if (inputRef.value) {
     inputRef.value.value = ''
   }
 }
 
 /**
- * 处理文件列表
- * 过滤并处理每个文件
- * @param files 待处理的文件数组
+ * 批量处理文件
+ * @param fileList 文件数组
  */
-async function processFiles(files: File[]) {
-  for (const file of files) {
-    // 检查是否支持
+async function processFiles(fileList: File[]) {
+  for (const file of fileList) {
     if (!isSupportedTextFile(file)) {
       console.warn(`不支持的文件类型: ${file.name}`)
       continue
     }
 
     try {
-      // 检查是否需要使用分片上传
-      if (shouldUseChunking(file)) {
-        // 分片上传
-        const fileData = await uploadChunkedFile(file, {
-          onProgress: (progress) => {
-            // 更新进度映射
-            uploadProgressMap.value.set(progress.fileId, progress)
-            // 触发进度事件
-            emit('uploadProgress', progress)
-          },
-        })
+      const uploadedFile = await uploadChunkedFile(file, {
+        onProgress: (progress) => {
+          uploadProgressMap.value.set(progress.fileId, progress)
+          emit('uploadProgress', progress)
+        }
+      })
 
-        emit('add', fileData)
-        // 完成后清理进度
-        uploadProgressMap.value.delete(fileData.id)
-      } else {
-        // 小文件直接读取上传
-        const fileData = await fileToFileData(file)
-        emit('add', fileData)
-      }
+      emit('add', uploadedFile)
+      uploadProgressMap.value.delete(uploadedFile.fileId)
     } catch (error) {
       console.error('读取文件失败:', error)
-      // 清理进度
-      uploadProgressMap.value.forEach((_, fileId) => {
-        uploadProgressMap.value.delete(fileId)
-      })
+      uploadProgressMap.value.clear()
+      emit('uploadError', error instanceof Error ? error.message : '文件上传失败')
     }
   }
 }
 
-/**
- * 处理拖拽进入事件
- */
-function handleDragEnter(e: DragEvent) {
-  e.preventDefault()
+/** 处理拖拽进入 */
+function handleDragEnter(event: DragEvent) {
+  event.preventDefault()
   isDragging.value = true
 }
 
-/**
- * 处理拖拽离开事件
- */
-function handleDragLeave(e: DragEvent) {
-  e.preventDefault()
+/** 处理拖拽离开 */
+function handleDragLeave(event: DragEvent) {
+  event.preventDefault()
   isDragging.value = false
 }
 
-/**
- * 处理拖拽悬停事件
- */
-function handleDragOver(e: DragEvent) {
-  e.preventDefault()
+/** 处理拖拽悬停 */
+function handleDragOver(event: DragEvent) {
+  event.preventDefault()
 }
 
-/**
- * 处理放置文件事件
- */
-async function handleDrop(e: DragEvent) {
-  e.preventDefault()
+/** 处理拖拽释放 */
+async function handleDrop(event: DragEvent) {
+  event.preventDefault()
   isDragging.value = false
 
-  const files = e.dataTransfer?.files
-  if (!files || files.length === 0) return
+  const fileList = event.dataTransfer?.files
+  if (!fileList || fileList.length === 0) return
 
-  await processFiles(Array.from(files))
+  await processFiles(Array.from(fileList))
 }
 
-/**
- * 点击上传区域触发文件选择
- */
+/** 打开文件选择器 */
 function handleClick() {
   inputRef.value?.click()
 }
 
 /**
- * 移除指定文件
- * @param id 要移除的文件 ID
+ * 移除文件
+ * @param id 文件 ID
  */
 function removeFile(id: string) {
   emit('remove', id)
 }
 
 /**
- * 格式化时间（秒 → 可读格式）
+ * 格式化剩余时间
  * @param seconds 秒数
- * @returns 格式化后的时间字符串
  */
 function formatTime(seconds: number): string {
-  if (seconds < 60) {
-    return `${Math.round(seconds)}秒`
-  } else if (seconds < 3600) {
+  if (seconds < 60) return `${Math.round(seconds)} 秒`
+
+  if (seconds < 3600) {
     const minutes = Math.floor(seconds / 60)
-    const secs = Math.round(seconds % 60)
-    return `${minutes}分${secs}秒`
-  } else {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    return `${hours}小时${minutes}分`
+    const remainSeconds = Math.round(seconds % 60)
+    return `${minutes} 分 ${remainSeconds} 秒`
   }
+
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  return `${hours} 小时 ${minutes} 分`
 }
 
 /**
- * 获取文件图标（简化版）
- * 根据文件类型返回对应的 emoji 图标
+ * 显示文件图标
  * @param name 文件名
- * @returns emoji 图标字符串
  */
 function getIcon(name: string): string {
   const icon = getFileIcon(name)
-  // 返回 emoji 图标
   const emojiMap: Record<string, string> = {
-    'js': '📜', 'ts': '📘', 'react': '⚛️',
-    'python': '🐍', 'java': '☕', 'go': '🐹',
-    'rust': '🦀', 'html': '🌐', 'css': '🎨',
-    'json': '📋', 'xml': '📄', 'sql': '🗃️',
-    'markdown': '📝', 'config': '⚙️', 'yaml': '📃',
-    'text': '📄', 'csv': '📊', 'file': '📎'
+    js: '📜',
+    ts: '📘',
+    react: '⚛️',
+    python: '🐍',
+    java: '☕',
+    go: '🐹',
+    rust: '🦀',
+    html: '🌐',
+    css: '🎨',
+    json: '📋',
+    xml: '📄',
+    sql: '🗃️',
+    markdown: '📝',
+    config: '⚙️',
+    yaml: '📃',
+    text: '📄',
+    csv: '📊',
+    file: '📎'
   }
+
   return emojiMap[icon] || '📎'
 }
 </script>
 
 <template>
   <div class="file-uploader">
-    <!-- 已上传文件列表 -->
     <div v-if="files.length > 0" class="file-list">
-      <div
+      <article
         v-for="file in files"
-        :key="file.id"
-        class="file-item"
-        :title="file.name"
+        :key="file.fileId"
+        class="file-chip"
+        :title="file.fileName"
       >
-        <span class="file-icon">{{ getIcon(file.name) }}</span>
-        <div class="file-info">
-          <span class="file-name">{{ file.name }}</span>
-          <span class="file-size">{{ formatFileSize(file.size) }}</span>
+        <span class="file-icon">{{ getIcon(file.fileName) }}</span>
+        <div class="file-copy">
+          <span class="file-name">{{ file.fileName }}</span>
+          <span class="file-meta">{{ formatFileSize(file.size) }} · 已引用</span>
         </div>
-        <button
-          class="remove-btn"
-          @click="removeFile(file.id)"
-          title="移除文件"
-        >
+        <button class="remove-btn" type="button" title="移除文件" @click="removeFile(file.fileId)">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
-      </div>
+      </article>
     </div>
 
-    <!-- 上传进度列表 -->
-    <div v-if="uploadProgressMap.size > 0" class="upload-progress-list">
-      <div
+    <div v-if="uploadProgressMap.size > 0" class="progress-list">
+      <article
         v-for="progress in uploadProgressMap.values()"
         :key="progress.fileId"
-        class="upload-progress-item"
+        class="progress-card"
       >
-        <div class="progress-header">
-          <span class="progress-filename">{{ progress.fileName }}</span>
-          <span class="progress-percentage">{{ progress.percentage.toFixed(1) }}%</span>
+        <div class="progress-head">
+          <div class="progress-copy">
+            <span class="progress-name">{{ progress.fileName }}</span>
+            <span class="progress-meta">
+              {{ progress.uploadedChunks }}/{{ progress.totalChunks }} 片
+              <template v-if="progress.speed > 0"> · {{ progress.speed.toFixed(1) }} KB/s</template>
+            </span>
+          </div>
+          <span class="progress-percent">{{ progress.percentage.toFixed(1) }}%</span>
         </div>
-        <div class="progress-bar-container">
+
+        <div class="progress-track">
           <div class="progress-bar" :style="{ width: `${progress.percentage}%` }"></div>
         </div>
-        <div class="progress-info">
-          <span>{{ progress.uploadedChunks }}/{{ progress.totalChunks }} 片</span>
-          <span v-if="progress.speed > 0">{{ progress.speed.toFixed(1) }} KB/s</span>
-          <span v-if="progress.estimatedTime > 0">
-            剩余 {{ formatTime(progress.estimatedTime) }}
-          </span>
-        </div>
-      </div>
+
+        <span v-if="progress.estimatedTime > 0" class="progress-eta">
+          预计剩余 {{ formatTime(progress.estimatedTime) }}
+        </span>
+      </article>
     </div>
 
-    <!-- 上传区域 -->
-    <div
+    <button
       class="upload-zone"
       :class="{ dragging: isDragging }"
+      type="button"
       @click="handleClick"
       @dragenter="handleDragEnter"
       @dragleave="handleDragLeave"
@@ -274,21 +242,21 @@ function getIcon(name: string): string {
         class="hidden-input"
         @change="handleFileSelect"
       />
-      
-      <div class="upload-content">
-        <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+      <span class="upload-zone-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="17 8 12 3 7 8"></polyline>
           <line x1="12" y1="3" x2="12" y2="15"></line>
         </svg>
-        <span class="upload-text">
-          {{ isDragging ? '松开以上传' : '点击或拖拽上传文件' }}
-        </span>
-        <span class="upload-hint">
-          支持 txt, md, json, js, py, java, go, sql 等代码文件
-        </span>
-      </div>
-    </div>
+      </span>
+      <span class="upload-zone-copy">
+        {{ isDragging ? '松开后开始上传' : '点击或拖拽添加文本 / 代码文件' }}
+      </span>
+      <span class="upload-zone-hint">
+        上传完成后只保留文件引用，提问时不会重复传整份正文。
+      </span>
+    </button>
   </div>
 </template>
 
@@ -299,27 +267,32 @@ function getIcon(name: string): string {
   gap: var(--space-3);
 }
 
-/* 文件列表 */
-.file-list {
+.file-list,
+.progress-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.file-item {
+.file-chip,
+.progress-card {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  transition: all var(--transition-fast);
+  background: var(--surface-strong);
 }
 
-.file-item:hover {
-  border-color: var(--border-color);
-  background: var(--bg-tertiary);
+.file-chip {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.file-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(201, 106, 23, 0.18);
+  box-shadow: var(--shadow-panel);
 }
 
 .file-icon {
@@ -327,183 +300,134 @@ function getIcon(name: string): string {
   flex-shrink: 0;
 }
 
-.file-info {
-  flex: 1;
-  min-width: 0;
+.file-copy,
+.progress-copy {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
-.file-name {
-  font-size: var(--text-sm);
-  font-weight: 500;
+.file-name,
+.progress-name {
   color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.file-size {
+.file-meta,
+.progress-meta,
+.progress-eta {
+  color: var(--text-tertiary);
   font-size: var(--text-xs);
-  color: var(--text-muted);
 }
 
 .remove-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
-  border: none;
-  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all var(--transition-fast);
-  flex-shrink: 0;
 }
 
 .remove-btn:hover {
-  background: var(--error-bg);
+  background: var(--danger-soft);
   color: var(--error);
 }
 
-/* 上传进度列表 */
-.upload-progress-list {
-  display: flex;
+.progress-card {
+  align-items: stretch;
   flex-direction: column;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
 }
 
-.upload-progress-item {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-4);
-  animation: fadeIn 200ms ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.progress-header {
+.progress-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-2);
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
-.progress-filename {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.progress-percentage {
-  font-size: var(--text-sm);
-  font-weight: 600;
+.progress-percent {
   color: var(--accent-primary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
-.progress-bar-container {
-  height: 4px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
+.progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
   overflow: hidden;
-  margin-bottom: var(--space-2);
 }
 
 .progress-bar {
   height: 100%;
-  background: var(--accent-primary);
-  transition: width 0.3s ease;
-  border-radius: var(--radius-sm);
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  transition: width var(--transition-base);
 }
 
-.progress-info {
-  display: flex;
-  gap: var(--space-3);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-/* 上传区域 */
 .upload-zone {
   position: relative;
-  padding: var(--space-6);
-  border: 2px dashed var(--border-subtle);
-  border-radius: var(--radius-xl);
-  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px dashed rgba(201, 106, 23, 0.24);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, var(--surface-strong) 100%);
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .upload-zone:hover,
 .upload-zone.dragging {
-  border-color: var(--accent-primary);
-  background: var(--accent-bg);
-}
-
-.upload-zone.dragging {
-  transform: scale(1.02);
+  transform: translateY(-1px);
+  border-color: rgba(201, 106, 23, 0.36);
+  box-shadow: var(--shadow-panel);
 }
 
 .hidden-input {
   position: absolute;
   inset: 0;
   opacity: 0;
-  cursor: pointer;
-}
-
-.upload-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
   pointer-events: none;
 }
 
-.upload-icon {
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.upload-zone:hover .upload-icon,
-.upload-zone.dragging .upload-icon {
+.upload-zone-icon {
   color: var(--accent-primary);
-  transform: translateY(-2px);
 }
 
-.upload-text {
+.upload-zone-copy {
+  color: var(--text-primary);
   font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-weight: 700;
 }
 
-.upload-hint {
+.upload-zone-hint {
+  color: var(--text-tertiary);
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  line-height: 1.6;
   text-align: center;
 }
 
-/* 响应式 */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .upload-zone {
     padding: var(--space-4);
-  }
-
-  .upload-hint {
-    display: none;
   }
 }
 </style>

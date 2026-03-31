@@ -254,19 +254,28 @@ export interface ImageData {
  * @property size - 文件大小（字节）
  * @property file - 原始 File 对象（可选）
  */
-export interface FileData {
-  /** 文件唯一 ID */
-  id: string;
+export interface UploadedFileRef {
+  /** 服务端文件唯一 ID */
+  fileId: string;
   /** 文件名 */
-  name: string;
-  /** 文件内容（纯文本） */
-  content: string;
+  fileName: string;
   /** 文件 MIME 类型 */
   mimeType: string;
   /** 文件大小（字节） */
   size: number;
-  /** 原始 File 对象（可选） */
-  file?: File;
+  /** 文件哈希 */
+  fileHash: string;
+  /** 文件来源 */
+  source: 'uploaded';
+}
+
+/**
+ * 上传完成响应
+ */
+export interface UploadCompleteResponse {
+  success: boolean;
+  file?: UploadedFileRef;
+  error?: string;
 }
 
 // ==================== 上传进度类型 ====================

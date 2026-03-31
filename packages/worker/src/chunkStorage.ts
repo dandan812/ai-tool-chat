@@ -1,20 +1,14 @@
 /**
  * ChunkStorage Durable Object - 持久化分片存储
  *
- * 正确实现 Durable Object 接口
+ * 说明：
+ * - 每个 fileId 对应一个 Durable Object 实例
+ * - 分片写入必须幂等，避免重复上传导致计数错误
+ * - 上传完成后，合并后的文件正文会保存在同一个 DO 中
+ * - 断点续传依赖 metadata 中的 receivedIndices 恢复缺失分片
  */
+import type { Env, UploadedFileRef } from './types';
 import { logger } from './utils/logger';
-
-interface ChunkEntry {
-  fileId: string;
-  chunkIndex: number;
-  data: ArrayBuffer;
-  fileName?: string;
-  fileHash?: string;
-  totalChunks?: number;
-  mimeType?: string;
-  createdAt?: number;
-}
 
 interface FileMetadata {
   fileId: string;
@@ -26,7 +20,10 @@ interface FileMetadata {
   receivedIndices: number[];
   mimeType: string;
   createdAt: number;
+  updatedAt: number;
 }
+
+const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 
 export class ChunkStorage implements DurableObject {
   constructor(private state: DurableObjectState, private env: Env) {}
@@ -41,31 +38,24 @@ export class ChunkStorage implements DurableObject {
       switch (action) {
         case 'storeChunk':
           return await this.handleStoreChunk(request);
-
         case 'getMetadata':
           return await this.handleGetMetadata(url);
-
+        case 'getFileContent':
+          return await this.handleGetFileContent(url);
         case 'isComplete':
           return await this.handleIsComplete(url);
-
         case 'mergeChunks':
-          return await this.handleMergeChunks();
-
+          return await this.handleMergeChunks(url);
         case 'deleteFile':
           return await this.handleDeleteFile(url);
-
         case 'cleanup':
           return await this.handleCleanup();
-
         default:
           return new Response('Unknown action', { status: 400 });
       }
     } catch (error) {
       logger.error('ChunkStorage error', { action, error });
-      return new Response(JSON.stringify({ error: String(error) }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return this.jsonResponse({ error: String(error) }, 500);
     }
   }
 
@@ -75,6 +65,8 @@ export class ChunkStorage implements DurableObject {
   private async handleStoreChunk(request: Request): Promise<Response> {
     const formData = await request.formData();
     const fileId = formData.get('fileId') as string;
+    const fileName = formData.get('fileName') as string || '';
+    const fileSize = parseInt(formData.get('fileSize') as string || '0');
     const chunkIndex = parseInt(formData.get('chunkIndex') as string || '0');
     const totalChunks = parseInt(formData.get('totalChunks') as string || '0');
     const fileHash = formData.get('fileHash') as string;
@@ -82,160 +74,225 @@ export class ChunkStorage implements DurableObject {
     const mimeType = formData.get('mimeType') as string || 'text/plain';
 
     if (!fileId || !chunk || isNaN(chunkIndex)) {
-      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return this.jsonResponse({ error: 'Missing required fields' }, 400);
     }
 
     const arrayBuffer = await chunk.arrayBuffer();
+    const metadataKey = this.getMetadataKey(fileId);
+    const chunkKey = this.getChunkKey(chunkIndex);
+    const now = Date.now();
 
-    // 先在事务外获取或创建元数据
-    const metadataKey = `meta:${fileId}`;
-    let metadata = await this.state.get<FileMetadata>(metadataKey);
+    let metadata = await this.state.storage.get<FileMetadata>(metadataKey);
+    if (metadata && this.isExpired(metadata)) {
+      await this.deleteFileData(metadata);
+      metadata = undefined;
+    }
+
+    if (metadata?.receivedIndices.includes(chunkIndex)) {
+      return this.jsonResponse({
+        success: true,
+        duplicate: true,
+        chunkIndex,
+        fileId,
+        receivedChunks: metadata.receivedChunks,
+        receivedIndices: metadata.receivedIndices,
+      });
+    }
+
+    const existingChunk = await this.state.storage.get<ArrayBuffer>(chunkKey);
+    if (existingChunk) {
+      const deduplicatedIndices = metadata
+        ? Array.from(new Set([...metadata.receivedIndices, chunkIndex])).sort((a, b) => a - b)
+        : [chunkIndex];
+
+      if (metadata) {
+        metadata = {
+          ...metadata,
+          receivedChunks: deduplicatedIndices.length,
+          receivedIndices: deduplicatedIndices,
+          updatedAt: now,
+        };
+        await this.state.storage.put(metadataKey, metadata);
+      }
+
+      return this.jsonResponse({
+        success: true,
+        duplicate: true,
+        chunkIndex,
+        fileId,
+        receivedChunks: deduplicatedIndices.length,
+        receivedIndices: deduplicatedIndices,
+      });
+    }
 
     if (!metadata) {
-      // 初始化元数据
       metadata = {
-        fileName: '',
+        fileId,
+        fileName,
         fileHash,
-        totalSize: arrayBuffer.byteLength,
-        totalChunks: parseInt(totalChunks as string) || 1,
+        totalSize: fileSize > 0 ? fileSize : arrayBuffer.byteLength,
+        totalChunks: totalChunks > 0 ? totalChunks : 1,
         receivedChunks: 0,
         receivedIndices: [],
         mimeType,
-        createdAt: Date.now(),
+        createdAt: now,
+        updatedAt: now,
       };
     }
 
-    // 更新元数据计数
+    const nextIndices = Array.from(new Set([...metadata.receivedIndices, chunkIndex])).sort((a, b) => a - b);
     const updatedMetadata: FileMetadata = {
       ...metadata,
-      receivedChunks: metadata.receivedChunks + 1,
-      receivedIndices: [...metadata.receivedIndices, chunkIndex],
+      fileName: fileName || metadata.fileName,
+      fileHash: fileHash || metadata.fileHash,
+      totalSize: fileSize > 0 ? fileSize : metadata.totalSize,
+      totalChunks: totalChunks > 0 ? totalChunks : metadata.totalChunks,
+      mimeType,
+      receivedChunks: nextIndices.length,
+      receivedIndices: nextIndices,
+      updatedAt: now,
     };
 
-    // 使用事务确保原子性
-    await this.state.transaction(async (txn) => {
+    await this.state.storage.transaction(async (txn) => {
       await txn.put(metadataKey, updatedMetadata);
-
-      // 存储分片
-      const chunkKey = `chunk:${fileId}:${chunkIndex}`;
       await txn.put(chunkKey, arrayBuffer);
     });
 
-    return new Response(JSON.stringify({
+    return this.jsonResponse({
       success: true,
       chunkIndex,
       fileId,
       receivedChunks: updatedMetadata.receivedChunks,
-    }), {
-      headers: { 'Content-Type': 'application/json' }
+      receivedIndices: updatedMetadata.receivedIndices,
     });
   }
 
   /**
-   * 获取元数据
+   * 获取分片元数据
    */
   private async handleGetMetadata(url: URL): Promise<Response> {
     const fileId = url.searchParams.get('fileId');
     if (!fileId) {
-      return new Response(JSON.stringify({ error: 'Missing fileId' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return this.jsonResponse({ error: 'Missing fileId' }, 400);
     }
 
-    const metadataKey = `meta:${fileId}`;
-    const metadata = await this.state.get<FileMetadata>(metadataKey);
-
+    const metadata = await this.state.storage.get<FileMetadata>(this.getMetadataKey(fileId));
     if (!metadata) {
-      return new Response(JSON.stringify({ error: 'File not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return this.jsonResponse({ error: 'File not found' }, 404);
     }
 
-    return new Response(JSON.stringify(metadata), {
-      headers: { 'Content-Type': 'application/json' }
+    if (this.isExpired(metadata)) {
+      await this.deleteFileData(metadata);
+      return this.jsonResponse({ error: 'File not found' }, 404);
+    }
+
+    return this.jsonResponse(metadata);
+  }
+
+  /**
+   * 获取合并后的文件正文
+   */
+  private async handleGetFileContent(url: URL): Promise<Response> {
+    const fileId = url.searchParams.get('fileId');
+    if (!fileId) {
+      return this.jsonResponse({ error: 'Missing fileId' }, 400);
+    }
+
+    const metadata = await this.state.storage.get<FileMetadata>(this.getMetadataKey(fileId));
+    const content = await this.state.storage.get<string>(this.getContentKey(fileId));
+
+    if (!metadata || content === undefined) {
+      return this.jsonResponse({ error: 'Uploaded file not found' }, 404);
+    }
+
+    if (this.isExpired(metadata)) {
+      await this.deleteFileData(metadata);
+      return this.jsonResponse({ error: 'Uploaded file not found' }, 404);
+    }
+
+    return this.jsonResponse({
+      fileId: metadata.fileId,
+      fileName: metadata.fileName,
+      mimeType: metadata.mimeType,
+      size: metadata.totalSize,
+      fileHash: metadata.fileHash,
+      source: 'uploaded',
+      content,
     });
   }
 
   /**
-   * 检查是否完整
+   * 检查是否上传完整
    */
   private async handleIsComplete(url: URL): Promise<Response> {
     const fileId = url.searchParams.get('fileId');
     if (!fileId) {
-      return new Response(JSON.stringify({ error: 'Missing fileId' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return this.jsonResponse({ error: 'Missing fileId' }, 400);
     }
 
-    const metadataKey = `meta:${fileId}`;
-    const metadata = await this.state.get<FileMetadata>(metadataKey);
-
+    const metadata = await this.state.storage.get<FileMetadata>(this.getMetadataKey(fileId));
     if (!metadata) {
-      return new Response(JSON.stringify({ isComplete: false }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return this.jsonResponse({ isComplete: false }, 404);
     }
 
-    const isComplete = metadata.receivedChunks >= metadata.totalChunks;
+    if (this.isExpired(metadata)) {
+      await this.deleteFileData(metadata);
+      return this.jsonResponse({ isComplete: false }, 404);
+    }
 
-    return new Response(JSON.stringify({ isComplete }), {
-      headers: { 'Content-Type': 'application/json' }
+    return this.jsonResponse({
+      isComplete: metadata.receivedChunks >= metadata.totalChunks,
     });
   }
 
   /**
-   * 合并分片
+   * 合并分片并持久化最终文件正文
    */
   private async handleMergeChunks(url: URL): Promise<Response> {
     const fileId = url.searchParams.get('fileId');
     if (!fileId) {
-      return new Response(JSON.stringify({ error: 'Missing fileId' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return this.jsonResponse({ error: 'Missing fileId' }, 400);
     }
 
-    // 先在事务外获取元数据，避免在事务内使用 list() 导致堆栈溢出
-    const metadataKey = `meta:${fileId}`;
-    const metadata = await this.state.get<FileMetadata>(metadataKey);
+    const metadataKey = this.getMetadataKey(fileId);
+    const contentKey = this.getContentKey(fileId);
+    const metadata = await this.state.storage.get<FileMetadata>(metadataKey);
 
     if (!metadata) {
-      return new Response(JSON.stringify({ error: 'File not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
+      return this.jsonResponse({ error: 'File not found' }, 404);
+    }
+
+    if (this.isExpired(metadata)) {
+      await this.deleteFileData(metadata);
+      return this.jsonResponse({ error: 'File not found' }, 404);
+    }
+
+    const existingContent = await this.state.storage.get<string>(contentKey);
+    if (existingContent !== undefined) {
+      return this.jsonResponse({
+        success: true,
+        file: this.createUploadedFileRef(metadata),
       });
     }
 
-    // 检查是否所有分片都已上传
     if (metadata.receivedChunks < metadata.totalChunks) {
-      return new Response(JSON.stringify({
+      return this.jsonResponse({
         success: false,
-        error: `Incomplete upload: ${metadata.receivedChunks}/${metadata.totalChunks} chunks received`
-      }), {
-        headers: { 'Content-Type': 'application/json' }
+        error: `Incomplete upload: ${metadata.receivedChunks}/${metadata.totalChunks} chunks received`,
       });
     }
 
-    // 收集所有分片并在事务内合并
-    const result = await this.state.transaction(async (txn) => {
+    const result = await this.state.storage.transaction(async (txn) => {
       const chunks: ArrayBuffer[] = [];
+
       for (let i = 0; i < metadata.totalChunks; i++) {
-        const chunkKey = `chunk:${fileId}:${i}`;
-        const chunk = await txn.get<ArrayBuffer>(chunkKey);
+        const chunk = await txn.get<ArrayBuffer>(this.getChunkKey(i));
         if (!chunk) {
           return { success: false, error: `Chunk ${i} not found` };
         }
         chunks.push(chunk);
       }
 
-      // 合并所有分片
       const merged = new Uint8Array(metadata.totalSize);
       let offset = 0;
       for (const chunk of chunks) {
@@ -243,92 +300,121 @@ export class ChunkStorage implements DurableObject {
         offset += chunk.byteLength;
       }
 
-      // 转换为 Base64（使用 TextDecoder 正确处理）
-      const textDecoder = new TextDecoder();
-      const textContent = textDecoder.decode(merged);
-      const base64 = btoa(textContent);
+      const content = new TextDecoder().decode(merged);
+      const updatedMetadata: FileMetadata = {
+        ...metadata,
+        updatedAt: Date.now(),
+      };
 
-      // 删除分片
+      await txn.put(contentKey, content);
+      await txn.put(metadataKey, updatedMetadata);
+
       for (let i = 0; i < metadata.totalChunks; i++) {
-        await txn.delete(`chunk:${fileId}:${i}`);
+        await txn.delete(this.getChunkKey(i));
       }
-
-      // 删除元数据
-      await txn.delete(`meta:${fileId}`);
 
       return {
         success: true,
-        data: base64,
-        size: metadata.totalSize,
+        file: this.createUploadedFileRef(updatedMetadata),
       };
     });
 
-    return new Response(JSON.stringify(result), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return this.jsonResponse(result);
   }
 
   /**
-   * 删除文件
+   * 删除指定文件的上传状态和正文
    */
   private async handleDeleteFile(url: URL): Promise<Response> {
     const fileId = url.searchParams.get('fileId');
     if (!fileId) {
-      return new Response(JSON.stringify({ error: 'Missing fileId' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return this.jsonResponse({ error: 'Missing fileId' }, 400);
     }
 
-    const result = await this.state.transaction(async (txn) => {
-      // 删除所有分片
-      for (let i = 0; i < 100; i++) { // 限制避免无限循环
-        const chunkKey = `chunk:${fileId}:${i}`;
-        await txn.delete(chunkKey);
-        if (!(await txn.get(chunkKey))) {
-          break; // 分片已删除完毕
-        }
-      }
+    const metadata = await this.state.storage.get<FileMetadata>(this.getMetadataKey(fileId));
 
-      // 删除元数据
-      await txn.delete(`meta:${fileId}`);
+    if (metadata) {
+      await this.deleteFileData(metadata);
+    }
 
-      return { success: true };
-    });
-
-    return new Response(JSON.stringify(result), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return this.jsonResponse({ success: true });
   }
 
   /**
-   * 清理过期文件（5 分钟）
+   * 清理过期上传内容
    */
   private async handleCleanup(): Promise<Response> {
-    // 先在事务外列出所有文件
-    const files = await this.state.list<FileMetadata>({ prefix: 'meta:' });
+    const files = await this.state.storage.list<FileMetadata>({ prefix: 'meta:' });
     const now = Date.now();
-    const timeout = 5 * 60 * 1000; // 5 分钟
+    const expiredFiles: FileMetadata[] = [];
 
-    const keysToDelete: string[] = [];
-    for (const [key, value] of files) {
-      if (now - value.createdAt > timeout) {
-        keysToDelete.push(key);
+    for (const [, metadata] of files) {
+      const lastUpdatedAt = metadata.updatedAt || metadata.createdAt;
+      if (now - lastUpdatedAt > UPLOAD_TTL_MS) {
+        expiredFiles.push(metadata);
       }
     }
 
-    // 在事务内删除
-    const result = await this.state.transaction(async (txn) => {
+    const result = await this.state.storage.transaction(async (txn) => {
       let deletedCount = 0;
-      for (const key of keysToDelete) {
-        await txn.delete(key);
+
+      for (const metadata of expiredFiles) {
+        for (let i = 0; i < metadata.totalChunks; i++) {
+          await txn.delete(this.getChunkKey(i));
+        }
+        await txn.delete(this.getMetadataKey(metadata.fileId));
+        await txn.delete(this.getContentKey(metadata.fileId));
         deletedCount++;
       }
+
       return { deletedCount };
     });
 
-    return new Response(JSON.stringify(result), {
-      headers: { 'Content-Type': 'application/json' }
+    return this.jsonResponse(result);
+  }
+
+  private createUploadedFileRef(metadata: FileMetadata): UploadedFileRef {
+    return {
+      fileId: metadata.fileId,
+      fileName: metadata.fileName,
+      mimeType: metadata.mimeType,
+      size: metadata.totalSize,
+      fileHash: metadata.fileHash,
+      source: 'uploaded' as const,
+    };
+  }
+
+  private getMetadataKey(fileId: string): string {
+    return `meta:${fileId}`;
+  }
+
+  private getChunkKey(chunkIndex: number): string {
+    return `chunk:${chunkIndex}`;
+  }
+
+  private getContentKey(fileId: string): string {
+    return `content:${fileId}`;
+  }
+
+  private isExpired(metadata: FileMetadata): boolean {
+    const lastUpdatedAt = metadata.updatedAt || metadata.createdAt;
+    return Date.now() - lastUpdatedAt > UPLOAD_TTL_MS;
+  }
+
+  private async deleteFileData(metadata: FileMetadata): Promise<void> {
+    await this.state.storage.transaction(async (txn) => {
+      for (let i = 0; i < metadata.totalChunks; i++) {
+        await txn.delete(this.getChunkKey(i));
+      }
+      await txn.delete(this.getMetadataKey(metadata.fileId));
+      await txn.delete(this.getContentKey(metadata.fileId));
+    });
+  }
+
+  private jsonResponse(data: unknown, status = 200): Response {
+    return new Response(JSON.stringify(data), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 }

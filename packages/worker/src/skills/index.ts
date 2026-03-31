@@ -17,6 +17,14 @@ import { textSkill } from './textSkill';
 import { multimodalSkill } from './multimodalSkill';
 import { fileSkill } from './fileSkill';
 import { glmSkill } from './glmSkill';
+import {
+  isDeepSeekTextModel,
+  isGlmTextModel,
+  isOpenAITextModel,
+  isQwenTextModel,
+  resolveDefaultMultimodalModel,
+  resolveDefaultTextModel,
+} from "../utils/textModel";
 
 /**
  * Skill 注册表
@@ -120,6 +128,48 @@ export function selectSkill(
     toolingMode,
   });
 
+  const selectDefaultTextRoute = (): Pick<SelectedSkill, 'model' | 'label' | 'description'> => {
+    const model = resolveDefaultTextModel(env);
+
+    if (isGlmTextModel(model)) {
+      return {
+        model,
+        label: '文件分析',
+        description: `调用 ${model} 分析上传内容`,
+      };
+    }
+
+    if (isOpenAITextModel(model)) {
+      return {
+        model,
+        label: '文件分析',
+        description: `调用 ${model} 分析上传内容`,
+      };
+    }
+
+    if (isDeepSeekTextModel(model)) {
+      return {
+        model,
+        label: '文件分析',
+        description: `调用 ${model} 分析上传内容`,
+      };
+    }
+
+    if (isQwenTextModel(model)) {
+      return {
+        model,
+        label: '文件分析',
+        description: `调用 ${model} 分析上传内容`,
+      };
+    }
+
+    return {
+      model,
+      label: '文件分析',
+      description: `调用 ${model} 分析上传内容`,
+    };
+  };
+
   // 规则 1：如果指定了 model，使用对应的 Skill
   if (model) {
     if (model.startsWith('glm')) {
@@ -139,59 +189,56 @@ export function selectSkill(
 
   // 规则 2：如果有图片，使用多模态 Skill
   if (images.length > 0) {
-    return createSelection(multimodalSkill, 'qwen3.5-plus', '多模态处理', '调用 Qwen3.5 处理图文');
+    const multimodalModel = resolveDefaultMultimodalModel(env);
+    return createSelection(multimodalSkill, multimodalModel, '多模态处理', `调用 ${multimodalModel} 处理图文`);
   }
 
   // 规则 3：如果有文件，使用文件处理 Skill
   if (files.length > 0) {
-    return createSelection(fileSkill, 'glm-4-flash', '文件分析', '调用文件处理技能分析上传内容');
+    const fileRoute = selectDefaultTextRoute();
+    return createSelection(fileSkill, fileRoute.model, fileRoute.label, fileRoute.description);
   }
 
-  if (env?.DEFAULT_MODEL?.startsWith('glm')) {
+  const defaultTextModel = resolveDefaultTextModel(env);
+
+  if (isGlmTextModel(defaultTextModel)) {
     return createSelection(
       glmSkill,
-      env.DEFAULT_MODEL,
+      defaultTextModel,
       'GLM 文本对话',
-      `调用 ${env.DEFAULT_MODEL} 生成回复`
+      `调用 ${defaultTextModel} 生成回复`
     );
   }
 
-  if (env?.DEFAULT_MODEL && (env.DEFAULT_MODEL.startsWith('gpt-') || env.DEFAULT_MODEL.startsWith('o'))) {
+  if (isOpenAITextModel(defaultTextModel)) {
     return createSelection(
       textSkill,
-      env.DEFAULT_MODEL,
+      defaultTextModel,
       'OpenAI 文本对话',
-      `调用 ${env.DEFAULT_MODEL} 生成回复`
+      `调用 ${defaultTextModel} 生成回复`
     );
   }
 
-  if (env?.DEFAULT_MODEL?.startsWith('qwen')) {
+  if (isDeepSeekTextModel(defaultTextModel)) {
     return createSelection(
       textSkill,
-      env.DEFAULT_MODEL,
-      'Qwen 文本对话',
-      `调用 ${env.DEFAULT_MODEL} 生成回复`
+      defaultTextModel,
+      'DeepSeek 文本对话',
+      `调用 ${defaultTextModel} 生成回复`
     );
   }
 
-  if (env?.GLM_API_KEY) {
-    return createSelection(glmSkill, 'glm-4-flash', 'GLM 文本对话', '调用 GLM 生成回复');
-  }
-
-  if (env?.OPENAI_API_KEY) {
-    return createSelection(textSkill, 'gpt-4.1-mini', 'OpenAI 文本对话', '调用 OpenAI 生成回复');
-  }
-
-  if (env?.DEEPSEEK_API_KEY) {
-    return createSelection(textSkill, 'deepseek-chat', 'DeepSeek 文本对话', '调用 DeepSeek 生成回复');
-  }
-
-  if (env?.QWEN_API_KEY) {
-    return createSelection(textSkill, 'qwen3-max-2026-01-23', 'Qwen 文本对话', '调用 Qwen 生成回复');
+  if (isQwenTextModel(defaultTextModel)) {
+    return createSelection(
+      textSkill,
+      defaultTextModel,
+      'Qwen 文本对话',
+      `调用 ${defaultTextModel} 生成回复`
+    );
   }
 
   // 规则 4：默认使用 GLM Skill（不再使用 DeepSeek）
-  return createSelection(glmSkill, 'glm-4-flash', 'GLM 文本对话', '调用 GLM 生成回复');
+  return createSelection(glmSkill, defaultTextModel, 'GLM 文本对话', `调用 ${defaultTextModel} 生成回复`);
 }
 
 /**

@@ -2,60 +2,57 @@
 /**
  * 消息列表组件
  *
- * 功能特性：
- * - 显示消息列表或欢迎页
- * - 支持流式内容实时更新
- * - 自动滚动到最新消息
+ * 目标：
+ * - 统一欢迎页与消息列表的内容版心
+ * - 优化长对话的滚动体验
+ * - 保持流式输出时的自动滚动能力
  *
  * @package frontend/src/components
  */
 
-import { watch, computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useScroll } from '../composables/useScroll'
 import ChatMessage from './ChatMessage.vue'
 import ChatWelcome from './ChatWelcome.vue'
 
-/**
- * 组件事件
- */
 const emit = defineEmits<{
-  /** 发送消息事件 */
+  /** 发送消息 */
   send: [content: string]
 }>()
 
-/** 聊天状态管理 */
 const store = useChatStore()
-/** 滚动管理 composable */
-const { container, scrollToBottom, shouldAutoScroll } = useScroll()
+const { container, isAtBottom, scrollToBottom, shouldAutoScroll } = useScroll()
 
-/**
- * 计算属性：带流式内容的消息列表
- * 如果当前有正在流式输出的消息，则显示流式内容
- */
+/** 展示中的消息列表 */
 const displayMessages = computed(() => {
   const sessionId = store.currentSessionId
   if (!sessionId) return []
 
-  const messages = store.messages
-  return messages.map((msg, index) => {
-    // 如果有流式内容且匹配当前消息，使用流式内容
-    if (store.streamingContent?.sessionId === sessionId &&
-        store.streamingContent?.index === index) {
-      return { ...msg, content: store.streamingContent.content }
+  return store.messages.map((message, index) => {
+    if (
+      store.streamingContent?.sessionId === sessionId &&
+      store.streamingContent?.index === index
+    ) {
+      return {
+        ...message,
+        content: store.streamingContent.content
+      }
     }
-    return msg
+
+    return message
   })
 })
 
-/**
- * 监听消息数量变化，自动滚动到底部
- */
-watch(() => displayMessages.value.length, () => scrollToBottom())
+/** 是否显示回到底部按钮 */
+const showScrollButton = computed(() => {
+  return displayMessages.value.length > 2 && !isAtBottom.value
+})
 
-/**
- * 监听最后一条消息内容变化，自动滚动到底部（仅在用户处于底部时）
- */
+watch(() => displayMessages.value.length, () => {
+  scrollToBottom()
+})
+
 watch(
   () => displayMessages.value[displayMessages.value.length - 1]?.content,
   () => {
@@ -66,9 +63,8 @@ watch(
 )
 
 /**
- * 处理建议点击事件
- * 将建议内容作为消息发送
- * @param suggestion 建议文本
+ * 处理欢迎页建议点击
+ * @param suggestion 建议文案
  */
 function handleSuggestion(suggestion: string) {
   emit('send', suggestion)
@@ -77,45 +73,99 @@ function handleSuggestion(suggestion: string) {
 
 <template>
   <main ref="container" class="messages">
-    <!-- 欢迎界面 -->
-    <ChatWelcome
-      v-if="displayMessages.length === 0"
-      @select="handleSuggestion"
-    />
-
-    <!-- 消息列表 -->
-    <div v-else class="message-list">
-      <ChatMessage
-        v-for="(msg, index) in displayMessages"
-        :key="`${index}-${msg.role}`"
-        :index="index"
-        :role="msg.role"
-        :content="msg.content"
-        @delete="store.deleteMessage"
+    <div class="messages-shell">
+      <ChatWelcome
+        v-if="displayMessages.length === 0"
+        @select="handleSuggestion"
       />
+
+      <div v-else class="message-list">
+        <ChatMessage
+          v-for="(message, index) in displayMessages"
+          :key="`${index}-${message.role}`"
+          :index="index"
+          :role="message.role"
+          :content="message.content"
+          @delete="store.deleteMessage"
+        />
+      </div>
     </div>
+
+    <button
+      v-show="showScrollButton"
+      class="scroll-bottom-btn"
+      type="button"
+      @click="scrollToBottom()"
+    >
+      <span>回到底部</span>
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="7 13 12 18 17 13"></polyline>
+        <polyline points="7 6 12 11 17 6"></polyline>
+      </svg>
+    </button>
   </main>
 </template>
 
 <style scoped>
 .messages {
+  position: relative;
   flex: 1;
+  height: 100%;
+  min-height: 0;
   overflow-y: auto;
-  padding: var(--space-6) var(--space-8);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-4) var(--space-6) var(--space-6);
+}
+
+.messages-shell {
+  width: min(100%, var(--layout-content-max));
+  margin: 0 auto;
 }
 
 .message-list {
-  max-width: 900px;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
+  padding-bottom: var(--space-8);
 }
 
-/* 响应式 */
+.scroll-bottom-btn {
+  position: sticky;
+  left: 100%;
+  bottom: var(--space-5);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid rgba(201, 106, 23, 0.16);
+  border-radius: var(--radius-pill);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-panel);
+  cursor: pointer;
+  backdrop-filter: blur(16px);
+  transition: all var(--transition-fast);
+}
+
+.scroll-bottom-btn:hover {
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
 @media (max-width: 768px) {
   .messages {
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4) var(--space-5);
+  }
+
+  .message-list {
+    gap: var(--space-5);
+  }
+
+  .scroll-bottom-btn {
+    bottom: var(--space-4);
+    padding: 0.7rem 0.9rem;
   }
 }
 </style>

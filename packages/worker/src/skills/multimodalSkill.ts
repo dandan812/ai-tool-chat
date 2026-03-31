@@ -16,6 +16,7 @@ import type {
   ImageData,
 } from '../types';
 import { logger } from '../utils/logger';
+import { resolveDefaultMultimodalModel } from "../utils/textModel";
 
 /**
  * 多模态技能定义
@@ -36,6 +37,10 @@ export const multimodalSkill: Skill = {
   ): AsyncIterable<SkillStreamChunk> {
     const { env } = context;
     const { messages, images = [], temperature = 0.7 } = input;
+    const requestedModel = typeof input.model === 'string' ? input.model : '';
+    const model = requestedModel.startsWith('qwen')
+      ? requestedModel
+      : resolveDefaultMultimodalModel(env);
 
     // 检查必要的 API Key 是否配置
     if (!env.QWEN_API_KEY) {
@@ -71,7 +76,7 @@ export const multimodalSkill: Skill = {
             'Authorization': `Bearer ${env.QWEN_API_KEY}`,
           },
           body: JSON.stringify({
-            model: 'qwen3.5-plus',    // 当前默认图片理解模型
+            model,    // 当前默认图片理解模型
             messages: qwenMessages,   // 构建好的消息列表
             stream: true,
             temperature,

@@ -14,9 +14,10 @@ import type {
   SkillContext,
   SkillStreamChunk,
   Message,
-  FileData,
+  ResolvedFileContent,
 } from "../types";
 import { glmSkill } from "./glmSkill";
+import { textSkill } from "./textSkill";
 import { logger } from "../utils/logger";
 import {
   estimateTokens,
@@ -29,6 +30,8 @@ import {
   formatRetrievedCode,
   detectLanguage,
 } from "../utils/ragRetriever";
+import { getUploadedFileContent } from "../utils/uploadedFileStorage";
+import { isGlmTextModel, resolveDefaultTextModel } from "../utils/textModel";
 
 /**
  * 最大 token 阈值，超过此值则分块处理
@@ -92,6 +95,48 @@ ${summaries}
 
 请基于以上摘要回答用户问题。`;
 
+function selectFileTextExecutor(input: SkillInput, context: SkillContext): {
+  execute: typeof glmSkill.execute;
+  model: string;
+} {
+  const requestedModel = typeof input.model === "string" ? input.model : "";
+  const { env } = context;
+
+  if (requestedModel.startsWith("glm")) {
+    return { execute: glmSkill.execute, model: requestedModel };
+  }
+
+  if (
+    requestedModel.startsWith("gpt-") ||
+    requestedModel.startsWith("o") ||
+    requestedModel.startsWith("deepseek") ||
+    requestedModel.startsWith("qwen")
+  ) {
+    return { execute: textSkill.execute, model: requestedModel };
+  }
+
+  if (env.DEFAULT_MODEL?.startsWith("glm")) {
+    return { execute: glmSkill.execute, model: env.DEFAULT_MODEL };
+  }
+
+  if (
+    env.DEFAULT_MODEL &&
+    (
+      env.DEFAULT_MODEL.startsWith("gpt-") ||
+      env.DEFAULT_MODEL.startsWith("o") ||
+      env.DEFAULT_MODEL.startsWith("deepseek") ||
+      env.DEFAULT_MODEL.startsWith("qwen")
+    )
+  ) {
+    return { execute: textSkill.execute, model: env.DEFAULT_MODEL };
+  }
+
+  const defaultModel = resolveDefaultTextModel(env);
+  return isGlmTextModel(defaultModel)
+    ? { execute: glmSkill.execute, model: defaultModel }
+    : { execute: textSkill.execute, model: defaultModel };
+}
+
 export const fileSkill: Skill = {
   name: "file-chat",
   type: "text", // 最终还是文本对话
@@ -105,15 +150,19 @@ export const fileSkill: Skill = {
 
     logger.info("Processing files in fileSkill", { fileCount: files.length });
 
+    const resolvedFiles = await Promise.all(
+      files.map((file) => getUploadedFileContent(context.env, file))
+    );
+
     // 调试：打印文件信息
-    for (const file of files) {
+    for (const file of resolvedFiles) {
       logger.info("File details in fileSkill", {
-        name: file.name,
+        name: file.fileName,
         contentLength: file.content?.length || 0,
         mimeType: file.mimeType,
         size: file.size,
         estimatedTokens: estimateTokens(file.content || ""),
-        isCodeFile: isCodeFile(file.name),
+        isCodeFile: isCodeFile(file.fileName),
       });
     }
 
@@ -122,28 +171,28 @@ export const fileSkill: Skill = {
     const userQuestion = lastUserMsg?.content || "请分析这些文件";
 
     // 判断是否所有文件都是代码文件
-    const allCodeFiles = files.length > 0 && files.every(f => isCodeFile(f.name));
-    const hasCodeFiles = files.some(f => isCodeFile(f.name));
+    const allCodeFiles = resolvedFiles.length > 0 && resolvedFiles.every(f => isCodeFile(f.fileName));
+    const hasCodeFiles = resolvedFiles.some(f => isCodeFile(f.fileName));
 
     logger.info("File type analysis", {
       allCodeFiles,
       hasCodeFiles,
-      fileTypes: files.map(f => ({ name: f.name, isCode: isCodeFile(f.name) })),
+      fileTypes: resolvedFiles.map(f => ({ name: f.fileName, isCode: isCodeFile(f.fileName) })),
     });
 
     // 处理策略选择
     if (hasCodeFiles && allCodeFiles) {
       // 全是代码文件：使用 RAG 检索
-      yield* processCodeFilesWithRAG(files, userQuestion, input, context);
+      yield* processCodeFilesWithRAG(resolvedFiles, userQuestion, input, context);
     } else if (hasCodeFiles) {
       // 混合文件：代码用压缩，其他用原内容
-      yield* processMixedFiles(files, userQuestion, input, context);
+      yield* processMixedFiles(resolvedFiles, userQuestion, input, context);
     } else {
       // 纯文本文件：使用原有分块策略
-      const allFileContents = files
+      const allFileContents = resolvedFiles
         .map((file) => {
-          const ext = file.name.split(".").pop() || "";
-          return `### 文件: ${file.name}\n\`\`\`${ext}\n${file.content}\n\`\`\``;
+          const ext = file.fileName.split(".").pop() || "";
+          return `### 文件: ${file.fileName}\n\`\`\`${ext}\n${file.content}\n\`\`\``;
         })
         .join("\n\n");
 
@@ -159,7 +208,7 @@ export const fileSkill: Skill = {
         yield* processSmallFiles(allFileContents, userQuestion, input, context);
       } else {
         yield* processLargeFiles(
-          files,
+          resolvedFiles,
           allFileContents,
           userQuestion,
           input,
@@ -179,6 +228,8 @@ async function* processSmallFiles(
   input: SkillInput,
   context: SkillContext,
 ): AsyncIterable<SkillStreamChunk> {
+  const textExecutor = selectFileTextExecutor(input, context);
+
   // 构建新的消息列表，将文件内容作为上下文
   const enhancedMessages: Message[] = [
     {
@@ -193,8 +244,8 @@ async function* processSmallFiles(
   ];
 
   // 复用 glmSkill 进行对话
-  const textInput = { ...input, messages: enhancedMessages };
-  yield* glmSkill.execute(textInput, context);
+  const textInput = { ...input, messages: enhancedMessages, model: textExecutor.model };
+  yield* textExecutor.execute(textInput, context);
 }
 
 /**
@@ -202,12 +253,13 @@ async function* processSmallFiles(
  * 采用 Map-Reduce 风格的分块处理
  */
 async function* processLargeFiles(
-  files: FileData[],
+  files: ResolvedFileContent[],
   fileContents: string,
   userQuestion: string,
   input: SkillInput,
   context: SkillContext,
 ): AsyncIterable<SkillStreamChunk> {
+  const textExecutor = selectFileTextExecutor(input, context);
   // 每块的最大 token 数（预留一些余量）
   const maxTokensPerChunk = MAX_TOKEN_THRESHOLD - 20000;
 
@@ -273,8 +325,8 @@ async function* processLargeFiles(
     },
   ];
 
-  const textInput = { ...input, messages: finalMessages };
-  yield* glmSkill.execute(textInput, context);
+  const textInput = { ...input, messages: finalMessages, model: textExecutor.model };
+  yield* textExecutor.execute(textInput, context);
 
   logger.info("Large file processing completed");
 }
@@ -321,6 +373,7 @@ async function extractSingleChunkSummary(
   input: SkillInput,
   context: SkillContext,
 ): Promise<string> {
+  const textExecutor = selectFileTextExecutor(input, context);
   logger.info(`Extracting summary for chunk ${chunkIndex}/${totalChunks}`);
 
   const messages: Message[] = [
@@ -335,11 +388,11 @@ async function extractSingleChunkSummary(
     },
   ];
 
-  const textInput = { ...input, messages, maxTokens: 2000 };
+  const textInput = { ...input, messages, maxTokens: 2000, model: textExecutor.model };
 
   // 收集流式响应
   let summary = "";
-  for await (const chunk of glmSkill.execute(textInput, context)) {
+  for await (const chunk of textExecutor.execute(textInput, context)) {
     if (chunk.type === "content") {
       summary += chunk.content;
     } else if (chunk.type === "error") {
@@ -361,11 +414,12 @@ async function extractSingleChunkSummary(
  * 根据用户问题智能选择相关代码片段
  */
 async function* processCodeFilesWithRAG(
-  files: FileData[],
+  files: ResolvedFileContent[],
   userQuestion: string,
   input: SkillInput,
   context: SkillContext,
 ): AsyncIterable<SkillStreamChunk> {
+  const textExecutor = selectFileTextExecutor(input, context);
   yield {
     type: "progress",
     progress: {
@@ -380,12 +434,12 @@ async function* processCodeFilesWithRAG(
   let totalRetrievedTokens = 0;
 
   for (const file of files) {
-    const language = detectLanguage(file.name);
+    const language = detectLanguage(file.fileName);
     const originalTokens = estimateTokens(file.content || "");
     totalOriginalTokens += originalTokens;
 
     logger.info("RAG retrieval for code file", {
-      filename: file.name,
+      filename: file.fileName,
       language,
       originalTokens,
       query: userQuestion.substring(0, 100),
@@ -410,11 +464,11 @@ async function* processCodeFilesWithRAG(
     totalRetrievedTokens += retrievedTokens;
 
     // 添加文件头
-    const fileHeader = `\n// ========== 文件: ${file.name} (${language}) ==========`;
+    const fileHeader = `\n// ========== 文件: ${file.fileName} (${language}) ==========`;
     allRetrievedCode.push(fileHeader + formattedCode);
 
     logger.info("RAG retrieval result", {
-      filename: file.name,
+      filename: file.fileName,
       extractedKeywords: retrievalResult.extractedKeywords,
       matchedSnippets: retrievalResult.matchedSnippets.length,
       coverageRatio: retrievalResult.coverageRatio,
@@ -464,8 +518,8 @@ Token 节省率: ${(reductionRatio * 100).toFixed(1)}%
     reductionRatio: reductionRatio,
   });
 
-  const textInput = { ...input, messages };
-  yield* glmSkill.execute(textInput, context);
+  const textInput = { ...input, messages, model: textExecutor.model };
+  yield* textExecutor.execute(textInput, context);
 }
 
 /**
@@ -473,11 +527,12 @@ Token 节省率: ${(reductionRatio * 100).toFixed(1)}%
  * 代码文件使用压缩，文本文件保持原样
  */
 async function* processMixedFiles(
-  files: FileData[],
+  files: ResolvedFileContent[],
   userQuestion: string,
   input: SkillInput,
   context: SkillContext,
 ): AsyncIterable<SkillStreamChunk> {
+  const textExecutor = selectFileTextExecutor(input, context);
   yield {
     type: "progress",
     progress: {
@@ -492,17 +547,17 @@ async function* processMixedFiles(
   let totalProcessedTokens = 0;
 
   for (const file of files) {
-    const ext = file.name.split(".").pop() || "";
+    const ext = file.fileName.split(".").pop() || "";
     const originalTokens = estimateTokens(file.content || "");
     totalOriginalTokens += originalTokens;
 
-    if (isCodeFile(file.name)) {
+    if (isCodeFile(file.fileName)) {
       // 代码文件：使用压缩
-      const language = detectLanguage(file.name);
+      const language = detectLanguage(file.fileName);
       const compressResult = compressCode(file.content || "", language);
 
       allFileContents.push(
-        `### 代码文件: ${file.name} (${language})\n` +
+        `### 代码文件: ${file.fileName} (${language})\n` +
         `// Token 节省: ${(compressResult.stats.reductionRatio * 100).toFixed(1)}% ` +
         `(${compressResult.stats.originalTokens} -> ${compressResult.stats.compressedTokens} tokens)\n` +
         `\`\`\`${ext}\n${compressResult.compressedCode}\n\`\`\``
@@ -511,7 +566,7 @@ async function* processMixedFiles(
       totalProcessedTokens += compressResult.stats.compressedTokens;
 
       logger.info("Code compression result", {
-        filename: file.name,
+        filename: file.fileName,
         language,
         originalTokens: compressResult.stats.originalTokens,
         compressedTokens: compressResult.stats.compressedTokens,
@@ -522,7 +577,7 @@ async function* processMixedFiles(
     } else {
       // 非代码文件：保持原样
       allFileContents.push(
-        `### 文件: ${file.name}\n\`\`\`${ext}\n${file.content}\n\`\`\``
+        `### 文件: ${file.fileName}\n\`\`\`${ext}\n${file.content}\n\`\`\``
       );
 
       totalProcessedTokens += originalTokens;
@@ -545,8 +600,8 @@ async function* processMixedFiles(
   };
 
   logger.info("Mixed files processing", {
-    codeFileCount: files.filter(f => isCodeFile(f.name)).length,
-    textFileCount: files.filter(f => !isCodeFile(f.name)).length,
+    codeFileCount: files.filter(f => isCodeFile(f.fileName)).length,
+    textFileCount: files.filter(f => !isCodeFile(f.fileName)).length,
     totalOriginalTokens,
     totalProcessedTokens,
     reductionRatio,
@@ -583,8 +638,8 @@ Token 节省率: ${(reductionRatio * 100).toFixed(1)}%
       context,
     );
   } else {
-    const textInput = { ...input, messages };
-    yield* glmSkill.execute(textInput, context);
+    const textInput = { ...input, messages, model: textExecutor.model };
+    yield* textExecutor.execute(textInput, context);
   }
 }
 

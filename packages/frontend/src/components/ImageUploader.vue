@@ -1,13 +1,10 @@
 <script setup lang="ts">
 /**
  * 图片上传组件
- * 支持多模态对话的图片选择和预览
  *
- * 功能特性：
- * - 支持点击选择或拖拽上传
- * - 支持图片预览和删除
- * - 自动转换为 base64 格式
- * - 限制最大上传数量
+ * 目标：
+ * - 保留现有图片处理逻辑
+ * - 提供更适合 composer 附件托盘的轻量展示
  *
  * @package frontend/src/components
  */
@@ -15,13 +12,10 @@
 import { ref } from 'vue'
 import type { ImageData } from '../types/task'
 
-/**
- * 组件属性
- */
 interface Props {
-  /** 已上传的图片列表 */
+  /** 已选择图片 */
   images: ImageData[]
-  /** 最大可上传图片数量，默认为 4 */
+  /** 最大数量 */
   maxImages?: number
 }
 
@@ -29,37 +23,33 @@ const props = withDefaults(defineProps<Props>(), {
   maxImages: 4
 })
 
-/**
- * 组件事件
- */
 const emit = defineEmits<{
-  /** 添加图片事件 */
+  /** 添加图片 */
   add: [image: ImageData]
-  /** 移除图片事件 */
+  /** 移除图片 */
   remove: [id: string]
 }>()
 
 /** 文件输入框引用 */
 const fileInput = ref<HTMLInputElement | null>(null)
-/** 拖拽状态标识 */
+/** 拖拽状态 */
 const isDragging = ref(false)
 
 /**
- * 处理文件选择事件
- * 用户点击上传区域选择文件时触发
+ * 处理文件选择
+ * @param event change 事件
  */
 function handleFileSelect(event: Event) {
   const input = event.target as HTMLInputElement
   if (input.files) {
     processFiles(Array.from(input.files))
   }
-  // 重置 input 以便可以重复选择相同文件
   input.value = ''
 }
 
 /**
- * 处理拖拽文件放置事件
- * 用户拖拽文件到上传区域并释放时触发
+ * 处理拖拽释放
+ * @param event 拖拽事件
  */
 function handleDrop(event: DragEvent) {
   isDragging.value = false
@@ -70,9 +60,8 @@ function handleDrop(event: DragEvent) {
 }
 
 /**
- * 处理文件列表
- * 过滤出图片文件并逐个处理
- * @param files 待处理的文件数组
+ * 批量处理图片
+ * @param files 文件列表
  */
 async function processFiles(files: File[]) {
   const imageFiles = files.filter((file) => file.type.startsWith('image/'))
@@ -86,8 +75,8 @@ async function processFiles(files: File[]) {
     try {
       const imageData = await new Promise<ImageData>((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload = (e) => {
-          const base64 = (e.target?.result as string).split(',')[1]
+        reader.onload = (event) => {
+          const base64 = (event.target?.result as string).split(',')[1]
           resolve({
             id: crypto.randomUUID(),
             base64: base64 || '',
@@ -95,9 +84,10 @@ async function processFiles(files: File[]) {
             description: file.name
           })
         }
-        reader.onerror = () => reject(new Error('读取文件失败'))
+        reader.onerror = () => reject(new Error('读取图片失败'))
         reader.readAsDataURL(file)
       })
+
       emit('add', imageData)
     } catch (error) {
       console.error('Failed to process image:', error)
@@ -106,17 +96,14 @@ async function processFiles(files: File[]) {
   }
 }
 
-/**
- * 触发文件选择对话框
- * 通过编程方式点击隐藏的文件输入框
- */
+/** 打开文件选择器 */
 function triggerFileSelect() {
   fileInput.value?.click()
 }
 
 /**
- * 移除指定图片
- * @param id 要移除的图片 ID
+ * 移除图片
+ * @param id 图片 ID
  */
 function removeImage(id: string) {
   emit('remove', id)
@@ -125,27 +112,36 @@ function removeImage(id: string) {
 
 <template>
   <div class="image-uploader">
-    <!-- 图片预览列表 -->
-    <div v-if="images.length > 0" class="image-preview-list">
-      <div v-for="image in images" :key="image.id" class="image-preview-item">
+    <div v-if="images.length > 0" class="image-strip">
+      <article v-for="image in images" :key="image.id" class="image-card">
         <img
           :src="`data:${image.mimeType};base64,${image.base64}`"
-          :alt="image.description || 'Uploaded image'"
+          :alt="image.description || '上传图片'"
         />
-        <button class="remove-btn" @click="removeImage(image.id)" title="移除图片" aria-label="移除图片">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
+
+        <div class="image-overlay">
+          <span class="image-name">{{ image.description || '未命名图片' }}</span>
+          <button
+            class="remove-btn"
+            type="button"
+            title="移除图片"
+            aria-label="移除图片"
+            @click="removeImage(image.id)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </article>
     </div>
 
-    <!-- 上传区域 -->
-    <div
+    <button
       v-if="images.length < maxImages"
       class="upload-zone"
       :class="{ dragging: isDragging }"
+      type="button"
       @click="triggerFileSelect"
       @dragenter.prevent="isDragging = true"
       @dragleave.prevent="isDragging = false"
@@ -160,19 +156,20 @@ function removeImage(id: string) {
         class="file-input"
         @change="handleFileSelect"
       />
-      <div class="upload-content">
-        <span class="upload-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-            <circle cx="12" cy="13" r="4"></circle>
-          </svg>
-        </span>
-        <span class="upload-text">
-          {{ isDragging ? '松开以上传' : '点击或拖拽上传图片' }}
-        </span>
-        <span class="upload-hint"> 支持 JPG、PNG、GIF，最多 {{ maxImages }} 张 </span>
-      </div>
-    </div>
+
+      <span class="upload-zone-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+          <circle cx="12" cy="13" r="4"></circle>
+        </svg>
+      </span>
+      <span class="upload-zone-copy">
+        {{ isDragging ? '松开后加入图片托盘' : '点击或拖拽加入图片' }}
+      </span>
+      <span class="upload-zone-hint">
+        支持 JPG、PNG、GIF，最多 {{ maxImages }} 张
+      </span>
+    </button>
   </div>
 </template>
 
@@ -180,131 +177,117 @@ function removeImage(id: string) {
 .image-uploader {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-3);
 }
 
-/* 图片预览列表 */
-.image-preview-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.image-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--space-3);
 }
 
-.image-preview-item {
+.image-card {
   position: relative;
-  width: 90px;
-  height: 90px;
-  border-radius: 12px;
   overflow: hidden;
-  border: 2px solid var(--border-color);
-  box-shadow: var(--card-shadow);
-  transition: var(--transition);
+  min-height: 120px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-panel);
 }
 
-.image-preview-item:hover {
-  box-shadow: var(--card-shadow-hover);
-}
-
-.image-preview-item img {
+.image-card img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+.image-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: linear-gradient(180deg, rgba(17, 17, 17, 0) 0%, rgba(17, 17, 17, 0.76) 100%);
+}
+
+.image-name {
+  color: white;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .remove-btn {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 24px;
-  height: 24px;
-  display: flex;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--error-color);
-  color: white;
   border: none;
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
   cursor: pointer;
-  opacity: 0;
-  transition: var(--transition);
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
-}
-
-.remove-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-.image-preview-item:hover .remove-btn {
-  opacity: 1;
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
 }
 
 .remove-btn:hover {
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.82);
+  transform: scale(1.04);
 }
 
-.remove-btn:focus-visible {
-  opacity: 1;
-  outline: 2px solid var(--error-color);
-  outline-offset: 2px;
-}
-
-/* 上传区域 */
 .upload-zone {
-  border: 2.5px dashed var(--border-color);
-  border-radius: 16px;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px dashed rgba(201, 106, 23, 0.24);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, var(--surface-strong) 100%);
   cursor: pointer;
-  transition: var(--transition);
-  background: var(--bg-color);
-  box-shadow: var(--card-shadow);
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.upload-zone:hover {
-  border-color: var(--accent-color);
-  background: var(--input-wrapper-bg);
-  box-shadow: var(--card-shadow-hover), var(--glow-shadow);
-}
-
-.upload-zone:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
-}
-
+.upload-zone:hover,
 .upload-zone.dragging {
-  border-color: var(--accent-color);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-  box-shadow: var(--glow-shadow);
+  transform: translateY(-1px);
+  border-color: rgba(201, 106, 23, 0.34);
+  box-shadow: var(--shadow-panel);
 }
 
 .file-input {
   display: none;
 }
 
-.upload-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+.upload-zone-icon {
+  color: var(--accent-primary);
 }
 
-.upload-icon {
-  transition: var(--transition);
+.upload-zone-copy {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
-.upload-zone:hover .upload-icon {
-  color: var(--accent-color);
+.upload-zone-hint {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
 }
 
-.upload-text {
-  font-size: 15px;
-  color: var(--text-color);
-  font-weight: 500;
-}
+@media (max-width: 768px) {
+  .image-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
-.upload-hint {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 400;
+  .upload-zone {
+    padding: var(--space-4);
+  }
 }
 </style>

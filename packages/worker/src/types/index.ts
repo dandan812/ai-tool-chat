@@ -140,7 +140,7 @@ export interface Skill {
 export interface SkillInput {
   messages: Message[];
   images?: ImageData[];
-  files?: FileData[];
+  files?: UploadedFileRef[];
   temperature?: number;
   maxTokens?: number;
   [key: string]: unknown;
@@ -189,12 +189,23 @@ export interface ImageData {
   height?: number;
 }
 
-export interface FileData {
-  id: string;
-  name: string;
-  content: string;
+export interface UploadedFileRef {
+  fileId: string;
+  fileName: string;
   mimeType: string;
-  size?: number;
+  size: number;
+  fileHash: string;
+  source: 'uploaded';
+}
+
+export interface ResolvedFileContent {
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  fileHash: string;
+  source: 'uploaded';
+  content: string;
 }
 
 // ==================== 分片上传 ====================
@@ -241,7 +252,7 @@ export interface UploadCompleteRequest {
  */
 export interface UploadCompleteResponse {
   success: boolean;
-  fileData?: FileData;
+  file?: UploadedFileRef;
   error?: string;
 }
 
@@ -302,12 +313,14 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;
   GLM_API_KEY?: string;  // 智谱 AI GLM API Key
+  CHUNK_STORAGE: DurableObjectNamespace;
   // 可选配置
   LOG_LEVEL?: 'debug' | 'info' | 'warn' | 'error';
   MAX_REQUEST_SIZE?: string;
   REQUEST_TIMEOUT?: string;
   ENABLE_CACHE?: string;
   DEFAULT_MODEL?: string;  // 默认使用的模型
+  DEFAULT_MULTIMODAL_MODEL?: string;  // 默认使用的图片模型
 }
 
 // ==================== API 请求/响应 ====================
@@ -315,7 +328,7 @@ export interface Env {
 export interface ChatRequest {
   messages: Message[];
   images?: ImageData[];
-  files?: FileData[];
+  files?: UploadedFileRef[];
   temperature?: number;
   maxTokens?: number;
   stream?: boolean;

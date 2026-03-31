@@ -32,6 +32,7 @@ ai-tool-chat/
 - 步骤可视化：前端消费 `task`、`step`、`error`、`complete` 事件并展示步骤状态
 - 多模型路由：按文本、图片、文件自动选择 Skill
 - 文件处理：支持文本类文件上传、分块、合并、分析
+- 断点续传：大文件按稳定哈希分片上传，重新选择同一文件后可继续未完成分片
 - 模型兜底：不同环境变量组合下自动回退到可用模型
 
 ## 技术栈
@@ -93,19 +94,22 @@ ai-tool-chat/
 
 ### 纯文本
 
-- 默认文本 Skill：`glmSkill`
-- 仅配置 `QWEN_API_KEY` 时：回退到 `textSkill + qwen3-max-2026-01-23`
-- 仅配置 `OPENAI_API_KEY` 时：回退到 `textSkill + gpt-4.1-mini`
-- 配置 `DEEPSEEK_API_KEY` 时：可兼容走 DeepSeek
+- 默认文本模型统一由 `DEFAULT_MODEL` 控制
+- `textSkill`、文件分析里的文本兜底和任务路由都会读取同一个默认模型解析逻辑
+- 如果未设置 `DEFAULT_MODEL`，系统会按已配置的供应商 Key 自动回退到内置默认型号
 
 ### 图片理解
 
-- 当前多模态模型：`qwen3.5-plus`
+- 默认图片模型统一由 `DEFAULT_MULTIMODAL_MODEL` 控制
+- 当前多模态默认值：`qwen3.5-plus`
 
 ### 文件处理
 
 - 当前文件处理主链路：`fileSkill`
-- 文件分析默认依赖 GLM 路由和文件处理逻辑
+- 文件分析会跟随当前默认文本模型路由，不再硬绑定 `GLM_API_KEY`
+- 前端文本文件统一走分片上传，聊天请求只携带 `fileId/fileName/fileHash` 等文件引用
+- 后端在 Durable Object 中保存上传状态和合并后的正文，同一文件重复上传只会补传缺失分片
+- 上传后的服务端文件默认保留 `24 小时`，过期后会在读取链路中按失效文件处理
 
 ## API 事件
 
@@ -144,7 +148,8 @@ pnpm install
 本地通常至少需要一个可用模型 Key：
 
 ```bash
-DEFAULT_MODEL=qwen3-max-2026-01-23
+DEFAULT_MODEL=qwen3.5-flash-2026-02-23
+DEFAULT_MULTIMODAL_MODEL=qwen3.5-plus
 QWEN_API_KEY=your_qwen_key
 ```
 
@@ -155,6 +160,7 @@ QWEN_API_KEY=your_qwen_key
 - `OPENAI_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `DEFAULT_MODEL`
+- `DEFAULT_MULTIMODAL_MODEL`
 
 ### 3. 启动本地开发服务
 

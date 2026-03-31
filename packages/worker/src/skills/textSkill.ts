@@ -12,6 +12,15 @@
  */
 import type { Skill, SkillInput, SkillContext, SkillStreamChunk, Message } from '../types';
 import { logger } from '../utils/logger';
+import {
+  DEFAULT_DEEPSEEK_TEXT_MODEL,
+  DEFAULT_OPENAI_TEXT_MODEL,
+  DEFAULT_QWEN_TEXT_MODEL,
+  isDeepSeekTextModel,
+  isOpenAITextModel,
+  isQwenTextModel,
+  resolveDefaultTextModel,
+} from "../utils/textModel";
 
 type TextProvider = 'openai' | 'deepseek' | 'qwen';
 
@@ -25,8 +34,9 @@ interface ProviderConfig {
 function resolveProvider(input: SkillInput, context: SkillContext): ProviderConfig | null {
   const requestedModel = typeof input.model === 'string' ? input.model : '';
   const { env } = context;
+  const defaultModel = resolveDefaultTextModel(env);
 
-  if ((requestedModel.startsWith('gpt-') || requestedModel.startsWith('o')) && env.OPENAI_API_KEY) {
+  if (isOpenAITextModel(requestedModel) && env.OPENAI_API_KEY) {
     return {
       provider: 'openai',
       model: requestedModel,
@@ -35,7 +45,7 @@ function resolveProvider(input: SkillInput, context: SkillContext): ProviderConf
     };
   }
 
-  if (requestedModel.startsWith('deepseek') && env.DEEPSEEK_API_KEY) {
+  if (isDeepSeekTextModel(requestedModel) && env.DEEPSEEK_API_KEY) {
     return {
       provider: 'deepseek',
       model: requestedModel,
@@ -44,7 +54,7 @@ function resolveProvider(input: SkillInput, context: SkillContext): ProviderConf
     };
   }
 
-  if (requestedModel.startsWith('qwen') && env.QWEN_API_KEY) {
+  if (isQwenTextModel(requestedModel) && env.QWEN_API_KEY) {
     return {
       provider: 'qwen',
       model: requestedModel,
@@ -53,28 +63,28 @@ function resolveProvider(input: SkillInput, context: SkillContext): ProviderConf
     };
   }
 
-  if (env.OPENAI_API_KEY && !env.DEEPSEEK_API_KEY) {
+  if (isOpenAITextModel(defaultModel) && env.OPENAI_API_KEY) {
     return {
       provider: 'openai',
-      model: 'gpt-4.1-mini',
+      model: defaultModel,
       url: 'https://api.openai.com/v1/chat/completions',
       apiKey: env.OPENAI_API_KEY,
     };
   }
 
-  if (env.DEEPSEEK_API_KEY) {
+  if (isDeepSeekTextModel(defaultModel) && env.DEEPSEEK_API_KEY) {
     return {
       provider: 'deepseek',
-      model: 'deepseek-chat',
+      model: defaultModel,
       url: 'https://api.deepseek.com/chat/completions',
       apiKey: env.DEEPSEEK_API_KEY,
     };
   }
 
-  if (env.QWEN_API_KEY) {
+  if (isQwenTextModel(defaultModel) && env.QWEN_API_KEY) {
     return {
       provider: 'qwen',
-      model: 'qwen3-max-2026-01-23',
+      model: defaultModel,
       url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
       apiKey: env.QWEN_API_KEY,
     };
@@ -83,9 +93,27 @@ function resolveProvider(input: SkillInput, context: SkillContext): ProviderConf
   if (env.OPENAI_API_KEY) {
     return {
       provider: 'openai',
-      model: 'gpt-4.1-mini',
+      model: DEFAULT_OPENAI_TEXT_MODEL,
       url: 'https://api.openai.com/v1/chat/completions',
       apiKey: env.OPENAI_API_KEY,
+    };
+  }
+
+  if (env.DEEPSEEK_API_KEY) {
+    return {
+      provider: 'deepseek',
+      model: DEFAULT_DEEPSEEK_TEXT_MODEL,
+      url: 'https://api.deepseek.com/chat/completions',
+      apiKey: env.DEEPSEEK_API_KEY,
+    };
+  }
+
+  if (env.QWEN_API_KEY) {
+    return {
+      provider: 'qwen',
+      model: DEFAULT_QWEN_TEXT_MODEL,
+      url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      apiKey: env.QWEN_API_KEY,
     };
   }
 

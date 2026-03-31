@@ -17,6 +17,11 @@
 /* ==================== CSS 变量 - 反主流美学 ==================== */
 
 :root {
+  /* 布局系统 */
+  --layout-sidebar-width: 304px;
+  --layout-content-max: 980px;
+  --layout-message-max: 920px;
+
   /* 字体系统 */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-display: 'Space Grotesk', var(--font-sans);
@@ -36,6 +41,7 @@
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
+  --space-5: 1.25rem;
   --space-6: 1.5rem;
   --space-8: 2rem;
   --space-10: 2.5rem;
@@ -50,6 +56,7 @@
   --radius-lg: 1rem;
   --radius-xl: 1.5rem;
   --radius-2xl: 2rem;
+  --radius-pill: 999px;
   --radius-full: 9999px;
 
   /* ===== 核心配色 - 深灰 + 橙 ===== */
@@ -99,6 +106,10 @@
   --bg-secondary: #FFFFFF;
   --bg-tertiary: var(--gray-100);
   --bg-elevated: #FFFFFF;
+  --surface-canvas: #fcfbf8;
+  --surface-panel: rgba(255, 255, 255, 0.86);
+  --surface-muted: #f3ede7;
+  --surface-strong: #ffffff;
   
   --text-primary: var(--gray-900);
   --text-secondary: var(--gray-600);
@@ -110,15 +121,20 @@
   --border-strong: var(--gray-400);
   
   /* 强调色 */
-  --accent-primary: var(--orange-600);
-  --accent-primary-hover: var(--orange-500);
-  --accent-secondary: var(--amber-600);
-  --accent-glow: rgba(234, 88, 12, 0.3);
+  --accent-primary: #c26b38;
+  --accent-primary-hover: #cf7b49;
+  --accent-secondary: #d08a58;
+  --accent-glow: rgba(194, 107, 56, 0.26);
+  --accent-soft: rgba(201, 106, 23, 0.12);
+  --focus-ring-strong: rgba(201, 106, 23, 0.22);
+  --danger-soft: rgba(239, 68, 68, 0.12);
+  --success-soft: rgba(34, 197, 94, 0.12);
   
   /* 消息气泡 */
-  --message-user-bg: var(--gray-900);
-  --message-user-text: var(--gray-50);
-  --message-ai-bg: #FFFFFF;
+  --message-user-bg: #f3efea;
+  --message-user-text: #221d18;
+  --message-user-border: #ece4da;
+  --message-ai-bg: rgba(255, 255, 255, 0.94);
   --message-ai-border: var(--gray-200);
   --message-ai-text: var(--gray-800);
   
@@ -139,6 +155,8 @@
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
   --shadow-warm: 0 4px 20px -2px rgba(234, 88, 12, 0.15);
+  --shadow-panel: 0 12px 30px rgba(28, 25, 23, 0.08);
+  --shadow-float: 0 18px 44px rgba(28, 25, 23, 0.12);
   
   /* 动画 */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -155,6 +173,10 @@
   --bg-secondary: var(--gray-900);
   --bg-tertiary: var(--gray-850);
   --bg-elevated: var(--gray-800);
+  --surface-canvas: #090909;
+  --surface-panel: rgba(28, 25, 23, 0.78);
+  --surface-muted: #1a1614;
+  --surface-strong: #1d1916;
   
   /* 文字 - 高对比 */
   --text-primary: var(--gray-100);
@@ -168,17 +190,22 @@
   --border-strong: var(--gray-700);
   
   /* 强调色 - 暖橙 */
-  --accent-primary: var(--amber-500);
-  --accent-primary-hover: var(--amber-400);
-  --accent-secondary: var(--orange-500);
-  --accent-glow: rgba(245, 158, 11, 0.25);
+  --accent-primary: #bb7048;
+  --accent-primary-hover: #c67b54;
+  --accent-secondary: #aa613d;
+  --accent-glow: rgba(187, 112, 72, 0.22);
+  --accent-soft: rgba(251, 191, 36, 0.12);
+  --focus-ring-strong: rgba(251, 191, 36, 0.22);
+  --danger-soft: rgba(239, 68, 68, 0.18);
+  --success-soft: rgba(34, 197, 94, 0.18);
   
   /* 消息气泡 */
-  --message-user-bg: var(--amber-600);
-  --message-user-text: #FFFFFF;
-  --message-ai-bg: var(--gray-850);
-  --message-ai-border: var(--gray-750);
-  --message-ai-text: var(--gray-200);
+  --message-user-bg: #2a2421;
+  --message-user-text: #f5f0ea;
+  --message-user-border: rgba(255, 255, 255, 0.1);
+  --message-ai-bg: #1f1b19;
+  --message-ai-border: #3a332d;
+  --message-ai-text: #f0ebe5;
   
   /* 输入框 */
   --input-bg: var(--gray-850);
@@ -197,6 +224,8 @@
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   --shadow-warm: 0 4px 20px -2px rgba(245, 158, 11, 0.2);
+  --shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.35);
+  --shadow-float: 0 24px 52px rgba(0, 0, 0, 0.44);
 }
 
 /* ==================== 基础样式 - 极简留白 ==================== */
@@ -222,8 +251,18 @@ body {
   font-weight: 400;
   line-height: 1.6;
   color: var(--text-primary);
-  background-color: var(--bg-primary);
-  transition: background-color var(--transition-slow), color var(--transition-slow);
+  background:
+    radial-gradient(circle at top left, var(--accent-soft) 0%, transparent 24%),
+    linear-gradient(180deg, var(--surface-canvas) 0%, var(--bg-primary) 100%);
+  transition: background-color var(--transition-slow), color var(--transition-slow), background var(--transition-slow);
+}
+
+.theme-transition * {
+  transition:
+    background-color var(--transition-base),
+    border-color var(--transition-base),
+    color var(--transition-base),
+    box-shadow var(--transition-base);
 }
 
 /* 标题 - Space Grotesk 个性 */

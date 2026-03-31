@@ -1,14 +1,11 @@
 <script setup lang="ts">
 /**
- * 单条消息组件 - 《反主流》美学
+ * 单条消息组件
  *
- * 设计理念：有机气泡、温暖交互
- *
- * 功能特性：
- * - 显示用户/AI 消息气泡
- * - Markdown 内容渲染
- * - 代码块语法高亮和复制功能
- * - 消息删除操作
+ * 目标：
+ * - 强化用户消息与 AI 消息的层级差异
+ * - 把操作入口收回消息头部，减少悬浮抖动
+ * - 继续保留 Markdown 和代码复制能力
  *
  * @package frontend/src/components
  */
@@ -16,13 +13,10 @@
 import { computed } from 'vue'
 import MarkdownIt from 'markdown-it'
 
-/**
- * 组件属性
- */
 interface Props {
-  /** 消息角色（用户/AI/系统） */
+  /** 消息角色 */
   role: 'user' | 'assistant' | 'system'
-  /** 消息内容（Markdown 格式） */
+  /** 消息内容 */
   content: string
   /** 消息索引 */
   index: number
@@ -30,17 +24,11 @@ interface Props {
 
 const props = defineProps<Props>()
 
-/**
- * 组件事件
- */
 const emit = defineEmits<{
-  /** 删除消息事件 */
+  /** 删除消息 */
   delete: [index: number]
 }>()
 
-/**
- * 配置 MarkdownIt，为代码块添加复制按钮
- */
 const md = new MarkdownIt({
   highlight: (str: string, lang: string) => {
     const escapedStr = escapeHtml(str)
@@ -64,10 +52,6 @@ const md = new MarkdownIt({
   }
 })
 
-/**
- * 覆盖默认的代码块渲染规则
- * 处理代码块并添加复制功能
- */
 md.renderer.rules.fence = (tokens, idx) => {
   const token = tokens[idx]
   if (!token) return ''
@@ -79,12 +63,13 @@ md.renderer.rules.fence = (tokens, idx) => {
   if (highlight) {
     return highlight(code, lang, '')
   }
+
   return `<pre><code>${escapeHtml(code)}</code></pre>`
 }
 
 /**
- * HTML 转义函数
- * 防止 XSS 攻击
+ * HTML 转义
+ * @param text 原始文本
  */
 function escapeHtml(text: string): string {
   return text
@@ -96,8 +81,8 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * HTML 属性转义函数
- * 转义用于 HTML 属性的文本
+ * HTML 属性转义
+ * @param text 原始文本
  */
 function escapeAttr(text: string): string {
   return text
@@ -108,51 +93,50 @@ function escapeAttr(text: string): string {
     .replace(/\r/g, '&#13;')
 }
 
-/**
- * 计算属性：渲染后的 HTML 内容
- */
+/** 渲染后的 HTML */
 const htmlContent = computed(() => md.render(props.content))
 
-/**
- * 计算属性：是否为用户消息
- */
+/** 是否为用户消息 */
 const isUser = computed(() => props.role === 'user')
 
-/**
- * 处理点击事件
- * 处理代码块复制按钮的点击
- */
-function handleClick(e: MouseEvent) {
-  const target = e.target as HTMLElement
-  const btn = target.closest('.copy-code-btn') as HTMLElement
-  if (!btn) return
+/** 消息角色文案 */
+const roleLabel = computed(() => (isUser.value ? '你' : 'AI 助手'))
 
-  const code = btn.getAttribute('data-code')
+/**
+ * 处理代码复制按钮点击
+ * @param event 鼠标事件
+ */
+function handleClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  const button = target.closest('.copy-code-btn') as HTMLElement | null
+  if (!button) return
+
+  const code = button.getAttribute('data-code')
   if (!code) return
 
   navigator.clipboard.writeText(code).then(() => {
-    const btnText = btn.querySelector('.btn-text')
-    const originalText = btnText?.textContent ?? '复制'
+    const buttonText = button.querySelector('.btn-text')
+    const originalText = buttonText?.textContent ?? '复制'
 
-    if (btnText) {
-      btnText.textContent = '已复制!'
+    if (buttonText) {
+      buttonText.textContent = '已复制'
     }
-    btn.classList.add('copied')
+
+    button.classList.add('copied')
 
     setTimeout(() => {
-      if (btnText) {
-        btnText.textContent = originalText
+      if (buttonText) {
+        buttonText.textContent = originalText
       }
-      btn.classList.remove('copied')
-    }, 2000)
+      button.classList.remove('copied')
+    }, 1800)
   })
 }
 </script>
 
 <template>
-  <div class="message-row" :class="{ 'user': isUser, 'ai': !isUser }">
-    <!-- 头像 -->
-    <div class="avatar">
+  <article class="message-row" :class="{ user: isUser, ai: !isUser }">
+    <div class="avatar" :aria-label="roleLabel">
       <svg v-if="isUser" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
         <circle cx="12" cy="7" r="4"></circle>
@@ -164,58 +148,72 @@ function handleClick(e: MouseEvent) {
       </svg>
     </div>
 
-    <!-- 内容 -->
-    <div class="bubble">
-      <!-- AI 消息 -->
-      <div v-if="!isUser" class="markdown-body" v-html="htmlContent" @click="handleClick" />
-      
-      <!-- 用户消息 -->
-      <div v-else class="user-text markdown-body" v-html="htmlContent" />
+    <div class="message-frame">
+      <div class="message-meta">
+        <span class="role-badge">{{ roleLabel }}</span>
+        <span class="message-index">第 {{ index + 1 }} 条</span>
 
-      <!-- 操作按钮 -->
-      <div class="actions">
-        <button class="action-btn" title="删除" @click="emit('delete', index)">
+        <button
+          class="delete-btn"
+          type="button"
+          title="删除消息"
+          @click="emit('delete', index)"
+        >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 6h18"></path>
             <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
           </svg>
         </button>
       </div>
+
+      <div class="bubble">
+        <div
+          class="markdown-body"
+          :class="{ 'user-text': isUser }"
+          v-html="htmlContent"
+          @click="handleClick"
+        />
+      </div>
     </div>
-  </div>
+  </article>
 </template>
 
 <style scoped>
 .message-row {
-  display: flex;
-  gap: var(--space-3);
-  animation: slideIn 0.4s ease-out;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+  animation: slide-in var(--transition-base) ease-out;
 }
 
 .message-row.user {
-  flex-direction: row-reverse;
+  grid-template-columns: minmax(0, 1fr) 40px;
 }
 
-/* 头像 */
+.message-row.user .avatar {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.message-row.user .message-frame {
+  grid-column: 1;
+}
+
 .avatar {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-lg);
+  border-radius: 14px;
   flex-shrink: 0;
+}
+
+.message-row.ai .avatar {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  color: white;
+  box-shadow: var(--shadow-warm);
 }
 
 .message-row.user .avatar {
@@ -223,131 +221,116 @@ function handleClick(e: MouseEvent) {
   color: var(--message-user-text);
 }
 
-.message-row.ai .avatar {
-  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
-  color: white;
-}
-
-/* 气泡 */
-.bubble {
-  position: relative;
-  max-width: 80%;
-  min-width: 0;
-  padding: 16px 20px;
-  line-height: 1.7;
-  border-radius: var(--radius-xl);
-  transition: all var(--transition-fast);
+.message-frame {
   display: flex;
   flex-direction: column;
-  overflow-wrap: break-word;
-}
-
-.message-row.user .bubble {
-  background: var(--message-user-bg);
-  color: var(--message-user-text);
-  border-bottom-right-radius: var(--radius-sm);
-}
-
-.message-row.ai .bubble {
-  background: var(--message-ai-bg);
-  color: var(--message-ai-text);
-  border: 1px solid var(--message-ai-border);
-  border-bottom-left-radius: var(--radius-sm);
-}
-
-/* Markdown 内容容器 */
-.markdown-body {
-  overflow-wrap: break-word;
-  min-width: 0;
-  width: 100%;
-}
-
-/* 用户文本 */
-.user-text {
-  font-size: var(--text-base);
-  line-height: 1.7;
-  word-break: break-word;
-}
-
-/* 用户消息的 Markdown 样式调整 */
-.message-row.user :deep(.markdown-body p) {
-  margin: 0 0 var(--space-3);
-}
-
-.message-row.user :deep(.markdown-body p:last-child) {
-  margin-bottom: 0;
-}
-
-.message-row.user :deep(.markdown-body pre) {
-  margin: var(--space-3) 0;
-  padding: var(--space-3);
-  overflow-x: auto;
-  font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
-  font-size: var(--text-sm);
-  line-height: 1.6;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: var(--radius-md);
-}
-
-.message-row.user :deep(.markdown-body code) {
-  padding: var(--space-1) var(--space-2);
-  font-family: 'Fira Code', monospace;
-  font-size: 0.9em;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-sm);
-}
-
-.message-row.user :deep(.markdown-body pre code) {
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
-}
-
-/* 操作按钮 */
-.actions {
-  position: absolute;
-  bottom: -28px;
-  left: 0;
-  display: flex;
   gap: var(--space-2);
-  opacity: 0;
-  transition: opacity var(--transition-fast);
+  min-width: 0;
 }
 
-.message-row.user .actions {
-  left: auto;
-  right: 0;
+.message-row.user .message-frame {
+  align-items: flex-end;
 }
 
-.bubble:hover .actions {
-  opacity: 1;
-}
-
-.action-btn {
+.message-meta {
   display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.message-row.user .message-meta {
+  flex-direction: row-reverse;
+}
+
+.role-badge,
+.message-index {
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+
+.message-row.ai .role-badge {
+  color: var(--accent-primary);
+  background: var(--accent-soft);
+}
+
+.message-index {
+  color: var(--text-tertiary);
+}
+
+.delete-btn {
+  margin-left: auto;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: var(--bg-elevated);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
   color: var(--text-muted);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  opacity: 0;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.action-btn:hover {
-  background: var(--error);
-  color: white;
-  border-color: var(--error);
+.message-row.user .delete-btn {
+  margin-left: 0;
+  margin-right: auto;
 }
 
-/* Markdown 样式 */
-:deep(.markdown-body) {
-  font-size: var(--text-base);
-  line-height: 1.7;
+.message-frame:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  border-color: rgba(239, 68, 68, 0.16);
+  background: var(--danger-soft);
+  color: var(--error);
+}
+
+.bubble {
+  width: min(100%, var(--layout-message-max));
+  padding: 1.05rem 1.15rem;
+  border-radius: 22px;
   overflow-wrap: break-word;
+}
+
+.message-row.ai .bubble {
+  background: var(--message-ai-bg);
+  border: 1px solid var(--message-ai-border);
+  box-shadow: var(--shadow-panel);
+}
+
+.message-row.user .bubble {
+  max-width: min(100%, 700px);
+  background: var(--message-user-bg);
+  color: var(--message-user-text);
+  border: 1px solid var(--message-user-border);
+  box-shadow: 0 10px 26px rgba(34, 29, 24, 0.06);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.markdown-body {
+  width: 100%;
+  min-width: 0;
+  line-height: 1.75;
+  color: inherit;
+  overflow-wrap: break-word;
+}
+
+.user-text {
+  color: inherit;
 }
 
 :deep(.markdown-body p) {
@@ -358,89 +341,6 @@ function handleClick(e: MouseEvent) {
   margin-bottom: 0;
 }
 
-:deep(.markdown-body pre) {
-  margin: 0;
-  padding: var(--space-4);
-  overflow-x: auto;
-  font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
-  font-size: var(--text-sm);
-  line-height: 1.6;
-  background: var(--gray-950);
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-  color: var(--gray-200);
-}
-
-:deep(.code-block-wrapper) {
-  margin: var(--space-4) 0;
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-}
-
-:deep(.code-block-header) {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-:deep(.copy-code-btn) {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-:deep(.copy-code-btn:hover) {
-  color: white;
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  transform: translateY(-1px);
-}
-
-:deep(.copy-code-btn.copied) {
-  color: white;
-  background: var(--success);
-  border-color: var(--success);
-}
-
-:deep(.code-lang) {
-  font-family: var(--font-sans);
-  letter-spacing: 0.05em;
-}
-
-:deep(.markdown-body code) {
-  padding: var(--space-1) var(--space-2);
-  font-family: 'Fira Code', monospace;
-  font-size: 0.9em;
-  color: var(--accent-primary);
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-}
-
-:deep(.markdown-body pre code) {
-  padding: 0;
-  color: inherit;
-  background: transparent;
-  border-radius: 0;
-}
-
-/* 列表样式 */
 :deep(.markdown-body ul),
 :deep(.markdown-body ol) {
   margin: var(--space-3) 0;
@@ -451,7 +351,6 @@ function handleClick(e: MouseEvent) {
   margin-bottom: var(--space-2);
 }
 
-/* 链接 */
 :deep(.markdown-body a) {
   color: var(--accent-primary);
   text-decoration: none;
@@ -463,14 +362,119 @@ function handleClick(e: MouseEvent) {
   border-bottom-color: var(--accent-primary);
 }
 
-/* 响应式 */
+:deep(.markdown-body code) {
+  padding: 0.12rem 0.38rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--accent-primary);
+  font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.9em;
+}
+
+:deep(.markdown-body pre code) {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+
+:deep(.code-block-wrapper) {
+  margin: var(--space-4) 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: #111111;
+}
+
+:deep(.code-block-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.9rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+:deep(.code-lang) {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+:deep(.copy-code-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.28rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+:deep(.copy-code-btn:hover) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:deep(.copy-code-btn.copied) {
+  color: white;
+  background: rgba(34, 197, 94, 0.22);
+  border-color: rgba(34, 197, 94, 0.26);
+}
+
+:deep(.markdown-body pre) {
+  margin: 0;
+  padding: var(--space-4);
+  overflow-x: auto;
+  color: rgba(255, 255, 255, 0.92);
+  background: transparent;
+  font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: var(--text-sm);
+  line-height: 1.65;
+}
+
+.message-row.user :deep(.markdown-body code) {
+  color: inherit;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 768px) {
-  .bubble {
-    max-width: 90%;
-    padding: var(--space-3) var(--space-4);
+  .message-row {
+    grid-template-columns: 36px minmax(0, 1fr);
   }
 
-  .actions {
+  .message-row.user {
+    grid-template-columns: minmax(0, 1fr) 36px;
+  }
+
+  .avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .bubble,
+  .message-row.user .bubble {
+    width: 100%;
+    max-width: 100%;
+    padding: var(--space-4);
+  }
+
+  .delete-btn {
     opacity: 1;
   }
 }

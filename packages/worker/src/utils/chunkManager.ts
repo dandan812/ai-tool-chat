@@ -10,7 +10,6 @@
  * @package worker/src/utils
  */
 
-import type { FileData } from '../types';
 import { logger } from './logger';
 
 /**

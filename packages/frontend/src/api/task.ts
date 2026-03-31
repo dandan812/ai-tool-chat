@@ -13,7 +13,7 @@
  * @package frontend/src/api
  */
 
-import type { ChatMessage, Task, Step, SSEEvent, ImageData, FileData } from '../types/task'
+import type { ChatMessage, Task, Step, SSEEvent, ImageData, UploadedFileRef } from '../types/task'
 import { API_BASE_URL } from '../config'
 import { getUserFriendlyError } from '../utils/error'
 
@@ -23,7 +23,7 @@ export interface TaskRequest {
   /** 图片数据（多模态） */
   images?: ImageData[]
   /** 文件数据 */
-  files?: FileData[]
+  files?: UploadedFileRef[]
   /** 温度参数 */
   temperature?: number
   /** 是否启用工具调用 */
@@ -56,11 +56,12 @@ export async function sendTaskRequest(
       console.log(
         '[TaskAPI] Sending files:',
         request.files.map((f) => ({
-          name: f.name,
-          contentLength: f.content?.length || 0,
-          contentPreview: f.content?.substring(0, 100) || '(empty)',
+          fileId: f.fileId,
+          fileHash: f.fileHash,
+          source: f.source,
           mimeType: f.mimeType,
-          size: f.size
+          size: f.size,
+          fileName: f.fileName,
         }))
       )
     }

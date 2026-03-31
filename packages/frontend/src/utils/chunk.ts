@@ -2,59 +2,60 @@
  * 文件分片上传工具
  *
  * 功能：
- * - 计算文件 MD5 哈希
- * - 切分文件为多个分片
- * - 分片上传到后端
- * - 进度追踪
+ * - 按分片增量计算文件 MD5，避免整文件一次性读入内存
+ * - 按稳定 fileId 进行上传，支持重复选择同一个文件时恢复
+ * - 上传前先查询服务端状态，只补传缺失分片
+ * - 在浏览器本地保存上传会话，用于页面刷新后的断点恢复提示
  *
  * @package frontend/src/utils
  */
 
-import type { FileData, UploadProgress, UploadProgressCallback } from '../types/task';
+import type { UploadedFileRef, UploadCompleteResponse, UploadProgress, UploadProgressCallback } from '../types/task';
 import { API_BASE_URL } from '../config';
-import { generateId } from './file';
 
 /**
  * 分片大小配置
  * 改小为 1MB，避免 Cloudflare Workers 堆栈溢出问题
  */
 const DEFAULT_CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
+const UPLOAD_SESSION_STORAGE_KEY = 'chat_upload_sessions_v1';
+
+interface UploadSession {
+  fileId: string;
+  fileHash: string;
+  fileName: string;
+  fileSize: number;
+  totalChunks: number;
+  uploadedChunkIndices: number[];
+  updatedAt: number;
+}
 
 /**
- * 使用 SparkMD5 计算文件哈希
+ * 使用 SparkMD5 按分片增量计算文件哈希
  */
-export async function calculateFileMD5(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // 动态导入 SparkMD5
-    import('spark-md5').then((SparkMD5) => {
-      const spark = new SparkMD5.ArrayBuffer();
-      const reader = new FileReader();
+export async function calculateFileMD5(
+  file: File,
+  chunkSize = DEFAULT_CHUNK_SIZE
+): Promise<string> {
+  const SparkMD5 = await import('spark-md5');
+  const spark = new SparkMD5.ArrayBuffer();
+  const totalChunks = Math.ceil(file.size / chunkSize);
 
-      reader.onload = (e) => {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
-        if (arrayBuffer) {
-          spark.append(arrayBuffer);
-          const hash = spark.end();
-          console.log('[Chunk] File MD5 calculated:', {
-            name: file.name,
-            size: file.size,
-            hash
-          });
-          resolve(hash);
-        } else {
-          reject(new Error('Failed to read file for MD5 calculation'));
-        }
-      };
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, file.size);
+    const chunkBuffer = await file.slice(start, end).arrayBuffer();
+    spark.append(chunkBuffer);
+  }
 
-      reader.onerror = () => {
-        reject(new Error('FileReader error while calculating MD5'));
-      };
-
-      reader.readAsArrayBuffer(file);
-    }).catch((error) => {
-      reject(new Error(`Failed to import SparkMD5: ${error}`));
-    });
+  const hash = spark.end();
+  console.log('[Chunk] File MD5 calculated:', {
+    name: file.name,
+    size: file.size,
+    hash,
+    totalChunks,
   });
+  return hash;
 }
 
 /**
@@ -67,8 +68,7 @@ export function splitIntoChunks(file: File, chunkSize = DEFAULT_CHUNK_SIZE): Blo
   for (let i = 0; i < totalChunks; i++) {
     const start = i * chunkSize;
     const end = Math.min(start + chunkSize, file.size);
-    const chunk = file.slice(start, end);
-    chunks.push(chunk);
+    chunks.push(file.slice(start, end));
   }
 
   console.log('[Chunk] File split into chunks:', {
@@ -88,6 +88,92 @@ export function calculateChunkCount(file: File, chunkSize = DEFAULT_CHUNK_SIZE):
   return Math.ceil(file.size / chunkSize);
 }
 
+function buildResumableFileId(file: File, fileHash: string): string {
+  return `${fileHash}-${file.size}`;
+}
+
+function getUploadSessionMap(): Record<string, UploadSession> {
+  try {
+    const raw = localStorage.getItem(UPLOAD_SESSION_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, UploadSession>;
+  } catch {
+    return {};
+  }
+}
+
+function setUploadSessionMap(sessionMap: Record<string, UploadSession>): void {
+  localStorage.setItem(UPLOAD_SESSION_STORAGE_KEY, JSON.stringify(sessionMap));
+}
+
+function saveUploadSession(session: UploadSession): void {
+  const sessionMap = getUploadSessionMap();
+  sessionMap[session.fileId] = session;
+  setUploadSessionMap(sessionMap);
+}
+
+function deleteUploadSession(fileId: string): void {
+  const sessionMap = getUploadSessionMap();
+  delete sessionMap[fileId];
+  setUploadSessionMap(sessionMap);
+}
+
+function getChunkSizeSum(chunks: Blob[], chunkIndices: Set<number>): number {
+  let totalSize = 0;
+  for (const index of chunkIndices) {
+    totalSize += chunks[index]?.size || 0;
+  }
+  return totalSize;
+}
+
+function createUploadProgress(
+  fileId: string,
+  fileName: string,
+  uploadedChunks: number,
+  totalChunks: number,
+  uploadedBytes: number,
+  fileSize: number,
+  startTime: number
+): UploadProgress {
+  const elapsed = (Date.now() - startTime) / 1000;
+  const speed = elapsed > 0 ? uploadedBytes / 1024 / elapsed : 0;
+  const remainingBytes = Math.max(fileSize - uploadedBytes, 0);
+  const estimatedTime = speed > 0 ? remainingBytes / 1024 / speed : 0;
+
+  return {
+    fileId,
+    fileName,
+    uploadedChunks,
+    totalChunks,
+    percentage: totalChunks > 0 ? (uploadedChunks / totalChunks) * 100 : 0,
+    speed,
+    estimatedTime,
+  };
+}
+
+async function queryUploadStatus(fileId: string): Promise<{
+  fileId: string;
+  fileName?: string;
+  fileHash?: string;
+  receivedChunks?: number;
+  totalChunks?: number;
+  receivedIndices?: number[];
+  isComplete?: boolean;
+  percentage?: number;
+} | null> {
+  const response = await fetch(`${API_BASE_URL}/upload/status?fileId=${encodeURIComponent(fileId)}`);
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error('查询上传状态失败');
+  }
+
+  return response.json();
+}
+
 /**
  * 分片上传文件
  */
@@ -98,48 +184,75 @@ export async function uploadChunkedFile(
     chunkSize?: number;
     apiUrl?: string;
   } = {}
-): Promise<FileData> {
-  const {
-    onProgress,
-    chunkSize = DEFAULT_CHUNK_SIZE,
-  } = options;
-
-  const fileId = generateId();
+): Promise<UploadedFileRef> {
+  const { onProgress, chunkSize = DEFAULT_CHUNK_SIZE } = options;
   const chunks = splitIntoChunks(file, chunkSize);
   const totalChunks = chunks.length;
 
-  console.log('[Chunk] Starting chunked upload:', {
-    fileId,
-    fileName: file.name,
-    fileSize: file.size,
-    totalChunks,
-    chunkSize,
-  });
-
-  console.log('[Chunk] Starting chunked upload function...');
-
   try {
-    // 计算 MD5
-    console.log('[Chunk] Calculating MD5...');
-    const fileHash = await calculateFileMD5(file);
-    console.log('[Chunk] MD5 calculated successfully, starting upload loop...');
-
-    // 上传进度追踪
+    console.log('[Chunk] Calculating MD5 for resumable upload...');
+    const fileHash = await calculateFileMD5(file, chunkSize);
+    const fileId = buildResumableFileId(file, fileHash);
     const startTime = Date.now();
-    let uploadedBytes = 0;
 
-    // 逐个上传分片
+    const serverStatus = await queryUploadStatus(fileId);
+    const savedSession = getUploadSessionMap()[fileId];
+    const uploadedChunkIndices = new Set<number>([
+      ...(serverStatus?.receivedIndices || []),
+      ...(savedSession?.uploadedChunkIndices || []),
+    ]);
+
+    let uploadedBytes = getChunkSizeSum(chunks, uploadedChunkIndices);
+
+    console.log('[Chunk] Starting chunked upload:', {
+      fileId,
+      fileName: file.name,
+      fileSize: file.size,
+      totalChunks,
+      uploadedChunks: uploadedChunkIndices.size,
+      resumed: uploadedChunkIndices.size > 0,
+    });
+
+    saveUploadSession({
+      fileId,
+      fileHash,
+      fileName: file.name,
+      fileSize: file.size,
+      totalChunks,
+      uploadedChunkIndices: Array.from(uploadedChunkIndices).sort((a, b) => a - b),
+      updatedAt: Date.now(),
+    });
+
+    if (onProgress) {
+      onProgress(
+        createUploadProgress(
+          fileId,
+          file.name,
+          uploadedChunkIndices.size,
+          totalChunks,
+          uploadedBytes,
+          file.size,
+          startTime
+        )
+      );
+    }
+
     for (let i = 0; i < totalChunks; i++) {
-      console.log(`[Chunk] Uploading chunk ${i + 1}/${totalChunks}...`);
+      if (uploadedChunkIndices.has(i)) {
+        console.log(`[Chunk] Skip uploaded chunk ${i + 1}/${totalChunks}`);
+        continue;
+      }
+
       const chunk = chunks[i];
       if (!chunk) {
         throw new Error(`Chunk ${i} not found`);
       }
-      const chunkData = await chunk.arrayBuffer();
-      console.log(`[Chunk] Chunk data size: ${chunkData.byteLength} bytes`);
 
+      const chunkData = await chunk.arrayBuffer();
       const formData = new FormData();
       formData.append('fileId', fileId);
+      formData.append('fileName', file.name);
+      formData.append('fileSize', String(file.size));
       formData.append('chunkIndex', String(i));
       formData.append('totalChunks', String(totalChunks));
       formData.append('fileHash', fileHash);
@@ -151,47 +264,48 @@ export async function uploadChunkedFile(
         body: formData,
       });
 
-      console.log(`[Chunk] Chunk ${i + 1} response status: ${response.status} ${response.ok}`);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Chunk] Chunk ${i + 1} failed with response:`, errorText);
         throw new Error(`分片 ${i + 1}/${totalChunks} 上传失败: ${errorText}`);
       }
 
-      // 更新上传进度
-      uploadedBytes += chunkData.byteLength;
-      const elapsed = (Date.now() - startTime) / 1000; // 秒
-      const speed = elapsed > 0 ? uploadedBytes / 1024 / elapsed : 0; // KB/s
-      const remainingBytes = file.size - uploadedBytes;
-      const estimatedTime = speed > 0 ? remainingBytes / 1024 / speed : 0; // 秒
+      const result = await response.json();
+      const receivedIndices = Array.isArray(result.receivedIndices)
+        ? result.receivedIndices as number[]
+        : [i];
 
-      const progress: UploadProgress = {
+      for (const index of receivedIndices) {
+        uploadedChunkIndices.add(index);
+      }
+
+      uploadedBytes = getChunkSizeSum(chunks, uploadedChunkIndices);
+
+      saveUploadSession({
         fileId,
+        fileHash,
         fileName: file.name,
-        uploadedChunks: i + 1,
+        fileSize: file.size,
         totalChunks,
-        percentage: ((i + 1) / totalChunks) * 100,
-        speed,
-        estimatedTime,
-      };
-
-      console.log('[Chunk] Chunk uploaded:', {
-        chunkIndex: i + 1,
-        totalChunks,
-        percentage: progress.percentage.toFixed(1),
-        speed: speed.toFixed(2),
-        estimatedTime: estimatedTime.toFixed(0),
+        uploadedChunkIndices: Array.from(uploadedChunkIndices).sort((a, b) => a - b),
+        updatedAt: Date.now(),
       });
 
-      // 触发进度回调
       if (onProgress) {
-        onProgress(progress);
+        onProgress(
+          createUploadProgress(
+            fileId,
+            file.name,
+            uploadedChunkIndices.size,
+            totalChunks,
+            uploadedBytes,
+            file.size,
+            startTime
+          )
+        );
       }
     }
 
-    // 所有分片上传完成，通知后端合并
-    console.log('[Chunk] All chunks uploaded, completing upload...', {
+    console.log('[Chunk] All missing chunks uploaded, completing upload...', {
       fileId,
       fileName: file.name,
       fileHash,
@@ -213,17 +327,21 @@ export async function uploadChunkedFile(
       throw new Error(`文件合并失败: ${errorText}`);
     }
 
-    const result = await completeResponse.json();
-    const fileData = result.fileData as FileData;
+    const result = await completeResponse.json() as UploadCompleteResponse;
+    const uploadedFile = result.file;
+
+    if (!uploadedFile) {
+      throw new Error('文件上传成功，但未返回文件引用');
+    }
 
     console.log('[Chunk] File upload completed:', {
       fileId,
       fileName: file.name,
-      contentLength: fileData.content?.length || 0,
-      size: fileData.size,
+      size: uploadedFile.size,
     });
 
-    return fileData;
+    deleteUploadSession(fileId);
+    return uploadedFile;
   } catch (error) {
     console.error('[Chunk] Upload failed:', error);
     throw error;
@@ -236,14 +354,14 @@ export async function uploadChunkedFile(
 export async function getUploadStatus(
   fileId: string
 ): Promise<{
-    fileId: string;
-    fileName?: string;
-    receivedChunks?: number;
-    totalChunks?: number;
-    isComplete?: boolean;
-    percentage?: number;
-  }> {
-  const response = await fetch(`${API_BASE_URL}/upload/status?fileId=${fileId}`);
+  fileId: string;
+  fileName?: string;
+  receivedChunks?: number;
+  totalChunks?: number;
+  isComplete?: boolean;
+  percentage?: number;
+}> {
+  const response = await fetch(`${API_BASE_URL}/upload/status?fileId=${encodeURIComponent(fileId)}`);
 
   if (!response.ok) {
     throw new Error('查询上传状态失败');
@@ -273,6 +391,5 @@ export function formatUploadProgress(progress: UploadProgress): string {
  * 检查是否应该使用分片上传
  */
 export function shouldUseChunking(file: File, threshold = 500 * 1024): boolean {
-  // 改为 500KB 以上使用分片上传，避免大文件直接读取导致内存问题
   return file.size > threshold;
 }
