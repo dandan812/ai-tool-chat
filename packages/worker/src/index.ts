@@ -19,6 +19,7 @@ import {
 import { logger } from './utils/logger';
 import { ChunkStorage } from "./chunkStorage";
 import { createChunkStorageUrl, getChunkStorageStub } from './utils/uploadedFileStorage';
+import { createErrorDetails, ERROR_CODES } from './utils/observability';
 
 export { ChunkStorage };
 
@@ -61,7 +62,10 @@ async function handleChatRequest(request: Request, env: Env): Promise<Response> 
   const body = await safeJSONParse<ChatRequest>(request);
 
   if (!body) {
-    throw new ValidationError('Invalid JSON body');
+    throw new ValidationError(
+      'Invalid JSON body',
+      createErrorDetails(ERROR_CODES.CHAT_INVALID_JSON),
+    );
   }
 
   const {
@@ -75,10 +79,15 @@ async function handleChatRequest(request: Request, env: Env): Promise<Response> 
 
   // 验证必需字段
   if (!Array.isArray(messages) || messages.length === 0) {
-    throw new ValidationError('Messages are required');
+    throw new ValidationError(
+      'Messages are required',
+      createErrorDetails(ERROR_CODES.CHAT_MESSAGES_REQUIRED),
+    );
   }
 
   logger.info('Creating task', {
+    route: '/chat',
+    requestType: 'chat',
     messageCount: messages.length,
     stream,
     hasImages: !!images?.length,
@@ -88,6 +97,14 @@ async function handleChatRequest(request: Request, env: Env): Promise<Response> 
 
   const taskManager = new TaskManager(env);
   const task = taskManager.createTask(body);
+
+  logger.info('Task created for chat request', {
+    route: '/chat',
+    requestType: 'chat',
+    taskId: task.id,
+    hasImages: !!images?.length,
+    hasFiles: !!files?.length,
+  });
 
   // 流式响应
   if (!stream) {
@@ -112,6 +129,14 @@ async function handleNonStreamRequest(
   }
 
   const finalTask = taskManager.getTask(taskId);
+  logger.info('Non-stream task finished', {
+    route: '/chat',
+    requestType: 'chat',
+    taskId,
+    status: finalTask?.status,
+    model: finalTask?.metadata?.model,
+    skill: finalTask?.metadata?.skill,
+  });
   return createJSONResponse({ task: finalTask, chunks });
 }
 
@@ -126,6 +151,7 @@ function handleStreamRequest(
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
+  const startedAt = Date.now();
 
   const executeTask = async () => {
     try {
@@ -135,9 +161,24 @@ function handleStreamRequest(
       }
 
       await writer.write(encoder.encode('data: [DONE]\n\n'));
-      logger.info('Task completed', { taskId });
+      const finalTask = taskManager.getTask(taskId);
+      logger.info('Stream task completed', {
+        route: '/chat',
+        requestType: 'chat',
+        taskId,
+        durationMs: Date.now() - startedAt,
+        skill: finalTask?.metadata?.skill,
+        model: finalTask?.metadata?.model,
+      });
     } catch (error) {
-      logger.error('Task execution error', error);
+      logger.error('Task execution error', {
+        route: '/chat',
+        requestType: 'chat',
+        taskId,
+        durationMs: Date.now() - startedAt,
+        errorCode: ERROR_CODES.CHAT_TASK_EXECUTION_FAILED,
+        error,
+      });
       const errorEvent = {
         type: 'error',
         data: { error: String(error) },
@@ -209,12 +250,21 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
     const mimeType = formData.get('mimeType') as string || 'text/plain';
 
     if (!fileId || !chunk || isNaN(chunkIndex)) {
-      throw new ValidationError('Missing required fields: fileId, chunk, or chunkIndex');
+      throw new ValidationError(
+        'Missing required fields: fileId, chunk, or chunkIndex',
+        createErrorDetails(ERROR_CODES.UPLOAD_CHUNK_INVALID_REQUEST),
+      );
     }
 
     const arrayBuffer = await chunk.arrayBuffer();
 
-    logger.info('Uploading chunk', { fileId, chunkIndex, size: arrayBuffer.byteLength });
+    logger.info('Uploading chunk', {
+      route: '/upload/chunk',
+      requestType: 'upload_chunk',
+      fileId,
+      chunkIndex,
+      size: arrayBuffer.byteLength,
+    });
 
     const durableObjectUrl = createChunkStorageUrl(
       `/?action=storeChunk&fileId=${encodeURIComponent(fileId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}&fileHash=${encodeURIComponent(fileHash)}&mimeType=${encodeURIComponent(mimeType)}`
@@ -230,16 +280,41 @@ async function handleUploadChunk(request: Request, env: Env): Promise<Response> 
 
     if (!durableResponse.ok) {
       const error = await durableResponse.text();
-      logger.error('Durable Object error', error);
-      throw new ValidationError(`Durable Object error: ${error}`);
+      logger.error('Durable Object error during chunk upload', {
+        route: '/upload/chunk',
+        requestType: 'upload_chunk',
+        fileId,
+        chunkIndex,
+        errorCode: ERROR_CODES.UPLOAD_CHUNK_STORE_FAILED,
+        error,
+      });
+      throw new ValidationError(
+        `Durable Object error: ${error}`,
+        createErrorDetails(ERROR_CODES.UPLOAD_CHUNK_STORE_FAILED, {
+          fileId,
+          chunkIndex,
+        }),
+      );
     }
 
     const result = await durableResponse.json();
-    logger.info('Chunk stored', { fileId, chunkIndex, result });
+    logger.info('Chunk stored', {
+      route: '/upload/chunk',
+      requestType: 'upload_chunk',
+      fileId,
+      chunkIndex,
+      receivedChunks: result.receivedChunks,
+      duplicate: result.duplicate,
+    });
 
     return createJSONResponse(result);
   } catch (error) {
-    logger.error('Upload chunk error', error);
+    logger.error('Upload chunk error', {
+      route: '/upload/chunk',
+      requestType: 'upload_chunk',
+      errorCode: ERROR_CODES.UPLOAD_CHUNK_STORE_FAILED,
+      error,
+    });
     throw error;
   }
 }
@@ -251,19 +326,33 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
   try {
     const body = await safeJSONParse<UploadCompleteRequest>(request);
     if (!body) {
-      throw new ValidationError('Invalid JSON body');
+      throw new ValidationError(
+        'Invalid JSON body',
+        createErrorDetails(ERROR_CODES.UPLOAD_COMPLETE_INVALID_REQUEST),
+      );
     }
 
     const { fileId, fileName } = body;
 
-    logger.info('Upload complete request', { fileId, fileName });
+    logger.info('Upload complete request', {
+      route: '/upload/complete',
+      requestType: 'upload_complete',
+      fileId,
+      fileName,
+    });
     const chunkStorage = getChunkStorageStub(env, fileId);
 
     // 先检查元数据状态（调试）
     const checkDurableUrl = createChunkStorageUrl(`/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`);
     const checkResponse = await chunkStorage.fetch(checkDurableUrl);
     const checkData = await checkResponse.json();
-    logger.info('Metadata check before merge', { fileId, checkData });
+    logger.info('Metadata check before merge', {
+      route: '/upload/complete',
+      requestType: 'upload_complete',
+      fileId,
+      receivedChunks: checkData?.receivedChunks,
+      totalChunks: checkData?.totalChunks,
+    });
 
     const durableObjectUrl = createChunkStorageUrl(`/?action=mergeChunks&fileId=${encodeURIComponent(fileId)}`);
     const durableRequest = new Request(durableObjectUrl, {
@@ -274,15 +363,32 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 
     if (!durableResponse.ok) {
       const error = await durableResponse.text();
-      logger.error('Durable Object error', error);
-      throw new ValidationError(`Durable Object error: ${error}`);
+      logger.error('Durable Object error during merge', {
+        route: '/upload/complete',
+        requestType: 'upload_complete',
+        fileId,
+        errorCode: ERROR_CODES.UPLOAD_MERGE_FAILED,
+        error,
+      });
+      throw new ValidationError(
+        `Durable Object error: ${error}`,
+        createErrorDetails(ERROR_CODES.UPLOAD_MERGE_FAILED, { fileId }),
+      );
     }
 
     const result = await durableResponse.json();
-    logger.info('Chunks merged', { fileId, result });
+    logger.info('Chunks merged', {
+      route: '/upload/complete',
+      requestType: 'upload_complete',
+      fileId,
+      success: result.success,
+    });
 
     if (!result.success) {
-      throw new ValidationError(result.error || 'Merge failed');
+      throw new ValidationError(
+        result.error || 'Merge failed',
+        createErrorDetails(ERROR_CODES.UPLOAD_MERGE_FAILED, { fileId }),
+      );
     }
 
     return createJSONResponse<UploadCompleteResponse>({
@@ -290,7 +396,12 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
       file: result.file,
     });
   } catch (error) {
-    logger.error('Upload complete error', error);
+    logger.error('Upload complete error', {
+      route: '/upload/complete',
+      requestType: 'upload_complete',
+      errorCode: ERROR_CODES.UPLOAD_MERGE_FAILED,
+      error,
+    });
     throw error;
   }
 }
@@ -304,22 +415,52 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
     const fileId = url.searchParams.get('fileId');
 
     if (!fileId) {
-      throw new ValidationError('Missing fileId parameter');
+      throw new ValidationError(
+        'Missing fileId parameter',
+        createErrorDetails(ERROR_CODES.UPLOAD_STATUS_INVALID_REQUEST),
+      );
     }
 
-    logger.info('Upload status request', { fileId });
+    logger.info('Upload status request', {
+      route: '/upload/status',
+      requestType: 'upload_status',
+      fileId,
+    });
     const chunkStorage = getChunkStorageStub(env, fileId);
 
     // 获取元数据
     const durableObjectUrl = createChunkStorageUrl(`/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`);
     const durableResponse = await chunkStorage.fetch(durableObjectUrl);
 
+    if (durableResponse.status === 404) {
+      logger.info('Upload status not found', {
+        route: '/upload/status',
+        requestType: 'upload_status',
+        fileId,
+        errorCode: ERROR_CODES.UPLOAD_STATUS_NOT_FOUND,
+      });
+      return createJSONResponse({
+        error: `File ${fileId} not found`,
+        code: ERROR_CODES.UPLOAD_STATUS_NOT_FOUND,
+      }, 404);
+    }
+
     if (!durableResponse.ok) {
-      throw new NotFoundError(`File ${fileId} not found`);
+      const errorText = await durableResponse.text();
+      throw new ValidationError(
+        `读取上传状态失败: ${errorText}`,
+        createErrorDetails(ERROR_CODES.UPLOAD_STATUS_READ_FAILED, { fileId }),
+      );
     }
 
     const metadata = await durableResponse.json();
-    logger.info('Got metadata', { fileId, metadata });
+    logger.info('Got upload metadata', {
+      route: '/upload/status',
+      requestType: 'upload_status',
+      fileId,
+      receivedChunks: metadata?.receivedChunks,
+      totalChunks: metadata?.totalChunks,
+    });
 
     if (!metadata) {
       throw new ValidationError('Invalid metadata response');
@@ -340,7 +481,12 @@ async function handleUploadStatus(request: Request, env: Env): Promise<Response>
       isComplete: metadata.receivedChunks >= metadata.totalChunks,
     });
   } catch (error) {
-    logger.error('Upload status error', error);
+    logger.error('Upload status error', {
+      route: '/upload/status',
+      requestType: 'upload_status',
+      errorCode: ERROR_CODES.UPLOAD_STATUS_READ_FAILED,
+      error,
+    });
     throw error;
   }
 }

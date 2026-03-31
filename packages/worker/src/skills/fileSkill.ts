@@ -13,14 +13,11 @@ import type {
   SkillInput,
   SkillContext,
   SkillStreamChunk,
-  Message,
   ResolvedFileContent,
 } from "../types";
 import { logger } from "../utils/logger";
 import {
   estimateTokens,
-  splitByTokens,
-  addContextToChunks,
 } from "../utils/chunker";
 import { compressCode, type CompressResult } from "../utils/codeCompressor";
 import {
@@ -32,17 +29,20 @@ import { getUploadedFileContent } from "../utils/uploadedFileStorage";
 import {
   buildCompressedCodeSection,
   buildResolvedFileSection,
-  createChunkSummaryMessages,
-  createLargeFileAnswerMessages,
   createMixedFileMessages,
   createRagMessages,
-  createSmallFileMessages,
   isCodeFile,
   isSupportedTextFile,
   MAX_TOKEN_THRESHOLD,
   resolveFileUserQuestion,
-  selectFileTextExecutor,
+  shouldPreferDirectFileAnswer,
+  shouldPreferGlobalSummary,
 } from "./fileSkillSupport";
+import {
+  processSmallFiles,
+  processLargeFiles,
+  processTextFilesWithRetrieval,
+} from './fileSkillTextProcessing';
 
 export const fileSkill: Skill = {
   name: "file-chat",
@@ -55,7 +55,13 @@ export const fileSkill: Skill = {
   ): AsyncIterable<SkillStreamChunk> {
     const { files = [], messages } = input;
 
-    logger.info("Processing files in fileSkill", { fileCount: files.length });
+    logger.info("Processing files in fileSkill", {
+      route: '/chat',
+      requestType: 'file_analysis',
+      taskId: context.taskId,
+      skill: 'file-chat',
+      fileCount: files.length,
+    });
 
     const resolvedFiles = await Promise.all(
       files.map((file) => getUploadedFileContent(context.env, file))
@@ -93,7 +99,7 @@ export const fileSkill: Skill = {
       // 混合文件：代码用压缩，其他用原内容
       yield* processMixedFiles(resolvedFiles, userQuestion, input, context);
     } else {
-      // 纯文本文件：使用原有分块策略
+      // 纯文本文件：优先走检索式问答，必要时再回退到全文/分块摘要
       const allFileContents = resolvedFiles
         .map(buildResolvedFileSection)
         .join("\n\n");
@@ -106,171 +112,36 @@ export const fileSkill: Skill = {
         needsChunking: totalTokens > MAX_TOKEN_THRESHOLD,
       });
 
-      if (totalTokens <= MAX_TOKEN_THRESHOLD) {
+      if (shouldPreferDirectFileAnswer(totalTokens, resolvedFiles.length)) {
         yield* processSmallFiles(allFileContents, userQuestion, input, context);
+      } else if (shouldPreferGlobalSummary(userQuestion)) {
+        if (totalTokens <= MAX_TOKEN_THRESHOLD) {
+          yield* processSmallFiles(allFileContents, userQuestion, input, context);
+        } else {
+          yield* processTextFilesWithRetrieval(
+            resolvedFiles,
+            userQuestion,
+            input,
+            context,
+            totalTokens,
+            allFileContents,
+            true,
+          );
+        }
       } else {
-        yield* processLargeFiles(
+        yield* processTextFilesWithRetrieval(
           resolvedFiles,
-          allFileContents,
           userQuestion,
           input,
           context,
+          totalTokens,
+          allFileContents,
+          false,
         );
       }
     }
   },
 };
-
-/**
- * 处理小文件（≤ MAX_TOKEN_THRESHOLD）
- */
-async function* processSmallFiles(
-  fileContents: string,
-  userQuestion: string,
-  input: SkillInput,
-  context: SkillContext,
-): AsyncIterable<SkillStreamChunk> {
-  const textExecutor = selectFileTextExecutor(input, context);
-  const enhancedMessages = createSmallFileMessages(fileContents, userQuestion);
-
-  // 复用 glmSkill 进行对话
-  const textInput = { ...input, messages: enhancedMessages, model: textExecutor.model };
-  yield* textExecutor.execute(textInput, context);
-}
-
-/**
- * 处理大文件（> MAX_TOKEN_THRESHOLD）
- * 采用 Map-Reduce 风格的分块处理
- */
-async function* processLargeFiles(
-  files: ResolvedFileContent[],
-  fileContents: string,
-  userQuestion: string,
-  input: SkillInput,
-  context: SkillContext,
-): AsyncIterable<SkillStreamChunk> {
-  const textExecutor = selectFileTextExecutor(input, context);
-  // 每块的最大 token 数（预留一些余量）
-  const maxTokensPerChunk = MAX_TOKEN_THRESHOLD - 20000;
-
-  logger.info("Starting chunked processing", { maxTokensPerChunk });
-
-  // 步骤 1: 分块
-  yield {
-    type: "progress",
-    progress: {
-      message: "正在分析文件并分块...",
-      current: 0,
-      total: 3,
-    },
-  };
-
-  const rawChunks = splitByTokens(fileContents, maxTokensPerChunk);
-  const chunks = addContextToChunks(rawChunks, 50);
-
-  logger.info("File split into chunks", {
-    totalChunks: chunks.length,
-    totalTokens: estimateTokens(fileContents),
-    avgTokensPerChunk: Math.round(estimateTokens(fileContents) / chunks.length),
-  });
-
-  // 步骤 2: 并行提取摘要
-  yield {
-    type: "progress",
-    progress: {
-      message: `正在处理 ${chunks.length} 个分块...`,
-      current: 1,
-      total: 3,
-    },
-  };
-
-  const summaries = await extractChunkSummaries(chunks, input, context);
-
-  logger.info("Chunk summaries extracted", { summaryCount: summaries.length });
-
-  // 步骤 3: 生成最终答案
-  yield {
-    type: "progress",
-    progress: {
-      message: "正在生成最终答案...",
-      current: 2,
-      total: 3,
-    },
-  };
-
-  const finalMessages = createLargeFileAnswerMessages(summaries, userQuestion);
-
-  const textInput = { ...input, messages: finalMessages, model: textExecutor.model };
-  yield* textExecutor.execute(textInput, context);
-
-  logger.info("Large file processing completed");
-}
-
-/**
- * 并行提取所有分块的摘要
- * 限制并发数为 3，避免 API 限流
- */
-async function extractChunkSummaries(
-  chunks: string[],
-  input: SkillInput,
-  context: SkillContext,
-): Promise<string[]> {
-  const CONCURRENCY_LIMIT = 3;
-  const summaries: string[] = [];
-
-  // 分批处理
-  for (let i = 0; i < chunks.length; i += CONCURRENCY_LIMIT) {
-    const batch = chunks.slice(i, i + CONCURRENCY_LIMIT);
-    const batchResults = await Promise.all(
-      batch.map((chunk, batchIndex) =>
-        extractSingleChunkSummary(
-          chunk,
-          i + batchIndex + 1,
-          chunks.length,
-          input,
-          context,
-        ),
-      ),
-    );
-    summaries.push(...batchResults);
-  }
-
-  return summaries;
-}
-
-/**
- * 提取单个分块的摘要
- */
-async function extractSingleChunkSummary(
-  chunk: string,
-  chunkIndex: number,
-  totalChunks: number,
-  input: SkillInput,
-  context: SkillContext,
-): Promise<string> {
-  const textExecutor = selectFileTextExecutor(input, context);
-  logger.info(`Extracting summary for chunk ${chunkIndex}/${totalChunks}`);
-
-  const messages = createChunkSummaryMessages(chunk);
-
-  const textInput = { ...input, messages, maxTokens: 2000, model: textExecutor.model };
-
-  // 收集流式响应
-  let summary = "";
-  for await (const chunk of textExecutor.execute(textInput, context)) {
-    if (chunk.type === "content") {
-      summary += chunk.content;
-    } else if (chunk.type === "error") {
-      logger.error(`Error in chunk ${chunkIndex}`, { error: chunk.error });
-      return `提取失败: ${chunk.error}`;
-    }
-  }
-
-  logger.info(`Summary extracted for chunk ${chunkIndex}`, {
-    summaryLength: summary.length,
-  });
-  return summary;
-}
 
 // ==================== 新增：代码文件 RAG 检索处理 ====================
 

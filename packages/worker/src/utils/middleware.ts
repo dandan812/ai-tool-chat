@@ -3,8 +3,9 @@
  */
 
 import type { Env, Handler, Middleware } from '../types';
-import { WorkerError, ValidationError, AuthenticationError } from '../types';
+import { WorkerError, ValidationError } from '../types';
 import { logger } from './logger';
+import { createErrorDetails, ERROR_CODES, getErrorCode, getRequestType } from './observability';
 
 /**
  * CORS 中间件
@@ -38,17 +39,13 @@ export function withCORS(handler: Handler): Handler {
  */
 export function withErrorHandler(handler: Handler): Handler {
   return async (request, env) => {
+    const url = new URL(request.url);
+    const route = url.pathname;
+    const requestType = getRequestType(route);
+
     try {
       return await handler(request, env);
     } catch (error) {
-      // 记录错误
-      if (error instanceof WorkerError) {
-        logger.error(`WorkerError: ${error.code}`, error);
-      } else {
-        logger.error('Unhandled error:', error);
-      }
-
-      // 构建错误响应
       let message: string;
       let status: number;
       let code: string;
@@ -64,6 +61,15 @@ export function withErrorHandler(handler: Handler): Handler {
         status = 500;
         code = 'INTERNAL_ERROR';
       }
+
+      logger.error('Request error response', {
+        route,
+        requestType,
+        method: request.method,
+        status,
+        errorCode: getErrorCode(error) || code,
+        error,
+      });
 
       return createJSONResponse(
         {
@@ -86,7 +92,10 @@ export function withValidation(handler: Handler): Handler {
   return async (request, env) => {
     // 验证请求方法
     if (request.method !== 'POST' && request.method !== 'GET') {
-      throw new ValidationError('Method Not Allowed', { method: request.method });
+      throw new ValidationError('Method Not Allowed', createErrorDetails(
+        ERROR_CODES.REQUEST_METHOD_NOT_ALLOWED,
+        { method: request.method },
+      ));
     }
 
     // GET 请求跳过 Content-Type 验证
@@ -97,19 +106,25 @@ export function withValidation(handler: Handler): Handler {
     // 验证 Content-Type
     const contentType = request.headers.get('content-type') || '';
     if (!contentType.includes('application/json') && !contentType.includes('multipart/form-data')) {
-      throw new ValidationError('Content-Type must be application/json or multipart/form-data', {
-        contentType,
-      });
+      throw new ValidationError(
+        'Content-Type must be application/json or multipart/form-data',
+        createErrorDetails(ERROR_CODES.REQUEST_UNSUPPORTED_CONTENT_TYPE, {
+          contentType,
+        }),
+      );
     }
 
     // 验证请求体大小 (限制 10MB)
     const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (contentLength > maxSize) {
-      throw new ValidationError('Request body too large', {
-        size: contentLength,
-        maxSize,
-      });
+      throw new ValidationError(
+        'Request body too large',
+        createErrorDetails(ERROR_CODES.REQUEST_BODY_TOO_LARGE, {
+          size: contentLength,
+          maxSize,
+        }),
+      );
     }
 
     return handler(request, env);
@@ -123,31 +138,40 @@ export function withLogging(handler: Handler): Handler {
   return async (request, env) => {
     const start = Date.now();
     const url = new URL(request.url);
+    const route = url.pathname;
+    const requestType = getRequestType(route);
 
     logger.info('Request started', {
+      route,
+      requestType,
       method: request.method,
-      path: url.pathname,
+      path: route,
       query: url.search,
     });
 
     try {
       const response = await handler(request, env);
-      const duration = Date.now() - start;
+      const durationMs = Date.now() - start;
 
       logger.info('Request completed', {
+        route,
+        requestType,
         method: request.method,
-        path: url.pathname,
+        path: route,
         status: response.status,
-        duration,
+        durationMs,
       });
 
       return response;
     } catch (error) {
-      const duration = Date.now() - start;
+      const durationMs = Date.now() - start;
       logger.error('Request failed', {
+        route,
+        requestType,
         method: request.method,
-        path: url.pathname,
-        duration,
+        path: route,
+        durationMs,
+        errorCode: getErrorCode(error),
         error,
       });
       throw error;

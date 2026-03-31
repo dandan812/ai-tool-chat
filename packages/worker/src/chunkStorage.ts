@@ -4,26 +4,22 @@
  * 说明：
  * - 每个 fileId 对应一个 Durable Object 实例
  * - 分片写入必须幂等，避免重复上传导致计数错误
- * - 上传完成后，合并后的文件正文会保存在同一个 DO 中
+ * - 上传完成后，合并后的文件正文写入 R2，DO 只保留元数据和完成标记
  * - 断点续传依赖 metadata 中的 receivedIndices 恢复缺失分片
  */
-import type { Env, UploadedFileRef } from './types';
+import type { Env } from './types';
 import { logger } from './utils/logger';
-
-interface FileMetadata {
-  fileId: string;
-  fileName: string;
-  fileHash: string;
-  totalSize: number;
-  totalChunks: number;
-  receivedChunks: number;
-  receivedIndices: number[];
-  mimeType: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
+import {
+  getUploadedFileObjectKey,
+  getUploadedFileTextIndexObjectKey,
+} from './utils/uploadedFileStorage';
+import {
+  createUploadedFileRef,
+  type FileMetadata,
+  isUploadExpired,
+  mergeStoredChunks,
+  repairMetadataFromChunks,
+} from './chunkStorageSupport';
 
 export class ChunkStorage implements DurableObject {
   constructor(private state: DurableObjectState, private env: Env) {}
@@ -40,8 +36,6 @@ export class ChunkStorage implements DurableObject {
           return await this.handleStoreChunk(request);
         case 'getMetadata':
           return await this.handleGetMetadata(url);
-        case 'getFileContent':
-          return await this.handleGetFileContent(url);
         case 'isComplete':
           return await this.handleIsComplete(url);
         case 'mergeChunks':
@@ -83,7 +77,7 @@ export class ChunkStorage implements DurableObject {
     const now = Date.now();
 
     let metadata = await this.state.storage.get<FileMetadata>(metadataKey);
-    if (metadata && this.isExpired(metadata)) {
+    if (metadata && isUploadExpired(metadata)) {
       await this.deleteFileData(metadata);
       metadata = undefined;
     }
@@ -181,44 +175,12 @@ export class ChunkStorage implements DurableObject {
       return this.jsonResponse({ error: 'File not found' }, 404);
     }
 
-    if (this.isExpired(metadata)) {
+    if (isUploadExpired(metadata)) {
       await this.deleteFileData(metadata);
       return this.jsonResponse({ error: 'File not found' }, 404);
     }
 
     return this.jsonResponse(metadata);
-  }
-
-  /**
-   * 获取合并后的文件正文
-   */
-  private async handleGetFileContent(url: URL): Promise<Response> {
-    const fileId = url.searchParams.get('fileId');
-    if (!fileId) {
-      return this.jsonResponse({ error: 'Missing fileId' }, 400);
-    }
-
-    const metadata = await this.state.storage.get<FileMetadata>(this.getMetadataKey(fileId));
-    const content = await this.state.storage.get<string>(this.getContentKey(fileId));
-
-    if (!metadata || content === undefined) {
-      return this.jsonResponse({ error: 'Uploaded file not found' }, 404);
-    }
-
-    if (this.isExpired(metadata)) {
-      await this.deleteFileData(metadata);
-      return this.jsonResponse({ error: 'Uploaded file not found' }, 404);
-    }
-
-    return this.jsonResponse({
-      fileId: metadata.fileId,
-      fileName: metadata.fileName,
-      mimeType: metadata.mimeType,
-      size: metadata.totalSize,
-      fileHash: metadata.fileHash,
-      source: 'uploaded',
-      content,
-    });
   }
 
   /**
@@ -235,18 +197,18 @@ export class ChunkStorage implements DurableObject {
       return this.jsonResponse({ isComplete: false }, 404);
     }
 
-    if (this.isExpired(metadata)) {
+    if (isUploadExpired(metadata)) {
       await this.deleteFileData(metadata);
       return this.jsonResponse({ isComplete: false }, 404);
     }
 
     return this.jsonResponse({
-      isComplete: metadata.receivedChunks >= metadata.totalChunks,
+      isComplete: metadata.isMerged || metadata.receivedChunks >= metadata.totalChunks,
     });
   }
 
   /**
-   * 合并分片并持久化最终文件正文
+   * 合并分片并将最终文件正文持久化到 R2
    */
   private async handleMergeChunks(url: URL): Promise<Response> {
     const fileId = url.searchParams.get('fileId');
@@ -255,23 +217,22 @@ export class ChunkStorage implements DurableObject {
     }
 
     const metadataKey = this.getMetadataKey(fileId);
-    const contentKey = this.getContentKey(fileId);
     const metadata = await this.state.storage.get<FileMetadata>(metadataKey);
 
     if (!metadata) {
       return this.jsonResponse({ error: 'File not found' }, 404);
     }
 
-    if (this.isExpired(metadata)) {
+    if (isUploadExpired(metadata)) {
       await this.deleteFileData(metadata);
       return this.jsonResponse({ error: 'File not found' }, 404);
     }
 
-    const existingContent = await this.state.storage.get<string>(contentKey);
-    if (existingContent !== undefined) {
+    if (await this.hasUploadedFileObject(fileId)) {
+      await this.markFileAsMerged(metadata);
       return this.jsonResponse({
         success: true,
-        file: this.createUploadedFileRef(metadata),
+        file: createUploadedFileRef(metadata),
       });
     }
 
@@ -282,42 +243,57 @@ export class ChunkStorage implements DurableObject {
       });
     }
 
-    const result = await this.state.storage.transaction(async (txn) => {
-      const chunks: ArrayBuffer[] = [];
+    const chunkEntries = await this.loadStoredChunks(metadata.totalChunks);
+    const { repairedMetadata, missingIndices } = repairMetadataFromChunks(metadata, chunkEntries);
 
-      for (let i = 0; i < metadata.totalChunks; i++) {
-        const chunk = await txn.get<ArrayBuffer>(this.getChunkKey(i));
-        if (!chunk) {
-          return { success: false, error: `Chunk ${i} not found` };
-        }
-        chunks.push(chunk);
-      }
+    if (missingIndices.length > 0) {
+      await this.state.storage.put(metadataKey, repairedMetadata);
 
-      const merged = new Uint8Array(metadata.totalSize);
-      let offset = 0;
-      for (const chunk of chunks) {
-        merged.set(new Uint8Array(chunk), offset);
-        offset += chunk.byteLength;
-      }
+      logger.warn('Missing chunks detected before merge', {
+        fileId,
+        missingIndices,
+        receivedChunks: repairedMetadata.receivedChunks,
+        totalChunks: repairedMetadata.totalChunks,
+      });
 
-      const content = new TextDecoder().decode(merged);
-      const updatedMetadata: FileMetadata = {
-        ...metadata,
-        updatedAt: Date.now(),
-      };
+      return this.jsonResponse({
+        success: false,
+        error: `Incomplete upload: ${repairedMetadata.receivedChunks}/${repairedMetadata.totalChunks} chunks received`,
+      });
+    }
 
-      await txn.put(contentKey, content);
+    const chunks = chunkEntries.map((entry) => entry.chunk as ArrayBuffer);
+    const merged = mergeStoredChunks(metadata.totalSize, chunks);
+
+    const updatedMetadata: FileMetadata = {
+      ...metadata,
+      isMerged: true,
+      completedAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await this.env.UPLOADED_FILES.put(this.getUploadedFileKey(fileId), merged, {
+      httpMetadata: {
+        contentType: metadata.mimeType || 'text/plain',
+      },
+      customMetadata: {
+        fileId: metadata.fileId,
+        fileName: metadata.fileName,
+        fileHash: metadata.fileHash,
+      },
+    });
+
+    await this.state.storage.transaction(async (txn) => {
       await txn.put(metadataKey, updatedMetadata);
-
       for (let i = 0; i < metadata.totalChunks; i++) {
         await txn.delete(this.getChunkKey(i));
       }
-
-      return {
-        success: true,
-        file: this.createUploadedFileRef(updatedMetadata),
-      };
     });
+
+    const result = {
+      success: true,
+      file: createUploadedFileRef(updatedMetadata),
+    };
 
     return this.jsonResponse(result);
   }
@@ -355,33 +331,11 @@ export class ChunkStorage implements DurableObject {
       }
     }
 
-    const result = await this.state.storage.transaction(async (txn) => {
-      let deletedCount = 0;
+    for (const metadata of expiredFiles) {
+      await this.deleteFileData(metadata);
+    }
 
-      for (const metadata of expiredFiles) {
-        for (let i = 0; i < metadata.totalChunks; i++) {
-          await txn.delete(this.getChunkKey(i));
-        }
-        await txn.delete(this.getMetadataKey(metadata.fileId));
-        await txn.delete(this.getContentKey(metadata.fileId));
-        deletedCount++;
-      }
-
-      return { deletedCount };
-    });
-
-    return this.jsonResponse(result);
-  }
-
-  private createUploadedFileRef(metadata: FileMetadata): UploadedFileRef {
-    return {
-      fileId: metadata.fileId,
-      fileName: metadata.fileName,
-      mimeType: metadata.mimeType,
-      size: metadata.totalSize,
-      fileHash: metadata.fileHash,
-      source: 'uploaded' as const,
-    };
+    return this.jsonResponse({ deletedCount: expiredFiles.length });
   }
 
   private getMetadataKey(fileId: string): string {
@@ -392,13 +346,8 @@ export class ChunkStorage implements DurableObject {
     return `chunk:${chunkIndex}`;
   }
 
-  private getContentKey(fileId: string): string {
-    return `content:${fileId}`;
-  }
-
-  private isExpired(metadata: FileMetadata): boolean {
-    const lastUpdatedAt = metadata.updatedAt || metadata.createdAt;
-    return Date.now() - lastUpdatedAt > UPLOAD_TTL_MS;
+  private getUploadedFileKey(fileId: string): string {
+    return getUploadedFileObjectKey(fileId);
   }
 
   private async deleteFileData(metadata: FileMetadata): Promise<void> {
@@ -407,8 +356,48 @@ export class ChunkStorage implements DurableObject {
         await txn.delete(this.getChunkKey(i));
       }
       await txn.delete(this.getMetadataKey(metadata.fileId));
-      await txn.delete(this.getContentKey(metadata.fileId));
     });
+    await this.env.UPLOADED_FILES.delete(this.getUploadedFileKey(metadata.fileId));
+    await this.env.UPLOADED_FILES.delete(getUploadedFileTextIndexObjectKey(metadata.fileId));
+  }
+
+  private async hasUploadedFileObject(fileId: string): Promise<boolean> {
+    const object = await this.env.UPLOADED_FILES.head(this.getUploadedFileKey(fileId));
+    return object !== null;
+  }
+
+  private async markFileAsMerged(metadata: FileMetadata): Promise<void> {
+    if (metadata.isMerged) {
+      return;
+    }
+
+    const updatedMetadata: FileMetadata = {
+      ...metadata,
+      isMerged: true,
+      completedAt: metadata.completedAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await this.state.storage.transaction(async (txn) => {
+      await txn.put(this.getMetadataKey(metadata.fileId), updatedMetadata);
+      for (let i = 0; i < metadata.totalChunks; i++) {
+        await txn.delete(this.getChunkKey(i));
+      }
+    });
+  }
+
+  private async loadStoredChunks(totalChunks: number): Promise<Array<{ index: number; chunk: ArrayBuffer | null }>> {
+    const entries: Array<{ index: number; chunk: ArrayBuffer | null }> = [];
+
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = await this.state.storage.get<ArrayBuffer>(this.getChunkKey(i));
+      entries.push({
+        index: i,
+        chunk: chunk ?? null,
+      });
+    }
+
+    return entries;
   }
 
   private jsonResponse(data: unknown, status = 200): Response {

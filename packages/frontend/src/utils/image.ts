@@ -11,7 +11,59 @@
  */
 
 import type { ImageData } from '../types/task'
-import { LRUCache, generateId, formatFileSize, IMAGE_CACHE_SIZE, IMAGE_COMPRESSION } from './common'
+
+const IMAGE_CACHE_SIZE = 20
+const IMAGE_COMPRESSION = {
+  MAX_WIDTH: 1920,
+  MAX_HEIGHT: 1920,
+  QUALITY: 0.82
+} as const
+
+class LRUCache<K, V> {
+  private readonly cache = new Map<K, V>()
+  private readonly maxSize: number
+
+  constructor(maxSize: number) {
+    this.maxSize = maxSize
+  }
+
+  get(key: K): V | undefined {
+    const value = this.cache.get(key)
+    if (value === undefined) return undefined
+
+    this.cache.delete(key)
+    this.cache.set(key, value)
+    return value
+  }
+
+  set(key: K, value: V): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key)
+    } else if (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey)
+      }
+    }
+
+    this.cache.set(key, value)
+  }
+
+  clear(): void {
+    this.cache.clear()
+  }
+}
+
+function generateId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function formatFileSize(size: number): string {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  if (size < 1024 * 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
+  return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`
+}
 
 // ==================== 缓存 ====================
 

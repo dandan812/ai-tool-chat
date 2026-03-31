@@ -174,6 +174,112 @@ async function queryUploadStatus(fileId: string): Promise<{
   return response.json();
 }
 
+async function uploadMissingChunks(
+  file: File,
+  chunks: Blob[],
+  fileId: string,
+  fileHash: string,
+  uploadedChunkIndices: Set<number>,
+  startTime: number,
+  onProgress?: UploadProgressCallback
+): Promise<void> {
+  let uploadedBytes = getChunkSizeSum(chunks, uploadedChunkIndices);
+  const totalChunks = chunks.length;
+
+  for (let i = 0; i < totalChunks; i++) {
+    if (uploadedChunkIndices.has(i)) {
+      console.log(`[Chunk] Skip uploaded chunk ${i + 1}/${totalChunks}`);
+      continue;
+    }
+
+    const chunk = chunks[i];
+    if (!chunk) {
+      throw new Error(`Chunk ${i} not found`);
+    }
+
+    const chunkData = await chunk.arrayBuffer();
+    const formData = new FormData();
+    formData.append('fileId', fileId);
+    formData.append('fileName', file.name);
+    formData.append('fileSize', String(file.size));
+    formData.append('chunkIndex', String(i));
+    formData.append('totalChunks', String(totalChunks));
+    formData.append('fileHash', fileHash);
+    formData.append('chunk', new Blob([chunkData], { type: file.type || 'text/plain' }));
+    formData.append('mimeType', file.type || 'text/plain');
+
+    const response = await fetch(`${API_BASE_URL}/upload/chunk`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`分片 ${i + 1}/${totalChunks} 上传失败: ${errorText}`);
+    }
+
+    const result = await response.json();
+    const receivedIndices = Array.isArray(result.receivedIndices)
+      ? result.receivedIndices as number[]
+      : [i];
+
+    for (const index of receivedIndices) {
+      uploadedChunkIndices.add(index);
+    }
+
+    uploadedBytes = getChunkSizeSum(chunks, uploadedChunkIndices);
+
+    saveUploadSession({
+      fileId,
+      fileHash,
+      fileName: file.name,
+      fileSize: file.size,
+      totalChunks,
+      uploadedChunkIndices: Array.from(uploadedChunkIndices).sort((a, b) => a - b),
+      updatedAt: Date.now(),
+    });
+
+    if (onProgress) {
+      onProgress(
+        createUploadProgress(
+          fileId,
+          file.name,
+          uploadedChunkIndices.size,
+          totalChunks,
+          uploadedBytes,
+          file.size,
+          startTime
+        )
+      );
+    }
+  }
+}
+
+async function completeChunkedUpload(
+  fileId: string,
+  fileHash: string,
+  fileName: string,
+  mimeType: string
+): Promise<UploadCompleteResponse> {
+  const completeResponse = await fetch(`${API_BASE_URL}/upload/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileId,
+      fileHash,
+      fileName,
+      mimeType,
+    }),
+  });
+
+  if (!completeResponse.ok) {
+    const errorText = await completeResponse.text();
+    throw new Error(`文件合并失败: ${errorText}`);
+  }
+
+  return completeResponse.json() as Promise<UploadCompleteResponse>;
+}
+
 /**
  * 分片上传文件
  */
@@ -197,12 +303,14 @@ export async function uploadChunkedFile(
 
     const serverStatus = await queryUploadStatus(fileId);
     const savedSession = getUploadSessionMap()[fileId];
-    const uploadedChunkIndices = new Set<number>([
-      ...(serverStatus?.receivedIndices || []),
-      ...(savedSession?.uploadedChunkIndices || []),
-    ]);
+    if (!serverStatus && savedSession) {
+      // 服务端没有记录时，本地断点状态已经失效，避免错误跳过分片
+      deleteUploadSession(fileId);
+    }
 
-    let uploadedBytes = getChunkSizeSum(chunks, uploadedChunkIndices);
+    const uploadedChunkIndices = new Set<number>(serverStatus?.receivedIndices || []);
+
+    const uploadedBytes = getChunkSizeSum(chunks, uploadedChunkIndices);
 
     console.log('[Chunk] Starting chunked upload:', {
       fileId,
@@ -237,73 +345,7 @@ export async function uploadChunkedFile(
       );
     }
 
-    for (let i = 0; i < totalChunks; i++) {
-      if (uploadedChunkIndices.has(i)) {
-        console.log(`[Chunk] Skip uploaded chunk ${i + 1}/${totalChunks}`);
-        continue;
-      }
-
-      const chunk = chunks[i];
-      if (!chunk) {
-        throw new Error(`Chunk ${i} not found`);
-      }
-
-      const chunkData = await chunk.arrayBuffer();
-      const formData = new FormData();
-      formData.append('fileId', fileId);
-      formData.append('fileName', file.name);
-      formData.append('fileSize', String(file.size));
-      formData.append('chunkIndex', String(i));
-      formData.append('totalChunks', String(totalChunks));
-      formData.append('fileHash', fileHash);
-      formData.append('chunk', new Blob([chunkData], { type: file.type || 'text/plain' }));
-      formData.append('mimeType', file.type || 'text/plain');
-
-      const response = await fetch(`${API_BASE_URL}/upload/chunk`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`分片 ${i + 1}/${totalChunks} 上传失败: ${errorText}`);
-      }
-
-      const result = await response.json();
-      const receivedIndices = Array.isArray(result.receivedIndices)
-        ? result.receivedIndices as number[]
-        : [i];
-
-      for (const index of receivedIndices) {
-        uploadedChunkIndices.add(index);
-      }
-
-      uploadedBytes = getChunkSizeSum(chunks, uploadedChunkIndices);
-
-      saveUploadSession({
-        fileId,
-        fileHash,
-        fileName: file.name,
-        fileSize: file.size,
-        totalChunks,
-        uploadedChunkIndices: Array.from(uploadedChunkIndices).sort((a, b) => a - b),
-        updatedAt: Date.now(),
-      });
-
-      if (onProgress) {
-        onProgress(
-          createUploadProgress(
-            fileId,
-            file.name,
-            uploadedChunkIndices.size,
-            totalChunks,
-            uploadedBytes,
-            file.size,
-            startTime
-          )
-        );
-      }
-    }
+    await uploadMissingChunks(file, chunks, fileId, fileHash, uploadedChunkIndices, startTime, onProgress);
 
     console.log('[Chunk] All missing chunks uploaded, completing upload...', {
       fileId,
@@ -311,23 +353,33 @@ export async function uploadChunkedFile(
       fileHash,
     });
 
-    const completeResponse = await fetch(`${API_BASE_URL}/upload/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fileId,
-        fileHash,
-        fileName: file.name,
-        mimeType: file.type || 'text/plain',
-      }),
-    });
+    let result: UploadCompleteResponse;
+    try {
+      result = await completeChunkedUpload(fileId, fileHash, file.name, file.type || 'text/plain');
+    } catch (error) {
+      const latestStatus = await queryUploadStatus(fileId);
+      const latestIndices = new Set<number>(latestStatus?.receivedIndices || []);
 
-    if (!completeResponse.ok) {
-      const errorText = await completeResponse.text();
-      throw new Error(`文件合并失败: ${errorText}`);
+      if (latestStatus && latestIndices.size < totalChunks) {
+        console.warn('[Chunk] Merge failed, retrying missing chunks once...', {
+          fileId,
+          beforeRetry: uploadedChunkIndices.size,
+          serverReceived: latestIndices.size,
+          totalChunks,
+        });
+
+        uploadedChunkIndices.clear();
+        for (const index of latestIndices) {
+          uploadedChunkIndices.add(index);
+        }
+
+        await uploadMissingChunks(file, chunks, fileId, fileHash, uploadedChunkIndices, startTime, onProgress);
+        result = await completeChunkedUpload(fileId, fileHash, file.name, file.type || 'text/plain');
+      } else {
+        throw error;
+      }
     }
 
-    const result = await completeResponse.json() as UploadCompleteResponse;
     const uploadedFile = result.file;
 
     if (!uploadedFile) {

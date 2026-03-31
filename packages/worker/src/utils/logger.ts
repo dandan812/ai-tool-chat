@@ -9,6 +9,33 @@ interface LogEntry {
   level: LogLevel;
   message: string;
   data?: unknown;
+  [key: string]: unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeValue(value: unknown): unknown {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+    };
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeValue(item));
+  }
+
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeValue(item)]),
+    );
+  }
+
+  return value;
 }
 
 class Logger {
@@ -32,11 +59,26 @@ class Logger {
    * 格式化日志
    */
   private format(level: LogLevel, message: string, data?: unknown): LogEntry {
-    return {
+    const baseEntry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
       message: `${this.prefix} ${message}`,
-      data,
+    };
+
+    if (data === undefined) {
+      return baseEntry;
+    }
+
+    if (isRecord(data)) {
+      return {
+        ...baseEntry,
+        ...normalizeValue(data) as Record<string, unknown>,
+      };
+    }
+
+    return {
+      ...baseEntry,
+      data: normalizeValue(data),
     };
   }
 
@@ -68,9 +110,7 @@ class Logger {
 
   error(message: string, error?: unknown): void {
     if (this.shouldLog('error')) {
-      const errorData = error instanceof Error 
-        ? { message: error.message, stack: error.stack }
-        : error;
+      const errorData = normalizeValue(error);
       console.error(JSON.stringify(this.format('error', message, errorData)));
     }
   }

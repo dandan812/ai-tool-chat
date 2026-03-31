@@ -1,0 +1,56 @@
+/**
+ * 主题变量覆盖
+ */
+
+[data-theme='dark'] {
+  --bg-primary: var(--gray-950);
+  --bg-secondary: var(--gray-900);
+  --bg-tertiary: var(--gray-850);
+  --bg-elevated: var(--gray-800);
+  --surface-canvas: #090909;
+  --surface-panel: rgba(28, 25, 23, 0.78);
+  --surface-muted: #1a1614;
+  --surface-strong: #1d1916;
+
+  --text-primary: var(--gray-100);
+  --text-secondary: var(--gray-400);
+  --text-tertiary: var(--gray-500);
+  --text-muted: var(--gray-600);
+
+  --border-subtle: var(--gray-800);
+  --border-default: var(--gray-750);
+  --border-strong: var(--gray-700);
+
+  --accent-primary: #bb7048;
+  --accent-primary-hover: #c67b54;
+  --accent-secondary: #aa613d;
+  --accent-glow: rgba(187, 112, 72, 0.22);
+  --accent-soft: rgba(251, 191, 36, 0.12);
+  --focus-ring-strong: rgba(251, 191, 36, 0.22);
+  --danger-soft: rgba(239, 68, 68, 0.18);
+  --success-soft: rgba(34, 197, 94, 0.18);
+
+  --message-user-bg: #2a2421;
+  --message-user-text: #f5f0ea;
+  --message-user-border: rgba(255, 255, 255, 0.1);
+  --message-ai-bg: #1f1b19;
+  --message-ai-border: #3a332d;
+  --message-ai-text: #f0ebe5;
+
+  --input-bg: var(--gray-850);
+  --input-border: var(--gray-750);
+  --input-focus-border: var(--amber-500);
+  --input-focus-ring: rgba(245, 158, 11, 0.2);
+
+  --sidebar-bg: var(--gray-900);
+  --sidebar-active: var(--gray-850);
+  --sidebar-hover: var(--gray-800);
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  --shadow-warm: 0 4px 20px -2px rgba(245, 158, 11, 0.2);
+  --shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.35);
+  --shadow-float: 0 24px 52px rgba(0, 0, 0, 0.44);
+}

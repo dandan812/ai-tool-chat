@@ -1,5 +1,6 @@
 import type { Env, ResolvedFileContent, UploadedFileRef } from '../types';
-import { NotFoundError, ValidationError } from '../types';
+import { ValidationError, WorkerError } from '../types';
+import { createErrorDetails, ERROR_CODES } from './observability';
 
 export function getChunkStorageStub(env: Env, fileId: string) {
   const id = env.CHUNK_STORAGE.idFromName(fileId);
@@ -10,23 +11,44 @@ export function createChunkStorageUrl(path: string): string {
   return `https://chunk-storage${path}`;
 }
 
+export function getUploadedFileObjectKey(fileId: string): string {
+  return `uploaded-files/${fileId}`;
+}
+
+export function getUploadedFileTextIndexObjectKey(fileId: string): string {
+  return `uploaded-file-indices/${fileId}.json`;
+}
+
 export async function getUploadedFileContent(
   env: Env,
   file: UploadedFileRef
 ): Promise<ResolvedFileContent> {
-  const chunkStorage = getChunkStorageStub(env, file.fileId);
-  const response = await chunkStorage.fetch(
-    createChunkStorageUrl(`/?action=getFileContent&fileId=${encodeURIComponent(file.fileId)}`)
-  );
-
-  if (response.status === 404) {
-    throw new NotFoundError(`Uploaded file ${file.fileId}`);
+  const object = await env.UPLOADED_FILES.get(getUploadedFileObjectKey(file.fileId));
+  if (!object) {
+    throw new WorkerError(
+      `Uploaded file ${file.fileId} not found`,
+      ERROR_CODES.UPLOADED_FILE_NOT_FOUND,
+      404,
+      {
+        fileId: file.fileId,
+        fileName: file.fileName,
+      },
+    );
   }
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new ValidationError(`读取上传文件失败: ${errorText}`);
+  try {
+    const content = await object.text();
+    return {
+      ...file,
+      content,
+    };
+  } catch (error) {
+    throw new ValidationError(
+      `读取上传文件失败: ${String(error)}`,
+      createErrorDetails(ERROR_CODES.UPLOADED_FILE_READ_FAILED, {
+        fileId: file.fileId,
+        fileName: file.fileName,
+      }),
+    );
   }
-
-  return response.json() as Promise<ResolvedFileContent>;
 }

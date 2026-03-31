@@ -10,6 +10,11 @@ enabled = true
 name = "CHUNK_STORAGE"
 class_name = "ChunkStorage"
 
+[[r2_buckets]]
+binding = "UPLOADED_FILES"
+bucket_name = "ai-tool-chat-uploaded-files"
+preview_bucket_name = "ai-tool-chat-uploaded-files-preview"
+
 # Durable Objects 迁移配置
 [[migrations]]
 tag = "v1"

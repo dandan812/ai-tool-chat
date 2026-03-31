@@ -314,6 +314,7 @@ export interface Env {
   GEMINI_API_KEY?: string;
   GLM_API_KEY?: string;  // 智谱 AI GLM API Key
   CHUNK_STORAGE: DurableObjectNamespace;
+  UPLOADED_FILES: R2Bucket;
   // 可选配置
   LOG_LEVEL?: 'debug' | 'info' | 'warn' | 'error';
   MAX_REQUEST_SIZE?: string;

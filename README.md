@@ -1,119 +1,35 @@
 # AI Tool Chat
 
-一个基于 `pnpm monorepo` 的 AI 对话平台，前端使用 Vue 3，后端运行在 Cloudflare Workers。项目支持：
+一个面向作品集和真实工程场景的 AI 对话平台：前端是 Vue 3 单页聊天工作台，后端是 Cloudflare Worker 编排层，支持流式对话、图片理解、文件上传、断点续传，以及普通文本文件的检索优先分析。
 
-- 纯文本对话
-- 图片理解
-- 文件上传与大文件分块处理
-- SSE 流式返回
-- Task → Step → Skill 编排
+## Demo / 素材
 
-当前仓库已经收口到单一 Task 主链路，前端通过 Store 发起请求，后端统一按任务流执行并把步骤事件实时推回 UI。
+- 在线地址：[https://i-tool-chat.store](https://i-tool-chat.store)
+- API 地址：[https://api.i-tool-chat.store](https://api.i-tool-chat.store)
+- 演示素材目录：[`docs/assets/`](./docs/assets/)
 
-## 项目结构
+当前仓库已经预留素材目录，你可以把录屏/GIF/截图放到这里后直接补到本 README：
 
-```text
-ai-tool-chat/
-├─ packages/
-│  ├─ frontend/   # Vue 3 + TypeScript + Pinia + Vite
-│  └─ worker/     # Cloudflare Worker + SSE + Task/Step/Skill
-├─ docs/
-│  ├─ adr/
-│  ├─ plans/
-│  └─ reference/
-├─ AGENTS.md
-└─ README.md
-```
+- `docs/assets/chat-overview.png`
+- `docs/assets/streaming-demo.gif`
+- `docs/assets/file-upload-demo.gif`
+- `docs/assets/architecture.png`
 
-## 核心能力
+## 这不是普通聊天 Demo 的原因
 
-- 会话管理：本地持久化会话、消息、当前会话状态
-- 流式回复：前端实时显示 `content` 片段
-- 步骤可视化：前端消费 `task`、`step`、`error`、`complete` 事件并展示步骤状态
-- 多模型路由：按文本、图片、文件自动选择 Skill
-- 文件处理：支持文本类文件上传、分块、合并、分析
-- 断点续传：大文件按稳定哈希分片上传，重新选择同一文件后可继续未完成分片
-- 模型兜底：不同环境变量组合下自动回退到可用模型
+这个项目不是“前端页面 + 一个模型 API”的简单套壳，而是做了完整的产品主链路和工程约束：
 
-## 技术栈
+- `Task -> Step -> Skill` 编排，而不是单接口直连模型
+- SSE 流式事件不仅返回内容，还返回任务步骤和错误状态
+- 文件上传走分片上传、断点续传、Durable Object 状态恢复、R2 正文存储
+- 普通文本文件默认走“检索优先”，把大文件分析 token 从全文级别压到少量相关片段
+- 前端已经收口成单一 Task 主链路，消息、步骤、流式内容和会话状态都由 Store 管理
 
-### 前端
+## 核心亮点
 
-- Vue 3
-- TypeScript
-- Pinia
-- Vue Router
-- Vite
-- Markdown-It
+### 1. 任务流可视化
 
-### 后端
-
-- Cloudflare Workers
-- Wrangler
-- SSE
-- Durable Objects（分片上传）
-
-## 架构说明
-
-### 前端主链路
-
-前端已经统一到单一发送入口：
-
-`UI -> ChatStore -> sendTaskRequest -> Worker`
-
-核心文件：
-
-- [packages/frontend/src/stores/chat.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/frontend/src/stores/chat.ts)
-- [packages/frontend/src/api/task.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/frontend/src/api/task.ts)
-- [packages/frontend/src/views/Chat.vue](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/frontend/src/views/Chat.vue)
-
-当前前端会维护：
-
-- 会话列表
-- 消息列表
-- 当前任务
-- 当前步骤
-- 流式内容
-- 中断控制
-
-### 后端执行模型
-
-后端采用 `Task -> Step -> Skill` 三层结构：
-
-1. `Task`：一次聊天请求的生命周期
-2. `Step`：`plan`、`skill`、`respond`
-3. `Skill`：具体能力模块
-
-核心文件：
-
-- [packages/worker/src/core/taskManager.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/worker/src/core/taskManager.ts)
-- [packages/worker/src/skills/index.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/worker/src/skills/index.ts)
-- [packages/worker/src/index.ts](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/worker/src/index.ts)
-
-## 当前模型路由
-
-### 纯文本
-
-- 默认文本模型统一由 `DEFAULT_MODEL` 控制
-- `textSkill`、文件分析里的文本兜底和任务路由都会读取同一个默认模型解析逻辑
-- 如果未设置 `DEFAULT_MODEL`，系统会按已配置的供应商 Key 自动回退到内置默认型号
-
-### 图片理解
-
-- 默认图片模型统一由 `DEFAULT_MULTIMODAL_MODEL` 控制
-- 当前多模态默认值：`qwen3.5-plus`
-
-### 文件处理
-
-- 当前文件处理主链路：`fileSkill`
-- 文件分析会跟随当前默认文本模型路由，不再硬绑定 `GLM_API_KEY`
-- 前端文本文件统一走分片上传，聊天请求只携带 `fileId/fileName/fileHash` 等文件引用
-- 后端在 Durable Object 中保存上传状态和合并后的正文，同一文件重复上传只会补传缺失分片
-- 上传后的服务端文件默认保留 `24 小时`，过期后会在读取链路中按失效文件处理
-
-## API 事件
-
-Worker 流式返回 SSE，前端目前消费这些事件：
+后端不是只返回最终文本，而是把一次请求拆成多个步骤，让前端能直接展示 AI 当前在做什么：
 
 - `task`
 - `step`
@@ -121,17 +37,124 @@ Worker 流式返回 SSE，前端目前消费这些事件：
 - `error`
 - `complete`
 
-主要接口：
+### 2. 大文件上传与断点续传
 
-- `POST /`
-- `POST /chat`
-- `POST /upload/chunk`
-- `POST /upload/complete`
-- `GET /upload/status`
-- `GET /health`
-- `GET /stats`
+- 文件上传使用稳定 `fileId`
+- 上传前查询服务端已收分片，只补传缺失部分
+- Durable Object 只保存元数据和分片状态
+- 合并后的正文写入 R2，避免大文本触发 DO 单值存储上限
 
-## 快速开始
+### 3. 普通文本文件检索优先
+
+普通文本文件不再默认全文丢进模型，而是：
+
+1. 服务端读取文件正文
+2. 切成稳定文本块
+3. 根据问题做相关性打分
+4. 只取少量高相关片段进入模型
+5. 仅在概览型问题或检索不足时回退到全文摘要
+
+这个策略直接解决了大文件场景下的 token 成本和响应时间问题。
+
+### 4. 前后端工程闭环
+
+- 前端：`lint + build + vitest`
+- Worker：`vitest + wrangler deploy --dry-run`
+- 根目录统一命令：`pnpm check`
+- GitHub Actions 已加入 `verify` 工作流，用于 PR / push 验证
+
+## 架构概览
+
+```mermaid
+flowchart LR
+  User["User"] --> Frontend["Vue 3 Frontend"]
+  Frontend --> Store["Pinia Chat Store"]
+  Store --> API["Task API / SSE Client"]
+  API --> Worker["Cloudflare Worker"]
+  Worker --> TM["TaskManager"]
+  TM --> Skill["Skill Router"]
+  Skill --> Text["Text Skill"]
+  Skill --> Multi["Multimodal Skill"]
+  Skill --> File["File Skill"]
+  File --> DO["Durable Object\n(upload state)"]
+  File --> R2["R2\n(file content / retrieval index)"]
+  Worker --> SSE["SSE Events"]
+  SSE --> Frontend
+```
+
+## 目录结构
+
+```text
+ai-tool-chat/
+├─ packages/
+│  ├─ frontend/   # Vue 3 + TypeScript + Pinia + Vite
+│  └─ worker/     # Cloudflare Worker + Task/Step/Skill + SSE
+├─ docs/
+│  ├─ adr/
+│  ├─ assets/
+│  ├─ plans/
+│  └─ reference/
+├─ AGENTS.md
+└─ README.md
+```
+
+## 关键技术问题与解法
+
+### 1. 如何避免聊天主链路状态分散
+
+做法：
+
+- 前端统一收口到 `ChatStore`
+- 页面不再绕过 Store 直接发请求
+- `Task / Step / streaming content / session loading` 都由 Store 统一管理
+
+### 2. 如何让大文件上传可恢复
+
+做法：
+
+- 前端按分片上传
+- 上传前先查 `/upload/status`
+- 前端只补传缺失分片
+- Worker 在合并前会校正 metadata，修复缺片状态
+
+### 3. 如何避免 Durable Object 存大文本失败
+
+做法：
+
+- DO 只存上传状态和完成标记
+- 文件正文写入 R2
+- 文件分析阶段按 `fileId` 从 R2 读取正文
+
+### 4. 如何压低普通文本文件分析 token
+
+做法：
+
+- 默认检索优先，不默认全文摘要
+- 设置 `topK` 和最大 prompt token 预算
+- 连续提问命中同一文件的检索索引缓存
+
+## 技术栈
+
+### Frontend
+
+- Vue 3
+- TypeScript
+- Pinia
+- Vue Router
+- Vite
+- Markdown-It
+- Vitest
+
+### Worker
+
+- Cloudflare Workers
+- Wrangler
+- SSE
+- Durable Objects
+- R2
+- Vitest
+
+## 本地运行
 
 ### 1. 安装依赖
 
@@ -139,13 +162,9 @@ Worker 流式返回 SSE，前端目前消费这些事件：
 pnpm install
 ```
 
-### 2. 配置本地 Worker 环境变量
+### 2. 配置 Worker 环境变量
 
-参考示例文件：
-
-- [packages/worker/.dev.vars.example](C:/Users/hulian/Desktop/huliang/ai-tool-chat/packages/worker/.dev.vars.example)
-
-本地通常至少需要一个可用模型 Key：
+参考 [`packages/worker/.dev.vars.example`](./packages/worker/.dev.vars.example)：
 
 ```bash
 DEFAULT_MODEL=qwen3.5-flash-2026-02-23
@@ -153,7 +172,7 @@ DEFAULT_MULTIMODAL_MODEL=qwen3.5-plus
 QWEN_API_KEY=your_qwen_key
 ```
 
-可选变量：
+常见可选变量：
 
 - `GLM_API_KEY`
 - `QWEN_API_KEY`
@@ -162,15 +181,15 @@ QWEN_API_KEY=your_qwen_key
 - `DEFAULT_MODEL`
 - `DEFAULT_MULTIMODAL_MODEL`
 
-### 3. 启动本地开发服务
+### 3. 启动开发环境
 
-启动前端：
+前端：
 
 ```bash
 pnpm --filter @ai-tool-chat/frontend dev
 ```
 
-启动 Worker：
+Worker：
 
 ```bash
 pnpm --filter @ai-tool-chat/worker dev
@@ -178,83 +197,89 @@ pnpm --filter @ai-tool-chat/worker dev
 
 默认地址：
 
-- 前端：[http://localhost:5173](http://localhost:5173)
-- Worker：[http://127.0.0.1:8787](http://127.0.0.1:8787)
+- Frontend: [http://localhost:5173](http://localhost:5173)
+- Worker: [http://127.0.0.1:8787](http://127.0.0.1:8787)
 
-## 常用命令
+## 工程验证
 
-### 根目录
+### 根目录统一检查
 
 ```bash
-pnpm lint
-pnpm format
-pnpm build
-pnpm build:frontend
-pnpm deploy:worker
+pnpm check
 ```
 
-### 前端
+### 分包命令
+
+前端：
 
 ```bash
-pnpm --filter @ai-tool-chat/frontend dev
-pnpm --filter @ai-tool-chat/frontend build
-pnpm --filter @ai-tool-chat/frontend preview
 pnpm --filter @ai-tool-chat/frontend lint
-pnpm --filter @ai-tool-chat/frontend format
+pnpm --filter @ai-tool-chat/frontend build
+pnpm --filter @ai-tool-chat/frontend test
 ```
 
-### Worker
+Worker：
 
 ```bash
-pnpm --filter @ai-tool-chat/worker dev
-pnpm --filter @ai-tool-chat/worker deploy
+pnpm --filter @ai-tool-chat/worker test
+pnpm --filter @ai-tool-chat/worker exec wrangler deploy --dry-run
 ```
 
-## 部署
+## 排障入口
 
-项目当前按下面的方式部署：
+先看 Worker 结构化日志里的这些字段：
 
-- 前端：Cloudflare Pages
-- 后端：Cloudflare Workers
-- CI/CD：GitHub Actions
+- `route`
+- `requestType`
+- `taskId`
+- `fileId`
+- `skill`
+- `model`
+- `durationMs`
+- `errorCode`
 
-生产地址：
+详细排障手册：
 
-- 前端：[https://i-tool-chat.store](https://i-tool-chat.store)
-- API：[https://api.i-tool-chat.store](https://api.i-tool-chat.store)
+- [`docs/reference/ERROR_LOG.md`](./docs/reference/ERROR_LOG.md)
 
-## 设计边界
+## 当前边界
 
 ### 工具调用
 
-`enableTools` 当前是实验能力标记，不代表完整工具链已经闭环。仓库里已经预留 MCP 相关结构，但目前仍以普通聊天主链路为主。
+`enableTools` 目前仍是实验能力标记，仓库内已经预留 MCP 结构，但产品主链路仍然以聊天与文件分析为主。
 
 ### Task 生命周期
 
-Task 状态当前保存在 Worker 实例内存里，适用于单次请求过程中的实时展示，不承诺：
+Task 主要服务于单次请求生命周期中的实时展示，目前不承诺：
 
 - 跨实例一致性
 - 长期任务持久化查询
-- 跨实例任务恢复
+- 跨实例恢复
 
-详细说明见：
+详细说明：
 
-- [docs/adr/2026-03-29-task-lifecycle-boundary.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/docs/adr/2026-03-29-task-lifecycle-boundary.md)
+- [`docs/adr/2026-03-29-task-lifecycle-boundary.md`](./docs/adr/2026-03-29-task-lifecycle-boundary.md)
+
+## 简历 / 面试可直接使用的亮点文案
+
+### 30 秒版本
+
+- 独立实现了一个基于 Vue 3 + Cloudflare Worker 的 AI 对话平台，支持 SSE 流式响应、图片理解、文件上传和断点续传。
+- 后端采用 `Task -> Step -> Skill` 编排模型，前端可以实时展示 AI 的执行步骤和状态。
+- 针对大文本文件做了检索优先改造，把普通文本文件分析从全文摘要改成相关片段注入，显著降低 token 成本并提升响应速度。
+
+### 适合写在简历里的 3 条
+
+1. 设计并实现基于 `Task -> Step -> Skill` 的 AI Worker 编排层，统一处理文本、多模态和文件分析请求，并通过 SSE 实时回传任务步骤与流式内容。
+2. 实现大文件分片上传、断点续传与 R2 正文存储方案，使用 Durable Object 管理上传状态，解决大文本文件在 Worker 环境下的合并与恢复问题。
+3. 将普通文本文件分析从全文摘要重构为“检索优先”链路，结合切块、相关性打分与缓存索引，有效降低 token 消耗并缩短文件问答响应时间。
 
 ## 相关文档
 
-- [AGENTS.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/AGENTS.md)
-- [docs/reference/ERROR_LOG.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/docs/reference/ERROR_LOG.md)
-- [docs/plans/2026-03-29-task-pipeline-unification.md](C:/Users/hulian/Desktop/huliang/ai-tool-chat/docs/plans/2026-03-29-task-pipeline-unification.md)
+- [`AGENTS.md`](./AGENTS.md)
+- [`docs/reference/ERROR_LOG.md`](./docs/reference/ERROR_LOG.md)
+- [`docs/plans/2026-03-29-task-pipeline-unification.md`](./docs/plans/2026-03-29-task-pipeline-unification.md)
 
-## 贡献
-
-```bash
-git checkout -b feature/your-feature
-git commit -m "feat: your change"
-git push origin feature/your-feature
-```
-
-## 许可证
+## License
 
 MIT

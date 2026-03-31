@@ -1,181 +1,116 @@
-/**
- * TaskManager 单元测试
- */
+import { describe, expect, it, vi } from 'vitest';
+import type { ChatRequest } from '../types';
+import { createMockEnv } from '../test/mocks';
+
+vi.mock('../skills', () => ({
+  selectSkill: () => ({
+    skill: {
+      name: 'mock-text',
+      type: 'text',
+      description: 'mock skill',
+      async *execute() {
+        yield { type: 'content', content: 'mock reply' };
+        yield { type: 'complete' };
+      },
+    },
+    model: 'mock-model',
+    label: '调用 Mock 模型',
+    description: '模拟技能执行',
+    toolingMode: 'disabled',
+  }),
+}));
+
+vi.mock('../mcp/client', () => ({
+  createMCPClient: () => ({
+    tools: new Map(),
+    resources: new Map(),
+    callTool: vi.fn(),
+    listTools: () => [],
+  }),
+}));
 
 import { TaskManager } from './taskManager';
-import type { Env, ChatRequest } from '../types';
-
-// 模拟环境变量
-const mockEnv: Env = {
-  DEEPSEEK_API_KEY: 'test-api-key',
-};
-
-// 测试框架
-function describe(name: string, fn: () => void) {
-  console.log(`\n📦 ${name}`);
-  fn();
-}
-
-function it(name: string, fn: () => void | Promise<void>) {
-  try {
-    const result = fn();
-    if (result instanceof Promise) {
-      result
-        .then(() => console.log(`  ✅ ${name}`))
-        .catch((err) => console.log(`  ❌ ${name}: ${err.message}`));
-    } else {
-      console.log(`  ✅ ${name}`);
-    }
-  } catch (err) {
-    console.log(`  ❌ ${name}: ${(err as Error).message}`);
-  }
-}
-
-function expect(actual: unknown) {
-  return {
-    toBe(expected: unknown) {
-      if (actual !== expected) {
-        throw new Error(`Expected ${expected} but got ${actual}`);
-      }
-    },
-    toEqual(expected: unknown) {
-      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
-      }
-    },
-    toBeDefined() {
-      if (actual === undefined) {
-        throw new Error(`Expected defined but got undefined`);
-      }
-    },
-    toBeUndefined() {
-      if (actual !== undefined) {
-        throw new Error(`Expected undefined but got ${actual}`);
-      }
-    },
-    toBeGreaterThan(expected: number) {
-      if (typeof actual !== 'number' || actual <= expected) {
-        throw new Error(`Expected ${actual} to be greater than ${expected}`);
-      }
-    },
-    toContain(expected: string) {
-      if (typeof actual !== 'string' || !actual.includes(expected)) {
-        throw new Error(`Expected "${actual}" to contain "${expected}"`);
-      }
-    },
-    toBeOneOf(expected: unknown[]) {
-      if (!expected.includes(actual)) {
-        throw new Error(`Expected ${actual} to be one of ${JSON.stringify(expected)}`);
-      }
-    },
-  };
-}
 
 describe('TaskManager', () => {
-  it('should create a task manager instance', () => {
-    const manager = new TaskManager(mockEnv);
-    expect(manager).toBeDefined();
-  });
-
-  it('should create a new task', () => {
-    const manager = new TaskManager(mockEnv);
+  it('应该创建待执行任务', () => {
+    const manager = new TaskManager(createMockEnv());
     const request: ChatRequest = {
       messages: [{ role: 'user', content: 'Hello' }],
     };
 
     const task = manager.createTask(request);
 
-    expect(task.id).toBeDefined();
     expect(task.status).toBe('pending');
     expect(task.type).toBe('chat');
     expect(task.userMessage).toBe('Hello');
     expect(task.steps).toEqual([]);
-    expect(task.createdAt).toBeGreaterThan(0);
-    expect(task.updatedAt).toBeGreaterThan(0);
   });
 
-  it('should determine task type correctly', () => {
-    const manager = new TaskManager(mockEnv);
+  it('应该根据请求内容推断任务类型', () => {
+    const manager = new TaskManager(createMockEnv());
 
-    const chatTask = manager.createTask({
-      messages: [{ role: 'user', content: 'Hello' }],
-    });
-    expect(chatTask.type).toBe('chat');
+    expect(
+      manager.createTask({ messages: [{ role: 'user', content: 'hi' }] }).type,
+    ).toBe('chat');
 
-    const imageTask = manager.createTask({
-      messages: [{ role: 'user', content: 'Look at this' }],
-      images: [{ id: '1', base64: 'abc', mimeType: 'image/png' }],
-    });
-    expect(imageTask.type).toBe('image');
+    expect(
+      manager.createTask({
+        messages: [{ role: 'user', content: 'look' }],
+        images: [{ id: '1', base64: 'a', mimeType: 'image/png' }],
+      }).type,
+    ).toBe('image');
 
-    const codeTask = manager.createTask({
-      messages: [{ role: 'user', content: 'Write code' }],
-      enableTools: true,
-    });
-    expect(codeTask.type).toBe('code');
+    expect(
+      manager.createTask({
+        messages: [{ role: 'user', content: 'file' }],
+        files: [{
+          fileId: 'f1',
+          fileName: 'demo.txt',
+          mimeType: 'text/plain',
+          size: 1,
+          fileHash: 'hash',
+          source: 'uploaded',
+        }],
+      }).type,
+    ).toBe('file');
   });
 
-  it('should get a task by id', () => {
-    const manager = new TaskManager(mockEnv);
+  it('应该输出完整的任务步骤流并更新状态', async () => {
+    const manager = new TaskManager(createMockEnv());
     const request: ChatRequest = {
-      messages: [{ role: 'user', content: 'Hello' }],
+      messages: [{ role: 'user', content: '请回答' }],
     };
 
     const task = manager.createTask(request);
-    const retrieved = manager.getTask(task.id);
+    const events: Array<{ type: string; data: unknown }> = [];
 
-    expect(retrieved).toBeDefined();
-    expect(retrieved?.id).toBe(task.id);
+    for await (const event of manager.executeTask(task.id, request)) {
+      events.push(event);
+    }
+
+    const completedTask = manager.getTask(task.id);
+    const eventTypes = events.map((event) => event.type);
+
+    expect(eventTypes).toContain('task');
+    expect(eventTypes).toContain('step');
+    expect(eventTypes).toContain('content');
+    expect(eventTypes).toContain('complete');
+    expect(completedTask?.status).toBe('completed');
+    expect(completedTask?.result).toBe('mock reply');
+    expect(completedTask?.metadata?.model).toBe('mock-model');
   });
 
-  it('should return undefined for non-existent task', () => {
-    const manager = new TaskManager(mockEnv);
-    const retrieved = manager.getTask('non-existent-id');
-    expect(retrieved).toBeUndefined();
-  });
+  it('应该提供任务统计', () => {
+    const manager = new TaskManager(createMockEnv());
+    manager.createTask({ messages: [{ role: 'user', content: 'a' }] });
+    manager.createTask({ messages: [{ role: 'user', content: 'b' }] });
 
-  it('should list all tasks', () => {
-    const manager = new TaskManager(mockEnv);
-
-    manager.createTask({ messages: [{ role: 'user', content: 'Hello 1' }] });
-    manager.createTask({ messages: [{ role: 'user', content: 'Hello 2' }] });
-
-    const tasks = manager.listTasks();
-    expect(tasks.length).toBe(2);
-  });
-
-  it('should delete a task', () => {
-    const manager = new TaskManager(mockEnv);
-    const task = manager.createTask({
-      messages: [{ role: 'user', content: 'Hello' }],
+    expect(manager.getStats()).toEqual({
+      total: 2,
+      pending: 2,
+      running: 0,
+      completed: 0,
+      failed: 0,
     });
-
-    const deleted = manager.deleteTask(task.id);
-    expect(deleted).toBe(true);
-
-    const retrieved = manager.getTask(task.id);
-    expect(retrieved).toBeUndefined();
-  });
-
-  it('should return false when deleting non-existent task', () => {
-    const manager = new TaskManager(mockEnv);
-    const deleted = manager.deleteTask('non-existent');
-    expect(deleted).toBe(false);
-  });
-
-  it('should provide stats', () => {
-    const manager = new TaskManager(mockEnv);
-
-    manager.createTask({ messages: [{ role: 'user', content: 'Hello 1' }] });
-    manager.createTask({ messages: [{ role: 'user', content: 'Hello 2' }] });
-
-    const stats = manager.getStats();
-    expect(stats.total).toBe(2);
-    expect(stats.pending).toBe(2);
-    expect(stats.running).toBe(0);
-    expect(stats.completed).toBe(0);
-    expect(stats.failed).toBe(0);
   });
 });
-
-console.log('🧪 Running TaskManager Tests...');

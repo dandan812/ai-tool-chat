@@ -3,58 +3,27 @@ import { ref, computed, shallowRef } from 'vue'
 import { sendTaskRequest } from '../api/task'
 import type { ChatMessage, Task, Step, ImageData, UploadedFileRef } from '../types/task'
 import { getUserFriendlyError } from '../utils/error'
-
-export interface ChatSession {
-  id: string
-  title: string
-  createdAt: number
-  updatedAt: number
-}
-
-interface StorageData {
-  sessionList: ChatSession[]
-  messagesMap: Record<string, ChatMessage[]>
-  currentSessionId: string
-}
-
-const STORAGE_KEYS = {
-  SESSION_LIST: 'chat_session_list',
-  MESSAGES_MAP: 'chat_messages_map',
-  CURRENT_SESSION_ID: 'chat_current_session_id'
-} as const
-
-const STORAGE_VERSION = 'v1'
-const MAX_STORAGE_SIZE = 4 * 1024 * 1024
-const TITLE_MAX_LENGTH = 50
-const DEBOUNCE_MS = 300
-
-function generateId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
-}
-
-function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number) {
-  let timer: ReturnType<typeof setTimeout> | null = null
-  return (...args: Parameters<T>) => {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => fn(...args), delay)
-  }
-}
-
-function estimateSize(data: unknown): number {
-  return new Blob([JSON.stringify(data)]).size
-}
-
-function generateFallbackTitle(content: string): string {
-  return content.trim().replace(/\s+/g, ' ').slice(0, TITLE_MAX_LENGTH) || '新对话'
-}
-
-function buildUserMessageContent(content: string, images: ImageData[], files: UploadedFileRef[]): string {
-  const trimmed = content.trim()
-  if (trimmed) return trimmed
-  if (images.length > 0) return '[图片]'
-  if (files.length > 0) return `[文件: ${files.map((file) => file.fileName).join(', ')}]`
-  return ''
-}
+import {
+  buildUserMessageContent,
+  debounce,
+  estimateStorageSize,
+  generateFallbackTitle,
+  generateSessionId,
+  loadChatStorage,
+  MAX_STORAGE_SIZE,
+  pruneStoredMessages,
+  saveChatStorage,
+  STORAGE_SAVE_DEBOUNCE_MS,
+  TITLE_MAX_LENGTH,
+  type ChatSession,
+} from './chatStorage'
+import {
+  clearSessionRuntimeMaps,
+  removeRuntimeSession,
+  setRuntimeMapValue,
+  upsertSessionStep,
+} from './chatRuntime'
+import { buildRequestMessages } from './chatRequest'
 
 export const useChatStore = defineStore('chat', () => {
   const sessionList = ref<ChatSession[]>([])
@@ -83,63 +52,28 @@ export const useChatStore = defineStore('chat', () => {
       const data = {
         sessionList: sessionList.value,
         messagesMap: messagesMap.value,
-        version: STORAGE_VERSION
+        version: 'v1'
       }
 
-      if (estimateSize(data) > MAX_STORAGE_SIZE) {
+      if (estimateStorageSize(data) > MAX_STORAGE_SIZE) {
         cleanupOldMessages()
       }
 
-      localStorage.setItem(STORAGE_KEYS.SESSION_LIST, JSON.stringify(sessionList.value))
-      localStorage.setItem(STORAGE_KEYS.MESSAGES_MAP, JSON.stringify(messagesMap.value))
-      localStorage.setItem(STORAGE_KEYS.CURRENT_SESSION_ID, currentSessionId.value)
+      saveChatStorage(sessionList.value, messagesMap.value, currentSessionId.value)
       storageError.value = null
     } catch (error) {
       console.error('Storage save failed:', error)
       storageError.value = getUserFriendlyError(error as Error, '存储失败')
       cleanupOldMessages()
     }
-  }, DEBOUNCE_MS)
+  }, STORAGE_SAVE_DEBOUNCE_MS)
 
   function cleanupOldMessages(): void {
-    if (sessionList.value.length <= 3) return
-
-    const recentIds = new Set(sessionList.value.slice(0, 3).map((session) => session.id))
-    const newMap: Record<string, ChatMessage[]> = {}
-
-    for (const [id, sessionMessages] of Object.entries(messagesMap.value)) {
-      newMap[id] = recentIds.has(id) ? sessionMessages : sessionMessages.slice(-10)
-    }
-
-    messagesMap.value = newMap
-  }
-
-  function loadFromStorage(): StorageData | null {
-    try {
-      const sessionListData = localStorage.getItem(STORAGE_KEYS.SESSION_LIST)
-      const messagesMapData = localStorage.getItem(STORAGE_KEYS.MESSAGES_MAP)
-      const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID)
-
-      if (!sessionListData || !messagesMapData) return null
-
-      const sessions: ChatSession[] = JSON.parse(sessionListData)
-      const messages: Record<string, ChatMessage[]> = JSON.parse(messagesMapData)
-
-      if (!Array.isArray(sessions)) return null
-
-      return {
-        sessionList: sessions,
-        messagesMap: messages,
-        currentSessionId: currentId ?? sessions[0]?.id ?? ''
-      }
-    } catch (error) {
-      console.error('Storage load failed:', error)
-      return null
-    }
+    messagesMap.value = pruneStoredMessages(sessionList.value, messagesMap.value)
   }
 
   function createSession(title?: string, initialMessages?: ChatMessage[]): string {
-    const id = generateId()
+    const id = generateSessionId()
     const now = Date.now()
 
     const newSession: ChatSession = {
@@ -168,13 +102,12 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function clearSessionRuntimeState(sessionId: string): void {
-    const nextTaskMap = { ...currentTaskMap.value }
-    const nextStepMap = { ...stepMap.value }
-    const nextLoadingMap = { ...sessionLoadingMap.value }
-
-    nextTaskMap[sessionId] = null
-    nextStepMap[sessionId] = []
-    nextLoadingMap[sessionId] = false
+    const { nextTaskMap, nextStepMap, nextLoadingMap } = clearSessionRuntimeMaps(
+      sessionId,
+      currentTaskMap.value,
+      stepMap.value,
+      sessionLoadingMap.value
+    )
 
     currentTaskMap.value = nextTaskMap
     stepMap.value = nextStepMap
@@ -195,15 +128,9 @@ export const useChatStore = defineStore('chat', () => {
     delete newMessagesMap[id]
     messagesMap.value = newMessagesMap
 
-    const newTaskMap = { ...currentTaskMap.value }
-    const newStepMap = { ...stepMap.value }
-    const newLoadingMap = { ...sessionLoadingMap.value }
-    delete newTaskMap[id]
-    delete newStepMap[id]
-    delete newLoadingMap[id]
-    currentTaskMap.value = newTaskMap
-    stepMap.value = newStepMap
-    sessionLoadingMap.value = newLoadingMap
+    currentTaskMap.value = removeRuntimeSession(currentTaskMap.value, id)
+    stepMap.value = removeRuntimeSession(stepMap.value, id)
+    sessionLoadingMap.value = removeRuntimeSession(sessionLoadingMap.value, id)
 
     if (id === currentSessionId.value) {
       if (sessionList.value.length > 0) {
@@ -277,7 +204,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function setSessionLoading(sessionId: string, loading: boolean) {
-    sessionLoadingMap.value = { ...sessionLoadingMap.value, [sessionId]: loading }
+    sessionLoadingMap.value = setRuntimeMapValue(sessionLoadingMap.value, sessionId, loading)
   }
 
   function isSessionLoading(sessionId: string): boolean {
@@ -285,7 +212,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function setCurrentTask(sessionId: string, task: Task | null) {
-    currentTaskMap.value = { ...currentTaskMap.value, [sessionId]: task }
+    currentTaskMap.value = setRuntimeMapValue(currentTaskMap.value, sessionId, task)
   }
 
   function getCurrentTask(sessionId: string): Task | null {
@@ -293,21 +220,11 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function setSteps(sessionId: string, steps: Step[]) {
-    stepMap.value = { ...stepMap.value, [sessionId]: steps }
+    stepMap.value = setRuntimeMapValue(stepMap.value, sessionId, steps)
   }
 
   function upsertStep(sessionId: string, step: Step) {
-    const currentSteps = stepMap.value[sessionId] ?? []
-    const index = currentSteps.findIndex((item) => item.id === step.id)
-    const nextSteps = [...currentSteps]
-
-    if (index === -1) {
-      nextSteps.push(step)
-    } else {
-      nextSteps[index] = { ...nextSteps[index], ...step }
-    }
-
-    stepMap.value = { ...stepMap.value, [sessionId]: nextSteps }
+    stepMap.value = upsertSessionStep(stepMap.value, sessionId, step)
   }
 
   function getSteps(sessionId: string): Step[] {
@@ -327,16 +244,13 @@ export const useChatStore = defineStore('chat', () => {
     const userContent = buildUserMessageContent(content, images, files)
     if (!userContent && images.length === 0 && files.length === 0) return
 
-    const historyMessages = (messagesMap.value[sessionId] ?? [])
-      .filter((message) => message.role !== 'system' && message.content.trim().length > 0)
-      .map((message) => ({ role: message.role, content: message.content }))
-
     const userMessage: ChatMessage = {
       role: 'user',
       content: userContent || '[消息]'
     }
 
-    const requestMessages = [...historyMessages, userMessage]
+    const sessionMessages = messagesMap.value[sessionId] ?? []
+    const requestMessages = buildRequestMessages(sessionMessages, userMessage)
 
     addMessage(sessionId, userMessage)
     addMessage(sessionId, { role: 'assistant', content: '' })
@@ -408,7 +322,7 @@ export const useChatStore = defineStore('chat', () => {
           onComplete: (task) => {
             setCurrentTask(sessionId, task)
 
-            if (historyMessages.length === 0) {
+            if (requestMessages.length === 1) {
               updateSessionTitle(sessionId, generateFallbackTitle(userMessage.content))
             }
           }
@@ -445,7 +359,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function init(): void {
-    const data = loadFromStorage()
+    const data = loadChatStorage()
 
     if (data?.sessionList?.length) {
       sessionList.value = data.sessionList
