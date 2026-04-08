@@ -1,0 +1,76 @@
+
+> @ai-tool-chat/worker@ dev C:\Users\hulian\Desktop\huliang\ai-tool-chat\packages\worker
+> wrangler dev
+
+
+ ⛅️ wrangler 4.60.0 (update available 4.79.0)
+─────────────────────────────────────────────
+Using vars defined in .dev.vars
+Your Worker has access to the following bindings:
+Binding                                                                 Resource                  Mode
+env.CHUNK_STORAGE (ChunkStorage)                                        Durable Object            local
+env.UPLOADED_FILES (ai-tool-chat-uploaded-files-preview)                R2 Bucket                 local
+env.DEFAULT_MODEL ("(hidden)")                                          Environment Variable      local
+env.DEFAULT_MULTIMODAL_MODEL ("(hidden)")                               Environment Variable      local
+env.QWEN_API_KEY ("(hidden)")                                           Environment Variable      local
+
+⎔ Starting local server...
+[Skill] Registered: text-chat (text)
+[Skill] Registered: multimodal-chat (multimodal)
+[wrangler:info] Ready on http://127.0.0.1:8787
+[Skill] Registered: file-chat (text)
+[Skill] Registered: glm-chat (text)
+{"timestamp":"2026-04-01T07:30:59.125Z","level":"info","message":"[Worker] Request started","route":"/health","requestType":"health","method":"GET","path":"/health","query":""}
+{"timestamp":"2026-04-01T07:30:59.140Z","level":"info","message":"[Worker] Request completed","route":"/health","requestType":"health","method":"GET","path":"/health","status":200,"durationMs":15}
+[wrangler:info] GET /health 200 OK (25ms)
+[wrangler:info] OPTIONS / 204 No Content (7ms)
+{"timestamp":"2026-04-01T07:33:18.844Z","level":"info","message":"[Worker] Request started","route":"/","requestType":"chat","method":"POST","path":"/","query":""}
+{"timestamp":"2026-04-01T07:33:18.846Z","level":"info","message":"[Worker] Creating task","route":"/chat","requestType":"chat","messageCount":1,"stream":true,"hasImages":false,"hasFiles":false}
+{"timestamp":"2026-04-01T07:33:18.846Z","level":"info","message":"[Worker] Task created","taskId":"mnfqberi-3iwy6l9","type":"chat"}
+{"timestamp":"2026-04-01T07:33:18.846Z","level":"info","message":"[Worker] Task created for chat request","route":"/chat","requestType":"chat","taskId":"mnfqberi-3iwy6l9","hasImages":false,"hasFiles":false}
+{"timestamp":"2026-04-01T07:33:18.854Z","level":"info","message":"[Worker] Request completed","route":"/","requestType":"chat","method":"POST","path":"/","status":200,"durationMs":10}
+{"timestamp":"2026-04-01T07:33:18.857Z","level":"info","message":"[Worker] Tool registered: execute_code"}
+{"timestamp":"2026-04-01T07:33:18.857Z","level":"info","message":"[Worker] Tool registered: web_search"}
+{"timestamp":"2026-04-01T07:33:18.857Z","level":"info","message":"[Worker] Tool registered: file_operations"}
+{"timestamp":"2026-04-01T07:33:18.857Z","level":"info","message":"[Worker] Tool registered: calculate"}
+{"timestamp":"2026-04-01T07:33:18.857Z","level":"info","message":"[Worker] Tool registered: datetime"}
+{"timestamp":"2026-04-01T07:33:18.857Z","level":"info","message":"[Worker] Tool registered: json_parser"}
+{"timestamp":"2026-04-01T07:33:18.858Z","level":"info","message":"[Worker] Calling text provider API","provider":"qwen","model":"qwen3.5-flash-2026-02-23","messageCount":1}
+[wrangler:info] POST / 200 OK (19ms)
+{"timestamp":"2026-04-01T07:33:27.204Z","level":"info","message":"[Worker] Text provider streaming completed","provider":"qwen","model":"qwen3.5-flash-2026-02-23","totalChunks":83}
+{"timestamp":"2026-04-01T07:33:27.205Z","level":"info","message":"[Worker] Task completed","taskId":"mnfqberi-3iwy6l9"}
+{"timestamp":"2026-04-01T07:33:27.205Z","level":"info","message":"[Worker] Task completed","taskId":"mnfqberi-3iwy6l9","duration":8350}
+{"timestamp":"2026-04-01T07:33:27.206Z","level":"info","message":"[Worker] Stream task completed","route":"/chat","requestType":"chat","taskId":"mnfqberi-3iwy6l9","durationMs":8355,"skill":"text-chat","model":"qwen3.5-flash-2026-02-23"}
+{"timestamp":"2026-04-01T07:40:16.852Z","level":"info","message":"[Worker] Request started","route":"/upload/status","requestType":"upload_status","method":"GET","path":"/upload/status","query":"?fileId=90cb8dfe5f7ac3f9ff2b46f994dc0195-3190"}
+{"timestamp":"2026-04-01T07:40:16.853Z","level":"info","message":"[Worker] Upload status request","route":"/upload/status","requestType":"upload_status","fileId":"90cb8dfe5f7ac3f9ff2b46f994dc0195-3190"}
+{"timestamp":"2026-04-01T07:40:16.862Z","level":"info","message":"[Worker] Got upload metadata","route":"/upload/status","requestType":"upload_status","fileId":"90cb8dfe5f7ac3f9ff2b46f994dc0195-3190","receivedChunks":1,"totalChunks":1}
+{"timestamp":"2026-04-01T07:40:16.863Z","level":"info","message":"[Worker] Request completed","route":"/upload/status","requestType":"upload_status","method":"GET","path":"/upload/status","status":200,"durationMs":11}
+[wrangler:info] GET /upload/status 200 OK (19ms)
+[wrangler:info] OPTIONS /upload/complete 204 No Content (3ms)
+{"timestamp":"2026-04-01T07:40:16.876Z","level":"info","message":"[Worker] Request started","route":"/upload/complete","requestType":"upload_complete","method":"POST","path":"/upload/complete","query":""}
+{"timestamp":"2026-04-01T07:40:16.876Z","level":"info","message":"[Worker] Upload complete request","route":"/upload/complete","requestType":"upload_complete","fileId":"90cb8dfe5f7ac3f9ff2b46f994dc0195-3190","fileName":"很好，这个问题问得非常关键。.txt"}
+{"timestamp":"2026-04-01T07:40:16.877Z","level":"info","message":"[Worker] Metadata check before merge","route":"/upload/complete","requestType":"upload_complete","fileId":"90cb8dfe5f7ac3f9ff2b46f994dc0195-3190","receivedChunks":1,"totalChunks":1}
+{"timestamp":"2026-04-01T07:40:16.904Z","level":"info","message":"[Worker] Chunks merged","route":"/upload/complete","requestType":"upload_complete","fileId":"90cb8dfe5f7ac3f9ff2b46f994dc0195-3190","success":true}
+{"timestamp":"2026-04-01T07:40:16.904Z","level":"info","message":"[Worker] Request completed","route":"/upload/complete","requestType":"upload_complete","method":"POST","path":"/upload/complete","status":200,"durationMs":28}
+[wrangler:info] POST /upload/complete 200 OK (32ms)
+{"timestamp":"2026-04-01T07:40:17.704Z","level":"info","message":"[Worker] Request started","route":"/","requestType":"chat","method":"POST","path":"/","query":""}
+{"timestamp":"2026-04-01T07:40:17.704Z","level":"info","message":"[Worker] Creating task","route":"/chat","requestType":"chat","messageCount":3,"stream":true,"hasImages":false,"hasFiles":true}
+{"timestamp":"2026-04-01T07:40:17.704Z","level":"info","message":"[Worker] Task created","taskId":"mnfqkdyg-kcrfyov","type":"file"}
+{"timestamp":"2026-04-01T07:40:17.704Z","level":"info","message":"[Worker] Task created for chat request","route":"/chat","requestType":"chat","taskId":"mnfqkdyg-kcrfyov","hasImages":false,"hasFiles":true}
+{"timestamp":"2026-04-01T07:40:17.704Z","level":"info","message":"[Worker] Request completed","route":"/","requestType":"chat","method":"POST","path":"/","status":200,"durationMs":0}
+{"timestamp":"2026-04-01T07:40:17.705Z","level":"info","message":"[Worker] Tool registered: execute_code"}
+{"timestamp":"2026-04-01T07:40:17.705Z","level":"info","message":"[Worker] Tool registered: web_search"}
+{"timestamp":"2026-04-01T07:40:17.706Z","level":"info","message":"[Worker] Tool registered: file_operations"}
+{"timestamp":"2026-04-01T07:40:17.706Z","level":"info","message":"[Worker] Tool registered: calculate"}
+{"timestamp":"2026-04-01T07:40:17.706Z","level":"info","message":"[Worker] Tool registered: datetime"}
+{"timestamp":"2026-04-01T07:40:17.706Z","level":"info","message":"[Worker] Tool registered: json_parser"}
+{"timestamp":"2026-04-01T07:40:17.706Z","level":"info","message":"[Worker] Processing files in fileSkill","route":"/chat","requestType":"file_analysis","taskId":"mnfqkdyg-kcrfyov","skill":"file-chat","fileCount":1}
+[wrangler:info] POST / 200 OK (9ms)
+{"timestamp":"2026-04-01T07:40:17.731Z","level":"info","message":"[Worker] File details in fileSkill","name":"很好，这个问题问得非常关键。.txt","contentLength":1454,"mimeType":"text/plain","size":3190,"estimatedTokens":727,"isCodeFile":false}
+{"timestamp":"2026-04-01T07:40:17.732Z","level":"info","message":"[Worker] File type analysis","allCodeFiles":false,"hasCodeFiles":false,"fileTypes":[{"name":"很好，这个问题问得非常关键。.txt","isCode":false}]}
+{"timestamp":"2026-04-01T07:40:17.732Z","level":"info","message":"[Worker] File token estimation","totalTokens":744,"threshold":100000,"needsChunking":false}
+{"timestamp":"2026-04-01T07:40:17.732Z","level":"info","message":"[Worker] Calling text provider API","provider":"qwen","model":"qwen3.5-flash-2026-02-23","messageCount":2}
+{"timestamp":"2026-04-01T07:40:32.393Z","level":"info","message":"[Worker] Text provider streaming completed","provider":"qwen","model":"qwen3.5-flash-2026-02-23","totalChunks":220}
+{"timestamp":"2026-04-01T07:40:32.394Z","level":"info","message":"[Worker] Task completed","taskId":"mnfqkdyg-kcrfyov"}
+{"timestamp":"2026-04-01T07:40:32.394Z","level":"info","message":"[Worker] Task completed","taskId":"mnfqkdyg-kcrfyov","duration":14690}
+{"timestamp":"2026-04-01T07:40:32.394Z","level":"info","message":"[Worker] Stream task completed","route":"/chat","requestType":"chat","taskId":"mnfqkdyg-kcrfyov","durationMs":14690,"skill":"file-chat","model":"qwen3.5-flash-2026-02-23"}
