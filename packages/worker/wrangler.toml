@@ -20,7 +20,3 @@ preview_bucket_name = "ai-tool-chat-uploaded-files-preview"
 tag = "v1"
 new_sqlite_classes = ["ChunkStorage"]
 
-# 自定义域名路由配置
-[[routes]]
-pattern = "api.i-tool-chat.store"
-custom_domain = true
