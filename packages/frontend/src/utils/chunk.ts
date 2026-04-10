@@ -15,9 +15,9 @@ import { API_BASE_URL } from '../config';
 
 /**
  * 分片大小配置
- * 改小为 1MB，避免 Cloudflare Workers 堆栈溢出问题
+ * 设置为 100KB，避免超过 Durable Object SQLite 的 128KB 单值限制
  */
-const DEFAULT_CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
+const DEFAULT_CHUNK_SIZE = 100 * 1024; // 100KB
 const UPLOAD_SESSION_STORAGE_KEY = 'chat_upload_sessions_v1';
 
 interface UploadSession {
