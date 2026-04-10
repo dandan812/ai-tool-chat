@@ -16,9 +16,9 @@ import type { Skill, ToolingMode } from '../types';
 import { textSkill } from './textSkill';
 import { multimodalSkill } from './multimodalSkill';
 import { fileSkill } from './fileSkill';
-import { glmSkill } from './glmSkill';
 import {
   getTextModelProviderLabel,
+  isBailianTextModel,
   resolveDefaultMultimodalModel,
   resolveDefaultTextModel,
 } from "../utils/textModel";
@@ -50,7 +50,6 @@ export function registerDefaultSkills(): void {
   registerSkill(textSkill);       // 注册文本对话技能
   registerSkill(multimodalSkill); // 注册图文对话技能
   registerSkill(fileSkill);       // 注册文件处理技能
-  registerSkill(glmSkill);        // 注册 GLM 对话技能
 }
 
 /**
@@ -104,9 +103,6 @@ export function selectSkill(
   env?: {
     DEFAULT_MODEL?: string;
     DEFAULT_MULTIMODAL_MODEL?: string;
-    GLM_API_KEY?: string;
-    OPENAI_API_KEY?: string;
-    DEEPSEEK_API_KEY?: string;
     QWEN_API_KEY?: string;
   }
 ): SelectedSkill {
@@ -129,19 +125,16 @@ export function selectSkill(
   }
 
   function createTextSelection(selectedModel: string): SelectedSkill {
-    const providerLabel = getTextModelProviderLabel(selectedModel);
-    const skill = providerLabel === 'GLM' ? glmSkill : textSkill;
-
     return createSelection(
-      skill,
+      textSkill,
       selectedModel,
-      `${providerLabel} 文本对话`,
+      `${getTextModelProviderLabel(selectedModel)} 文本对话`,
       `调用 ${selectedModel} 生成回复`
     );
   }
 
   function hasKnownTextProvider(selectedModel: string): boolean {
-    return getTextModelProviderLabel(selectedModel) !== '文本';
+    return isBailianTextModel(selectedModel);
   }
 
   function createFileSelection(): SelectedSkill {

@@ -114,9 +114,7 @@ export function createMockEnv(overrides: Partial<Env> = {}): Env {
   };
 
   return {
-    DEEPSEEK_API_KEY: 'test-deepseek-key',
     QWEN_API_KEY: 'test-qwen-key',
-    OPENAI_API_KEY: 'test-openai-key',
     CHUNK_STORAGE: chunkStorageNamespace as unknown as DurableObjectNamespace,
     UPLOADED_FILES: new MemoryR2Bucket() as unknown as R2Bucket,
     ...overrides,

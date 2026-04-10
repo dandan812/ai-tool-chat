@@ -210,10 +210,8 @@ function handleHealthCheck(env: Env): Response {
     timestamp: new Date().toISOString(),
     version: '2.0.0',
     features: {
-      deepseek: !!env.DEEPSEEK_API_KEY,
-      qwen: !!env.QWEN_API_KEY,
-      openai: !!env.OPENAI_API_KEY,
-      anthropic: !!env.ANTHROPIC_API_KEY,
+      bailianText: !!env.QWEN_API_KEY,
+      bailianMultimodal: !!env.QWEN_API_KEY,
     },
   };
 

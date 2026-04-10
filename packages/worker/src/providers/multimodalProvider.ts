@@ -29,7 +29,7 @@ export function resolveQwenMultimodalProviderConfig(
   }
 
   const requestedModel = typeof input.model === 'string' ? input.model : '';
-  const model = requestedModel.startsWith('qwen')
+  const model = requestedModel
     ? requestedModel
     : resolveDefaultMultimodalModel(context.env);
 

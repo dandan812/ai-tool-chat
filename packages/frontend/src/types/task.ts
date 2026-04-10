@@ -123,7 +123,7 @@ export interface Step {
   input?: unknown;
   /**
    * 步骤输出数据
-   * 对于 skill 步骤，可能包含 { model: 'deepseek-chat', ... }
+   * 对于 skill 步骤，可能包含 { model: 'qwen3.5-flash-2026-02-23', ... }
    */
   output?: unknown;
   /** 错误信息（仅 status 为 failed 时有值） */

@@ -1,16 +1,12 @@
 import type { Message, SkillContext, SkillInput, SkillStreamChunk } from '../types';
 import {
-  DEFAULT_DEEPSEEK_TEXT_MODEL,
-  DEFAULT_OPENAI_TEXT_MODEL,
   DEFAULT_QWEN_TEXT_MODEL,
-  isDeepSeekTextModel,
-  isOpenAITextModel,
-  isQwenTextModel,
+  isBailianTextModel,
   resolveDefaultTextModel,
 } from '../utils/textModel';
 import { executeChatCompletionStream } from './chatCompletionStream';
 
-export type TextProviderName = 'openai' | 'deepseek' | 'qwen';
+export type TextProviderName = 'bailian';
 
 export interface TextProviderConfig {
   provider: TextProviderName;
@@ -20,14 +16,14 @@ export interface TextProviderConfig {
 }
 
 const TEXT_PROVIDER_ENDPOINTS: Record<TextProviderName, string> = {
-  openai: 'https://api.openai.com/v1/chat/completions',
-  deepseek: 'https://api.deepseek.com/chat/completions',
-  qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+  bailian: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
 };
 
 /**
- * 解析当前请求最终应走哪个文本供应商。
- * 优先遵循显式模型，其次遵循默认模型，最后按现有 Key 做兜底。
+ * 解析当前请求最终应走哪个文本模型。
+ *
+ * 当前项目统一只走百炼兼容接口，因此这里不再区分 OpenAI / DeepSeek / GLM。
+ * 只要模型名属于百炼支持范围，并且存在 QWEN_API_KEY，就统一落到同一个 provider。
  */
 export function resolveTextProvider(
   input: SkillInput,
@@ -47,16 +43,8 @@ function resolveRequestedProvider(
   model: string,
   context: SkillContext,
 ): TextProviderConfig | null {
-  if (isOpenAITextModel(model) && context.env.OPENAI_API_KEY) {
-    return createProviderConfig('openai', model, context.env.OPENAI_API_KEY);
-  }
-
-  if (isDeepSeekTextModel(model) && context.env.DEEPSEEK_API_KEY) {
-    return createProviderConfig('deepseek', model, context.env.DEEPSEEK_API_KEY);
-  }
-
-  if (isQwenTextModel(model) && context.env.QWEN_API_KEY) {
-    return createProviderConfig('qwen', model, context.env.QWEN_API_KEY);
+  if (isBailianTextModel(model) && context.env.QWEN_API_KEY) {
+    return createProviderConfig('bailian', model, context.env.QWEN_API_KEY);
   }
 
   return null;
@@ -66,16 +54,8 @@ function resolveDefaultProvider(
   model: string,
   context: SkillContext,
 ): TextProviderConfig | null {
-  if (isQwenTextModel(model) && context.env.QWEN_API_KEY) {
-    return createProviderConfig('qwen', model, context.env.QWEN_API_KEY);
-  }
-
-  if (isOpenAITextModel(model) && context.env.OPENAI_API_KEY) {
-    return createProviderConfig('openai', model, context.env.OPENAI_API_KEY);
-  }
-
-  if (isDeepSeekTextModel(model) && context.env.DEEPSEEK_API_KEY) {
-    return createProviderConfig('deepseek', model, context.env.DEEPSEEK_API_KEY);
+  if (isBailianTextModel(model) && context.env.QWEN_API_KEY) {
+    return createProviderConfig('bailian', model, context.env.QWEN_API_KEY);
   }
 
   return null;
@@ -84,17 +64,8 @@ function resolveDefaultProvider(
 function resolveAvailableProviderFallback(
   context: SkillContext,
 ): TextProviderConfig | null {
-  // 当前项目主用阿里云百炼，兜底时优先返回 Qwen。
   if (context.env.QWEN_API_KEY) {
-    return createProviderConfig('qwen', DEFAULT_QWEN_TEXT_MODEL, context.env.QWEN_API_KEY);
-  }
-
-  if (context.env.OPENAI_API_KEY) {
-    return createProviderConfig('openai', DEFAULT_OPENAI_TEXT_MODEL, context.env.OPENAI_API_KEY);
-  }
-
-  if (context.env.DEEPSEEK_API_KEY) {
-    return createProviderConfig('deepseek', DEFAULT_DEEPSEEK_TEXT_MODEL, context.env.DEEPSEEK_API_KEY);
+    return createProviderConfig('bailian', DEFAULT_QWEN_TEXT_MODEL, context.env.QWEN_API_KEY);
   }
 
   return null;

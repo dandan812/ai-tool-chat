@@ -59,9 +59,7 @@
 1. 访问本地或线上健康检查：
    - `/health`
 2. 确认 `.dev.vars` 或线上环境里至少有一个可用模型 Key：
-   - `GLM_API_KEY`
    - `QWEN_API_KEY`
-   - `OPENAI_API_KEY`
 3. 看日志中的：
    - `model`
    - `skill`
@@ -70,7 +68,7 @@
 ### 典型情况
 
 - `QWEN_API_KEY` 有 Key 但免费额度耗尽
-- `DEFAULT_MODEL` 改成了 `glm-*`，但本地没有 `GLM_API_KEY`
+- `DEFAULT_MODEL` 写成了百炼里不存在或当前账号不可用的模型名
 - 线上健康检查正常，但请求实际路由到了没有额度的模型
 
 ### 建议做法

@@ -9,7 +9,6 @@ const STEP_TYPE_LABELS: Record<string, string> = {
 }
 
 const MODEL_LABELS: Record<string, string> = {
-  'deepseek-chat': 'DeepSeek',
   'qwen3.5-plus': 'Qwen 3.5 Plus',
   'qwen3.5-flash': 'Qwen 3.5 Flash',
   'qwen3.5-flash-2026-02-23': 'Qwen 3.5 Flash',
@@ -18,7 +17,13 @@ const MODEL_LABELS: Record<string, string> = {
   'qwen3-max-2026-01-23': 'Qwen 3 Max',
   'qwen3-vl-plus': 'Qwen VL Plus',
   'qwen-vl-plus': 'Qwen VL Plus',
-  'glm-5': 'GLM-5',
+  'kimi-k2.5': 'Kimi K2.5',
+  'MiniMax-M2.5': 'MiniMax M2.5',
+  'MiniMax-M2.1': 'MiniMax M2.1',
+  'qwen3-coder-next': 'Qwen 3 Coder Next',
+  'qwen3.5-397b-a17b': 'Qwen 3.5 397B',
+  'qwen-flash-character': 'Qwen Flash Character',
+  'qwen-flash-character-2026-01-22': 'Qwen Flash Character',
 }
 
 export function getStepTypeLabel(type: string, fallback: string): string {

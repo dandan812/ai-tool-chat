@@ -2,8 +2,8 @@
  * 文本 Skill
  *
  * 作用：处理纯文本对话。
- * 当前项目主路径优先使用阿里云百炼（Qwen），
- * 但依然保留 OpenAI / DeepSeek 的兼容能力。
+ * 当前项目已经明确收口到阿里云百炼，因此这里不再承担多供应商分发职责，
+ * 只负责把输入交给百炼兼容 provider，并在失败时统一兜底。
  */
 import type { Skill, SkillInput, SkillContext, SkillStreamChunk, Message } from '../types';
 import { logger } from '../utils/logger';
@@ -15,7 +15,7 @@ import {
 export const textSkill: Skill = {
   name: 'text-chat',
   type: 'text',
-  description: '基于 OpenAI / DeepSeek / Qwen 的文本对话技能',
+  description: '基于阿里云百炼兼容接口的文本对话技能',
 
   async *execute(input: SkillInput, context: SkillContext): AsyncIterable<SkillStreamChunk> {
     const { messages, temperature = 0.7 } = input;

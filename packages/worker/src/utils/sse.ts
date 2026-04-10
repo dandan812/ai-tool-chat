@@ -2,7 +2,7 @@ import type { SkillStreamChunk } from '../types';
 
 /**
  * 解析 OpenAI 兼容格式的 SSE 数据行。
- * 文本、多模态和 GLM 都复用这套格式解析。
+ * 当前项目里的百炼文本和百炼多模态都复用这套格式解析。
  */
 export function parseChatCompletionSSELine(line: string): SkillStreamChunk | null {
   const trimmed = line.trim();

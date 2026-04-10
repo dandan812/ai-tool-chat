@@ -19,41 +19,47 @@ function createInput(model?: string): SkillInput {
 }
 
 describe('resolveTextProvider', () => {
-  it('默认优先走 Qwen 兜底供应商', () => {
+  it('默认优先走百炼兜底供应商', () => {
     const provider = resolveTextProvider(
       createInput(),
       createContext({ QWEN_API_KEY: 'qwen-key' }),
     );
 
     expect(provider).not.toBeNull();
-    expect(provider?.provider).toBe('qwen');
+    expect(provider?.provider).toBe('bailian');
     expect(provider?.model).toBe('qwen3.5-flash-2026-02-23');
   });
 
-  it('显式指定 DeepSeek 模型时优先走 DeepSeek', () => {
+  it('显式指定 kimi 模型时仍然走百炼兼容接口', () => {
     const provider = resolveTextProvider(
-      createInput('deepseek-chat'),
-      createContext({
-        QWEN_API_KEY: 'qwen-key',
-        DEEPSEEK_API_KEY: 'deepseek-key',
-      }),
+      createInput('kimi-k2.5'),
+      createContext({ QWEN_API_KEY: 'qwen-key' }),
     );
 
-    expect(provider?.provider).toBe('deepseek');
-    expect(provider?.model).toBe('deepseek-chat');
+    expect(provider?.provider).toBe('bailian');
+    expect(provider?.model).toBe('kimi-k2.5');
   });
 
-  it('默认模型显式配置为 Qwen 时应命中 Qwen', () => {
+  it('显式指定 minimax 模型时仍然走百炼兼容接口', () => {
+    const provider = resolveTextProvider(
+      createInput('MiniMax-M2.5'),
+      createContext({ QWEN_API_KEY: 'qwen-key' }),
+    );
+
+    expect(provider?.provider).toBe('bailian');
+    expect(provider?.model).toBe('MiniMax-M2.5');
+  });
+
+  it('默认模型显式配置为百炼模型时应命中百炼', () => {
     const provider = resolveTextProvider(
       createInput(),
       createContext({
         DEFAULT_MODEL: 'qwen3.5-flash-2026-02-23',
         QWEN_API_KEY: 'qwen-key',
-        OPENAI_API_KEY: 'openai-key',
       }),
     );
 
-    expect(provider?.provider).toBe('qwen');
+    expect(provider?.provider).toBe('bailian');
     expect(provider?.model).toBe('qwen3.5-flash-2026-02-23');
   });
 });

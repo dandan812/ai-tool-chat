@@ -64,8 +64,8 @@ Worker 遵循 **Task → Step → Skill** 架构模式：
 1. **Task** (`packages/worker/src/core/taskManager.ts`): 表示单个聊天请求，管理生命周期
 2. **Steps** (`plan`, `skill`, `respond`): 任务执行的顺序阶段
 3. **Skills** (`packages/worker/src/skills/`): 可插拔的处理模块
-   - `textSkill.ts` - 纯文本 AI 对话 (DeepSeek API)
-   - `multimodalSkill.ts` - 图片+文本处理 (Qwen-VL API)
+   - `textSkill.ts` - 纯文本 AI 对话（百炼兼容接口）
+   - `multimodalSkill.ts` - 图片+文本处理（百炼多模态模型）
    - 通过 `selectSkill()` 根据输入类型自动选择
 
 **MCP 集成** (`packages/worker/src/mcp/`): 模型上下文协议，用于工具执行。
@@ -82,8 +82,9 @@ Worker 遵循 **Task → Step → Skill** 架构模式：
 ## 环境变量
 
 ### Worker (必需)
-- `DEEPSEEK_API_KEY` - 主要 AI 提供商
-- `QWEN_API_KEY` - 多模态支持（可选）
+- `QWEN_API_KEY` - 百炼兼容接口所需的主要模型密钥
+- `DEFAULT_MODEL` - 默认文本模型（可选，未配置时回退到项目内置默认值）
+- `DEFAULT_MULTIMODAL_MODEL` - 默认图片模型（可选）
 
 ### 前端 (可选)
 - `VITE_API_URL` - API 服务器地址（默认为 worker URL）
@@ -113,7 +114,7 @@ Worker 遵循 **Task → Step → Skill** 架构模式：
 
 ## 常见问题
 
-- **网络错误**: 通常表示 worker 未部署或缺少 `DEEPSEEK_API_KEY` 环境变量
+- **网络错误**: 通常表示 worker 未部署或缺少 `QWEN_API_KEY` 环境变量
 - **浏览器缓存**: 部署后需要强制刷新（Ctrl+Shift+R），必要时清除 Cloudflare 缓存
 
 详细故障排查请参阅 `docs/reference/ERROR_LOG.md`。

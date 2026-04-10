@@ -17,7 +17,6 @@ import {
   createTextRetrievalNarrowScopeMessage,
 } from "../utils/filePromptBuilders";
 import { getTextModelProviderLabel, resolveDefaultTextModel } from "../utils/textModel";
-import { glmSkill } from "./glmSkill";
 import { textSkill } from "./textSkill";
 
 /**
@@ -113,7 +112,8 @@ function getFileExtension(filename: string): string {
  */
 function createTextExecutor(model: string): TextExecutorSelection {
   return {
-    execute: getTextModelProviderLabel(model) === "GLM" ? glmSkill.execute : textSkill.execute,
+    // 文件分析最终统一回到百炼文本链路，避免这里再分叉到历史上的独立供应商实现。
+    execute: textSkill.execute,
     model,
   };
 }

@@ -12,10 +12,10 @@ export interface ChatCompletionStreamRequest {
 }
 
 /**
- * 统一执行 OpenAI 兼容的流式 Chat Completions 请求。
+ * 统一执行兼容 OpenAI Chat Completions 协议的流式请求。
  *
  * 这里不负责“选哪个模型/供应商”，只负责把已经确定好的请求发出去并流式读回。
- * 这样各个 Skill 可以保留自己的策略判断，而底层的请求、SSE 解析和日志格式不再重复。
+ * 当前主用场景是阿里云百炼兼容接口，因此这里更像一个通用的“兼容协议执行器”。
  */
 export async function* executeChatCompletionStream(
   request: ChatCompletionStreamRequest,

@@ -307,12 +307,9 @@ export interface ToolResult {
 // ==================== 环境变量 ====================
 
 export interface Env {
-  DEEPSEEK_API_KEY: string;
   QWEN_API_KEY?: string;
-  OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;
-  GLM_API_KEY?: string;  // 智谱 AI GLM API Key
   CHUNK_STORAGE: DurableObjectNamespace;
   UPLOADED_FILES: R2Bucket;
   // 可选配置
