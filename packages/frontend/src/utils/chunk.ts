@@ -357,26 +357,52 @@ export async function uploadChunkedFile(
     try {
       result = await completeChunkedUpload(fileId, fileHash, file.name, file.type || 'text/plain');
     } catch (error) {
-      const latestStatus = await queryUploadStatus(fileId);
-      const latestIndices = new Set<number>(latestStatus?.receivedIndices || []);
-
-      if (latestStatus && latestIndices.size < totalChunks) {
-        console.warn('[Chunk] Merge failed, retrying missing chunks once...', {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // 检测是否是分片大小不匹配导致的 offset 越界错误
+      if (errorMessage.includes('offset is out of bounds')) {
+        console.warn('[Chunk] Detected chunk size mismatch, deleting old upload and retrying...', {
           fileId,
-          beforeRetry: uploadedChunkIndices.size,
-          serverReceived: latestIndices.size,
           totalChunks,
         });
-
-        uploadedChunkIndices.clear();
-        for (const index of latestIndices) {
-          uploadedChunkIndices.add(index);
+        
+        // 删除服务端的旧上传数据
+        try {
+          await fetch(`${API_BASE_URL}/upload/delete?fileId=${encodeURIComponent(fileId)}`, {
+            method: 'POST',
+          });
+        } catch (deleteError) {
+          console.warn('[Chunk] Failed to delete old upload:', deleteError);
         }
-
+        
+        // 清空本地状态，重新上传所有分片
+        uploadedChunkIndices.clear();
+        deleteUploadSession(fileId);
+        
         await uploadMissingChunks(file, chunks, fileId, fileHash, uploadedChunkIndices, startTime, onProgress);
         result = await completeChunkedUpload(fileId, fileHash, file.name, file.type || 'text/plain');
       } else {
-        throw error;
+        const latestStatus = await queryUploadStatus(fileId);
+        const latestIndices = new Set<number>(latestStatus?.receivedIndices || []);
+
+        if (latestStatus && latestIndices.size < totalChunks) {
+          console.warn('[Chunk] Merge failed, retrying missing chunks once...', {
+            fileId,
+            beforeRetry: uploadedChunkIndices.size,
+            serverReceived: latestIndices.size,
+            totalChunks,
+          });
+
+          uploadedChunkIndices.clear();
+          for (const index of latestIndices) {
+            uploadedChunkIndices.add(index);
+          }
+
+          await uploadMissingChunks(file, chunks, fileId, fileHash, uploadedChunkIndices, startTime, onProgress);
+          result = await completeChunkedUpload(fileId, fileHash, file.name, file.type || 'text/plain');
+        } else {
+          throw error;
+        }
       }
     }
 
