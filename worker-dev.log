@@ -121,3 +121,16 @@ env.QWEN_API_KEY ("(hidden)")                                           Environm
 {"timestamp":"2026-04-10T13:53:14.838Z","level":"info","message":"[Worker] Tool registered: json_parser"}
 {"timestamp":"2026-04-10T13:53:14.839Z","level":"info","message":"[Worker] Calling chat completion provider","provider":"qwen-multimodal","model":"qwen3.5-plus"}
 [wrangler:info] POST / 200 OK (6ms)
+{"timestamp":"2026-04-10T13:53:47.265Z","level":"info","message":"[Worker] Chat completion provider streaming completed","provider":"qwen-multimodal","model":"qwen3.5-plus","totalChunks":2}
+{"timestamp":"2026-04-10T13:53:47.265Z","level":"info","message":"[Worker] Task completed","taskId":"mnsyuo9h-75cg4af","duration":32428}
+{"timestamp":"2026-04-10T13:53:47.265Z","level":"info","message":"[Worker] Stream task completed","route":"/chat","requestType":"chat","taskId":"mnsyuo9h-75cg4af","durationMs":32428,"skill":"multimodal-chat","model":"qwen3.5-plus"}
+⎔ Reloading local server...
+[Skill] Registered: text-chat (text)
+[Skill] Registered: multimodal-chat (multimodal)
+[Skill] Registered: file-chat (text)
+⎔ Local server updated and ready
+⎔ Reloading local server...
+[Skill] Registered: text-chat (text)
+[Skill] Registered: multimodal-chat (multimodal)
+[Skill] Registered: file-chat (text)
+⎔ Local server updated and ready
