@@ -1,125 +1,16 @@
 /**
  * 文本 Skill
  *
- * 作用：处理纯文本对话
- * 优先级：
- *   1. 如果显式指定 OpenAI 模型，走 OpenAI
- *   2. 如果显式指定 DeepSeek 模型，走 DeepSeek
- *   3. 如果显式指定 Qwen 模型，走阿里云百炼
- *   4. 如果只配置了 OpenAI Key，走 OpenAI
- *   5. 如果只配置了 Qwen Key，走阿里云百炼
- *   6. 否则走 DeepSeek
+ * 作用：处理纯文本对话。
+ * 当前项目主路径优先使用阿里云百炼（Qwen），
+ * 但依然保留 OpenAI / DeepSeek 的兼容能力。
  */
 import type { Skill, SkillInput, SkillContext, SkillStreamChunk, Message } from '../types';
 import { logger } from '../utils/logger';
-import { parseChatCompletionSSELine } from '../utils/sse';
 import {
-  DEFAULT_DEEPSEEK_TEXT_MODEL,
-  DEFAULT_OPENAI_TEXT_MODEL,
-  DEFAULT_QWEN_TEXT_MODEL,
-  isDeepSeekTextModel,
-  isOpenAITextModel,
-  isQwenTextModel,
-  resolveDefaultTextModel,
-} from "../utils/textModel";
-
-type TextProvider = 'openai' | 'deepseek' | 'qwen';
-
-interface ProviderConfig {
-  provider: TextProvider;
-  model: string;
-  url: string;
-  apiKey: string;
-}
-
-function resolveProvider(input: SkillInput, context: SkillContext): ProviderConfig | null {
-  const requestedModel = typeof input.model === 'string' ? input.model : '';
-  const { env } = context;
-  const defaultModel = resolveDefaultTextModel(env);
-
-  if (isOpenAITextModel(requestedModel) && env.OPENAI_API_KEY) {
-    return {
-      provider: 'openai',
-      model: requestedModel,
-      url: 'https://api.openai.com/v1/chat/completions',
-      apiKey: env.OPENAI_API_KEY,
-    };
-  }
-
-  if (isDeepSeekTextModel(requestedModel) && env.DEEPSEEK_API_KEY) {
-    return {
-      provider: 'deepseek',
-      model: requestedModel,
-      url: 'https://api.deepseek.com/chat/completions',
-      apiKey: env.DEEPSEEK_API_KEY,
-    };
-  }
-
-  if (isQwenTextModel(requestedModel) && env.QWEN_API_KEY) {
-    return {
-      provider: 'qwen',
-      model: requestedModel,
-      url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-      apiKey: env.QWEN_API_KEY,
-    };
-  }
-
-  if (isOpenAITextModel(defaultModel) && env.OPENAI_API_KEY) {
-    return {
-      provider: 'openai',
-      model: defaultModel,
-      url: 'https://api.openai.com/v1/chat/completions',
-      apiKey: env.OPENAI_API_KEY,
-    };
-  }
-
-  if (isDeepSeekTextModel(defaultModel) && env.DEEPSEEK_API_KEY) {
-    return {
-      provider: 'deepseek',
-      model: defaultModel,
-      url: 'https://api.deepseek.com/chat/completions',
-      apiKey: env.DEEPSEEK_API_KEY,
-    };
-  }
-
-  if (isQwenTextModel(defaultModel) && env.QWEN_API_KEY) {
-    return {
-      provider: 'qwen',
-      model: defaultModel,
-      url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-      apiKey: env.QWEN_API_KEY,
-    };
-  }
-
-  if (env.OPENAI_API_KEY) {
-    return {
-      provider: 'openai',
-      model: DEFAULT_OPENAI_TEXT_MODEL,
-      url: 'https://api.openai.com/v1/chat/completions',
-      apiKey: env.OPENAI_API_KEY,
-    };
-  }
-
-  if (env.DEEPSEEK_API_KEY) {
-    return {
-      provider: 'deepseek',
-      model: DEFAULT_DEEPSEEK_TEXT_MODEL,
-      url: 'https://api.deepseek.com/chat/completions',
-      apiKey: env.DEEPSEEK_API_KEY,
-    };
-  }
-
-  if (env.QWEN_API_KEY) {
-    return {
-      provider: 'qwen',
-      model: DEFAULT_QWEN_TEXT_MODEL,
-      url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-      apiKey: env.QWEN_API_KEY,
-    };
-  }
-
-  return null;
-}
+  executeTextProviderStream,
+  resolveTextProvider,
+} from '../providers/textProvider';
 
 export const textSkill: Skill = {
   name: 'text-chat',
@@ -128,7 +19,7 @@ export const textSkill: Skill = {
 
   async *execute(input: SkillInput, context: SkillContext): AsyncIterable<SkillStreamChunk> {
     const { messages, temperature = 0.7 } = input;
-    const providerConfig = resolveProvider(input, context);
+    const providerConfig = resolveTextProvider(input, context);
 
     if (!providerConfig) {
       yield { type: 'error', error: '未配置可用的文本模型 API Key' };
@@ -136,87 +27,11 @@ export const textSkill: Skill = {
     }
 
     try {
-      logger.info('Calling text provider API', {
-        provider: providerConfig.provider,
-        model: providerConfig.model,
-        messageCount: messages.length,
-      });
-
-      const response = await fetch(providerConfig.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${providerConfig.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: providerConfig.model,
-          messages: messages as Message[],
-          stream: true,
-          temperature,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        logger.error('Text provider API error', {
-          provider: providerConfig.provider,
-          model: providerConfig.model,
-          status: response.status,
-          error,
-        });
-        yield {
-          type: 'error',
-          error: `${providerConfig.provider.toUpperCase()} API Error (Status ${response.status}): ${error}`,
-        };
-        return;
-      }
-
-      if (!response.body) {
-        yield { type: 'error', error: 'Response body is null' };
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let chunkCount = 0;
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const chunk = parseChatCompletionSSELine(line);
-            if (chunk && chunk.type === 'content') {
-              chunkCount++;
-              yield chunk;
-            } else if (chunk && chunk.type === 'error') {
-              yield chunk;
-            }
-          }
-        }
-
-        if (buffer.trim()) {
-          const chunk = parseChatCompletionSSELine(buffer.trim());
-          if (chunk) {
-            yield chunk;
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-
-      yield { type: 'complete' };
-      logger.info('Text provider streaming completed', {
-        provider: providerConfig.provider,
-        model: providerConfig.model,
-        totalChunks: chunkCount,
-      });
+      yield* executeTextProviderStream(
+        providerConfig,
+        messages as Message[],
+        temperature,
+      );
     } catch (error) {
       logger.error('Text provider request failed', error);
       yield { type: 'error', error: String(error) };

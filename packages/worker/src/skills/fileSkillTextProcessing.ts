@@ -20,6 +20,8 @@ import {
   createTextOverviewMessages,
   createTextRetrievalMessages,
   createTextRetrievalNarrowScopeMessage,
+} from '../utils/filePromptBuilders'
+import {
   MAX_TOKEN_THRESHOLD,
   selectFileTextExecutor,
   shouldFallbackToFullSummary,
@@ -29,6 +31,10 @@ import {
   TEXT_RETRIEVAL_TOP_K,
 } from './fileSkillSupport'
 
+/**
+ * 只有在“文件体量很小、文件数很少”时，才值得直接全文进模型。
+ * 这条路径成本最低，但一旦文件变大，就会拖慢首轮响应并放大后续多轮问答成本。
+ */
 export async function* processSmallFiles(
   fileContents: string,
   userQuestion: string,
@@ -156,6 +162,11 @@ export async function* processTextFilesWithRetrieval(
     maxPromptTokens: TEXT_RETRIEVAL_MAX_PROMPT_TOKENS,
     minRelevance: TEXT_RETRIEVAL_MIN_RELEVANCE,
   })
+  /**
+   * 当用户本身就在问“整体内容”，或者检索结果不足但文件又明显偏大时，
+   * 直接回退全文摘要会重新把成本抬高，所以这里优先切到“概览模式”：
+   * 从文件不同位置抽代表性片段，给出整体轮廓，而不是假装已经通读全文。
+   */
   const overviewRetrieval = forceOverviewMode || (retrieval.insufficient && totalTokens > MAX_TOKEN_THRESHOLD)
     ? retrieveOverviewText(indices, userQuestion, {
         topK: TEXT_RETRIEVAL_TOP_K,
@@ -283,6 +294,10 @@ async function extractChunkSummaries(
   input: SkillInput,
   context: SkillContext,
 ): Promise<string[]> {
+  /**
+   * 这里限制并发不是为了“更快”，而是为了避免大文件摘要时同时打爆上游模型配额，
+   * 以及在 Worker 环境里堆出过高的瞬时资源占用。
+   */
   const concurrencyLimit = 3
   const summaries: string[] = []
 

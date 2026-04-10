@@ -103,6 +103,7 @@ export function selectSkill(
   input: { images?: unknown[]; files?: unknown[]; model?: string },
   env?: {
     DEFAULT_MODEL?: string;
+    DEFAULT_MULTIMODAL_MODEL?: string;
     GLM_API_KEY?: string;
     OPENAI_API_KEY?: string;
     DEEPSEEK_API_KEY?: string;
