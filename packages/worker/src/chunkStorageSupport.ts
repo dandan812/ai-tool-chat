@@ -63,7 +63,22 @@ export function repairMetadataFromChunks(
 }
 
 export function mergeStoredChunks(totalSize: number, chunks: ArrayBuffer[]): Uint8Array {
-  const merged = new Uint8Array(totalSize);
+  // 计算实际分片总大小
+  const actualSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  
+  // 如果实际大小与预期不符，使用实际大小
+  const finalSize = actualSize !== totalSize ? actualSize : totalSize;
+  
+  if (actualSize !== totalSize) {
+    console.warn('Chunk size mismatch', {
+      expectedTotalSize: totalSize,
+      actualTotalSize: actualSize,
+      chunkCount: chunks.length,
+      chunkSizes: chunks.map(c => c.byteLength)
+    });
+  }
+  
+  const merged = new Uint8Array(finalSize);
   let offset = 0;
 
   for (const chunk of chunks) {
