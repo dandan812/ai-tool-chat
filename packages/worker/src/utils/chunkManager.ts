@@ -141,8 +141,29 @@ export class ChunkManager {
       totalSize: meta.totalSize,
     });
 
+    // 先计算实际分片总大小
+    let actualSize = 0;
+    for (let i = 0; i < meta.totalChunks; i++) {
+      const chunk = chunksMap.get(i);
+      if (!chunk) {
+        throw new Error(`Chunk ${i} missing for file ${fileId}`);
+      }
+      actualSize += chunk.byteLength;
+    }
+
+    // 使用实际大小而非元数据中的预期大小
+    const finalSize = actualSize !== meta.totalSize ? actualSize : meta.totalSize;
+    
+    if (actualSize !== meta.totalSize) {
+      logger.warn('Chunk size mismatch in chunkManager', {
+        fileId,
+        expectedTotalSize: meta.totalSize,
+        actualTotalSize: actualSize,
+      });
+    }
+
     // 创建合并后的 ArrayBuffer
-    const merged = new Uint8Array(meta.totalSize);
+    const merged = new Uint8Array(finalSize);
     let offset = 0;
 
     // 按顺序合并分片
