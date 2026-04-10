@@ -370,6 +370,7 @@ export async function uploadChunkedFile(
         try {
           await fetch(`${API_BASE_URL}/upload/delete?fileId=${encodeURIComponent(fileId)}`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
           });
         } catch (deleteError) {
           console.warn('[Chunk] Failed to delete old upload:', deleteError);
