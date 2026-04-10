@@ -251,3 +251,53 @@ export async function handleUploadStatus(request: Request, env: Env): Promise<Re
     throw error;
   }
 }
+
+/**
+ * 处理删除上传请求
+ */
+export async function handleUploadDelete(request: Request, env: Env): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const fileId = url.searchParams.get('fileId');
+
+    if (!fileId) {
+      throw new ValidationError(
+        'Missing fileId parameter',
+        createErrorDetails(ERROR_CODES.UPLOAD_STATUS_INVALID_REQUEST),
+      );
+    }
+
+    logger.info('Upload delete request', {
+      route: '/upload/delete',
+      requestType: 'upload_delete',
+      fileId,
+    });
+
+    const chunkStorage = getChunkStorageStub(env, fileId);
+    const durableObjectUrl = createChunkStorageUrl(`/?action=deleteFile&fileId=${encodeURIComponent(fileId)}`);
+    const durableResponse = await chunkStorage.fetch(durableObjectUrl);
+
+    if (!durableResponse.ok) {
+      const errorText = await durableResponse.text();
+      throw new ValidationError(
+        `删除上传失败: ${errorText}`,
+        createErrorDetails(ERROR_CODES.UPLOAD_STATUS_READ_FAILED, { fileId }),
+      );
+    }
+
+    logger.info('Upload deleted successfully', {
+      route: '/upload/delete',
+      requestType: 'upload_delete',
+      fileId,
+    });
+
+    return createJSONResponse({ success: true });
+  } catch (error) {
+    logger.error('Upload delete error', {
+      route: '/upload/delete',
+      requestType: 'upload_delete',
+      error,
+    });
+    throw error;
+  }
+}

@@ -18,7 +18,7 @@ import {
 } from './utils/middleware';
 import { ChunkStorage } from "./chunkStorage";
 import { handleChatRequest } from './handlers/chatHandlers';
-import { handleUploadChunk, handleUploadComplete, handleUploadStatus } from './handlers/uploadHandlers';
+import { handleUploadChunk, handleUploadComplete, handleUploadStatus, handleUploadDelete } from './handlers/uploadHandlers';
 import { handleHealthCheck, handleStatsRequest } from './handlers/systemHandlers';
 
 export { ChunkStorage };
@@ -42,6 +42,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
     case '/upload/status':
       return handleUploadStatus(request, env);
+
+    case '/upload/delete':
+      return handleUploadDelete(request, env);
 
     case '/health':
       return handleHealthCheck(env);
