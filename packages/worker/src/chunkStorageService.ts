@@ -1,6 +1,7 @@
 import type { Env } from './types';
 import { logger } from './utils/logger';
 import {
+  getUploadedFileChunkObjectKey,
   getUploadedFileObjectKey,
   getUploadedFileTextIndexObjectKey,
 } from './utils/uploadedFileStorage';
@@ -8,7 +9,6 @@ import {
   createUploadedFileRef,
   type FileMetadata,
   isUploadExpired,
-  mergeStoredChunks,
   repairMetadataFromChunks,
   UPLOAD_TTL_MS,
 } from './chunkStorageSupport';
@@ -60,7 +60,6 @@ export class ChunkStorageService {
 
     const arrayBuffer = await chunk.arrayBuffer();
     const metadataKey = this.getMetadataKey(fileId);
-    const chunkKey = this.getChunkKey(chunkIndex);
     const currentTime = Date.now();
 
     let metadata = await this.state.storage.get<FileMetadata>(metadataKey);
@@ -80,7 +79,8 @@ export class ChunkStorageService {
       });
     }
 
-    const existingChunk = await this.state.storage.get<ArrayBuffer>(chunkKey);
+    const chunkObjectKey = this.getChunkObjectKey(fileId, chunkIndex);
+    const existingChunk = await this.env.UPLOADED_FILES.head(chunkObjectKey);
     if (existingChunk) {
       const deduplicatedIndices = metadata
         ? Array.from(new Set([...metadata.receivedIndices, chunkIndex])).sort((a, b) => a - b)
@@ -136,7 +136,16 @@ export class ChunkStorageService {
 
     await this.state.storage.transaction(async (txn) => {
       await txn.put(metadataKey, updatedMetadata);
-      await txn.put(chunkKey, arrayBuffer);
+    });
+    await this.env.UPLOADED_FILES.put(chunkObjectKey, arrayBuffer, {
+      httpMetadata: {
+        contentType: 'application/octet-stream',
+      },
+      customMetadata: {
+        fileId,
+        chunkIndex: String(chunkIndex),
+        fileHash: fileHash || '',
+      },
     });
 
     return this.jsonResponse({
@@ -224,7 +233,7 @@ export class ChunkStorageService {
       });
     }
 
-    const chunkEntries = await this.loadStoredChunks(metadata.totalChunks);
+    const chunkEntries = await this.loadStoredChunks(fileId, metadata.totalChunks);
     const { repairedMetadata, missingIndices } = repairMetadataFromChunks(metadata, chunkEntries);
     if (missingIndices.length > 0) {
       await this.state.storage.put(metadataKey, repairedMetadata);
@@ -242,8 +251,6 @@ export class ChunkStorageService {
       });
     }
 
-    const chunks = chunkEntries.map((entry) => entry.chunk as ArrayBuffer);
-    const merged = mergeStoredChunks(metadata.totalSize, chunks);
     const updatedMetadata: FileMetadata = {
       ...metadata,
       isMerged: true,
@@ -251,7 +258,7 @@ export class ChunkStorageService {
       updatedAt: Date.now(),
     };
 
-    await this.env.UPLOADED_FILES.put(this.getUploadedFileKey(fileId), merged, {
+    await this.env.UPLOADED_FILES.put(this.getUploadedFileKey(fileId), this.createMergedChunkStream(fileId, chunkEntries), {
       httpMetadata: {
         contentType: metadata.mimeType || 'text/plain',
       },
@@ -264,10 +271,8 @@ export class ChunkStorageService {
 
     await this.state.storage.transaction(async (txn) => {
       await txn.put(metadataKey, updatedMetadata);
-      for (let index = 0; index < metadata.totalChunks; index++) {
-        await txn.delete(this.getChunkKey(index));
-      }
     });
+    await this.deleteChunkObjects(fileId, metadata.totalChunks);
 
     return this.jsonResponse({
       success: true,
@@ -312,22 +317,16 @@ export class ChunkStorageService {
     return `meta:${fileId}`;
   }
 
-  private getChunkKey(chunkIndex: number): string {
-    return `chunk:${chunkIndex}`;
-  }
-
   private getUploadedFileKey(fileId: string): string {
     return getUploadedFileObjectKey(fileId);
   }
 
   private async deleteFileData(metadata: FileMetadata): Promise<void> {
     await this.state.storage.transaction(async (txn) => {
-      for (let index = 0; index < metadata.totalChunks; index++) {
-        await txn.delete(this.getChunkKey(index));
-      }
       await txn.delete(this.getMetadataKey(metadata.fileId));
     });
 
+    await this.deleteChunkObjects(metadata.fileId, metadata.totalChunks);
     await this.env.UPLOADED_FILES.delete(this.getUploadedFileKey(metadata.fileId));
     await this.env.UPLOADED_FILES.delete(getUploadedFileTextIndexObjectKey(metadata.fileId));
   }
@@ -351,17 +350,16 @@ export class ChunkStorageService {
 
     await this.state.storage.transaction(async (txn) => {
       await txn.put(this.getMetadataKey(metadata.fileId), updatedMetadata);
-      for (let index = 0; index < metadata.totalChunks; index++) {
-        await txn.delete(this.getChunkKey(index));
-      }
     });
+    await this.deleteChunkObjects(metadata.fileId, metadata.totalChunks);
   }
 
-  private async loadStoredChunks(totalChunks: number): Promise<Array<{ index: number; chunk: ArrayBuffer | null }>> {
+  private async loadStoredChunks(fileId: string, totalChunks: number): Promise<Array<{ index: number; chunk: ArrayBuffer | null }>> {
     const entries: Array<{ index: number; chunk: ArrayBuffer | null }> = [];
 
     for (let index = 0; index < totalChunks; index++) {
-      const chunk = await this.state.storage.get<ArrayBuffer>(this.getChunkKey(index));
+      const chunkObject = await this.env.UPLOADED_FILES.get(this.getChunkObjectKey(fileId, index));
+      const chunk = chunkObject ? await chunkObject.arrayBuffer() : null;
       entries.push({
         index,
         chunk: chunk ?? null,
@@ -369,6 +367,41 @@ export class ChunkStorageService {
     }
 
     return entries;
+  }
+
+  private getChunkObjectKey(fileId: string, chunkIndex: number): string {
+    return getUploadedFileChunkObjectKey(fileId, chunkIndex);
+  }
+
+  private async deleteChunkObjects(fileId: string, totalChunks: number): Promise<void> {
+    for (let index = 0; index < totalChunks; index++) {
+      await this.env.UPLOADED_FILES.delete(this.getChunkObjectKey(fileId, index));
+    }
+  }
+
+  private createMergedChunkStream(
+    fileId: string,
+    chunkEntries: Array<{ index: number; chunk: ArrayBuffer | null }>,
+  ): ReadableStream<Uint8Array> {
+    const iterator = chunkEntries[Symbol.iterator]();
+
+    return new ReadableStream<Uint8Array>({
+      pull: async (controller) => {
+        const next = iterator.next();
+        if (next.done) {
+          controller.close();
+          return;
+        }
+
+        const { index } = next.value;
+        const object = await this.env.UPLOADED_FILES.get(this.getChunkObjectKey(fileId, index));
+        if (!object) {
+          throw new Error(`Missing chunk object: ${index}`);
+        }
+
+        controller.enqueue(new Uint8Array(await object.arrayBuffer()));
+      },
+    });
   }
 
   private jsonResponse(data: unknown, status = 200): Response {

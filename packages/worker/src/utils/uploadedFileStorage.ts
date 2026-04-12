@@ -15,6 +15,10 @@ export function getUploadedFileObjectKey(fileId: string): string {
   return `uploaded-files/${fileId}`;
 }
 
+export function getUploadedFileChunkObjectKey(fileId: string, chunkIndex: number): string {
+  return `uploaded-file-chunks/${fileId}/${chunkIndex}`;
+}
+
 export function getUploadedFileTextIndexObjectKey(fileId: string): string {
   return `uploaded-file-indices/${fileId}.json`;
 }

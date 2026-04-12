@@ -8,7 +8,7 @@ interface StoredObject {
   };
 }
 
-function normalizeBody(value: unknown): Uint8Array {
+async function normalizeBody(value: unknown): Promise<Uint8Array> {
   if (value instanceof Uint8Array) {
     return value;
   }
@@ -25,6 +25,34 @@ function normalizeBody(value: unknown): Uint8Array {
     throw new Error('测试环境不支持直接存储 Blob，请先转为 ArrayBuffer');
   }
 
+  if (value instanceof ReadableStream) {
+    const reader = value.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalLength = 0;
+
+    while (true) {
+      const { done, value: chunk } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      const normalizedChunk = chunk instanceof Uint8Array
+        ? chunk
+        : new Uint8Array(chunk);
+      chunks.push(normalizedChunk);
+      totalLength += normalizedChunk.byteLength;
+    }
+
+    const merged = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    return merged;
+  }
+
   return new Uint8Array();
 }
 
@@ -37,7 +65,7 @@ export class MemoryR2Bucket {
     options?: StoredObject['options'],
   ): Promise<void> {
     this.objects.set(key, {
-      body: normalizeBody(value),
+      body: await normalizeBody(value),
       options,
     });
   }

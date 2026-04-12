@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ChunkStorage } from './chunkStorage';
 import { createMockEnv, MemoryDurableObjectState, MemoryR2Bucket } from './test/mocks';
+import { getUploadedFileChunkObjectKey } from './utils/uploadedFileStorage';
 
 function createChunkFormData(overrides: Partial<{
   fileId: string;
@@ -63,6 +64,65 @@ describe('ChunkStorage', () => {
     await expect(uploadedObject?.text()).resolves.toBe('你好，世界');
   });
 
+  it('应该按顺序合并多个 R2 分片并在完成后清理分片对象', async () => {
+    const state = new MemoryDurableObjectState();
+    const env = createMockEnv();
+    const storage = new ChunkStorage(
+      state as unknown as DurableObjectState,
+      env,
+    );
+    const bucket = env.UPLOADED_FILES as unknown as MemoryR2Bucket;
+
+    await storage.fetch(new Request('https://chunk-storage/?action=storeChunk', {
+      method: 'POST',
+      body: createChunkFormData({
+        fileId: 'multi-file',
+        fileName: 'multi.txt',
+        fileSize: 6,
+        chunkIndex: 0,
+        totalChunks: 3,
+        content: 'ab',
+        fileHash: 'multi-hash',
+      }),
+    }));
+    await storage.fetch(new Request('https://chunk-storage/?action=storeChunk', {
+      method: 'POST',
+      body: createChunkFormData({
+        fileId: 'multi-file',
+        fileName: 'multi.txt',
+        fileSize: 6,
+        chunkIndex: 1,
+        totalChunks: 3,
+        content: 'cd',
+        fileHash: 'multi-hash',
+      }),
+    }));
+    await storage.fetch(new Request('https://chunk-storage/?action=storeChunk', {
+      method: 'POST',
+      body: createChunkFormData({
+        fileId: 'multi-file',
+        fileName: 'multi.txt',
+        fileSize: 6,
+        chunkIndex: 2,
+        totalChunks: 3,
+        content: 'ef',
+        fileHash: 'multi-hash',
+      }),
+    }));
+
+    const mergeResponse = await storage.fetch(
+      new Request('https://chunk-storage/?action=mergeChunks&fileId=multi-file'),
+    );
+    const mergeResult = await mergeResponse.json() as { success: boolean };
+    const uploadedObject = await bucket.get('uploaded-files/multi-file');
+
+    expect(mergeResult.success).toBe(true);
+    await expect(uploadedObject?.text()).resolves.toBe('abcdef');
+    await expect(bucket.head(getUploadedFileChunkObjectKey('multi-file', 0))).resolves.toBeNull();
+    await expect(bucket.head(getUploadedFileChunkObjectKey('multi-file', 1))).resolves.toBeNull();
+    await expect(bucket.head(getUploadedFileChunkObjectKey('multi-file', 2))).resolves.toBeNull();
+  });
+
   it('应该在分片缺失时修正元数据并返回 incomplete upload', async () => {
     const state = new MemoryDurableObjectState();
     const env = createMockEnv();
@@ -97,5 +157,32 @@ describe('ChunkStorage', () => {
     expect(result.error).toContain('Incomplete upload');
     expect(metadata?.receivedChunks).toBe(0);
     expect(metadata?.receivedIndices).toEqual([]);
+  });
+
+  it('删除上传时应该同时清理 R2 分片对象', async () => {
+    const state = new MemoryDurableObjectState();
+    const env = createMockEnv();
+    const storage = new ChunkStorage(
+      state as unknown as DurableObjectState,
+      env,
+    );
+    const bucket = env.UPLOADED_FILES as unknown as MemoryR2Bucket;
+
+    await storage.fetch(new Request('https://chunk-storage/?action=storeChunk', {
+      method: 'POST',
+      body: createChunkFormData({
+        fileId: 'delete-file',
+        chunkIndex: 0,
+        totalChunks: 1,
+        content: 'to-delete',
+      }),
+    }));
+
+    await storage.fetch(
+      new Request('https://chunk-storage/?action=deleteFile&fileId=delete-file'),
+    );
+
+    await expect(bucket.head(getUploadedFileChunkObjectKey('delete-file', 0))).resolves.toBeNull();
+    await expect(state.storage.get('meta:delete-file')).resolves.toBeUndefined();
   });
 });
