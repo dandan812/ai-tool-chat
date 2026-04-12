@@ -6,3 +6,5 @@ frontend-dev.out.log
 frontend-dev.err.log
 worker-dev.out.log
 worker-dev.err.log
+frontend-dev.log
+worker-dev.log
