@@ -258,7 +258,7 @@ export class ChunkStorageService {
       updatedAt: Date.now(),
     };
 
-    await this.env.UPLOADED_FILES.put(this.getUploadedFileKey(fileId), this.createMergedChunkStream(fileId, chunkEntries), {
+    await this.env.UPLOADED_FILES.put(this.getUploadedFileKey(fileId), this.createMergedChunkBody(fileId, metadata.totalSize, chunkEntries), {
       httpMetadata: {
         contentType: metadata.mimeType || 'text/plain',
       },
@@ -379,7 +379,31 @@ export class ChunkStorageService {
     }
   }
 
-  private createMergedChunkStream(
+  private createMergedChunkBody(
+    fileId: string,
+    totalSize: number,
+    chunkEntries: Array<{ index: number; chunk: ArrayBuffer | null }>,
+  ): ReadableStream<Uint8Array> {
+    const FixedLengthStreamCtor = (globalThis as typeof globalThis & {
+      FixedLengthStream?: new (length: number) => {
+        readable: ReadableStream<Uint8Array>;
+        writable: WritableStream<Uint8Array>;
+      };
+    }).FixedLengthStream;
+
+    if (!FixedLengthStreamCtor) {
+      return this.createMergedChunkFallbackStream(fileId, chunkEntries);
+    }
+
+    const fixedLengthStream = new FixedLengthStreamCtor(totalSize);
+
+    // 使用固定长度流把各个 R2 分片顺序转发给最终对象，避免在 DO 内拼出大 Blob。
+    void this.pipeChunksToFixedLengthStream(fileId, chunkEntries, fixedLengthStream.writable);
+
+    return fixedLengthStream.readable;
+  }
+
+  private createMergedChunkFallbackStream(
     fileId: string,
     chunkEntries: Array<{ index: number; chunk: ArrayBuffer | null }>,
   ): ReadableStream<Uint8Array> {
@@ -402,6 +426,29 @@ export class ChunkStorageService {
         controller.enqueue(new Uint8Array(await object.arrayBuffer()));
       },
     });
+  }
+
+  private async pipeChunksToFixedLengthStream(
+    fileId: string,
+    chunkEntries: Array<{ index: number; chunk: ArrayBuffer | null }>,
+    writable: WritableStream<Uint8Array>,
+  ): Promise<void> {
+    const writer = writable.getWriter();
+
+    try {
+      for (const { index } of chunkEntries) {
+        const object = await this.env.UPLOADED_FILES.get(this.getChunkObjectKey(fileId, index));
+        if (!object) {
+          throw new Error(`Missing chunk object: ${index}`);
+        }
+
+        await writer.write(new Uint8Array(await object.arrayBuffer()));
+      }
+      await writer.close();
+    } catch (error) {
+      await writer.abort(error);
+      throw error;
+    }
   }
 
   private jsonResponse(data: unknown, status = 200): Response {
