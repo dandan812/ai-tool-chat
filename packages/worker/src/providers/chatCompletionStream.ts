@@ -20,9 +20,36 @@ export interface ChatCompletionStreamRequest {
 export async function* executeChatCompletionStream(
   request: ChatCompletionStreamRequest,
 ): AsyncIterable<SkillStreamChunk> {
+  const rawMessages = Array.isArray(request.body.messages)
+    ? request.body.messages
+    : [];
+  const messagePreview = rawMessages.map((message, index) => {
+    if (!message || typeof message !== 'object') {
+      return {
+        index,
+        role: 'unknown',
+        preview: '[invalid message]',
+      };
+    }
+
+    const candidate = message as Record<string, unknown>;
+    const content = candidate.content;
+    const preview = typeof content === 'string'
+      ? content.slice(0, 300)
+      : JSON.stringify(content).slice(0, 300);
+
+    return {
+      index,
+      role: typeof candidate.role === 'string' ? candidate.role : 'unknown',
+      preview,
+    };
+  });
+
   logger.info('Calling chat completion provider', {
     provider: request.provider,
     model: request.model,
+    messageCount: rawMessages.length,
+    messagePreview,
   });
 
   const controller = new AbortController();
