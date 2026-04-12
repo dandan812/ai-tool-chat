@@ -18,6 +18,10 @@ export function handleHealthCheck(env: Env): Response {
   });
 }
 
+/**
+ * 统计接口只读取 TaskManager 当前实例能看到的任务计数，
+ * 它适合本地开发和轻量排障，不等同于全局持久化监控。
+ */
 export function handleStatsRequest(env: Env): Response {
   const taskManager = new TaskManager(env);
   return createJSONResponse({
