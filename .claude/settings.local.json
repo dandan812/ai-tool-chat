@@ -35,7 +35,9 @@
       "Bash(pnpm dev:*)",
       "Bash(npx:*)",
       "Bash(pnpm --filter @ai-tool-chat/worker deploy:*)",
-      "Bash(pnpm deploy:*)"
+      "Bash(pnpm deploy:*)",
+      "Bash(cloc packages/worker/src --by-file --include-lang=TypeScript --json)",
+      "Bash(find packages/worker/src -name \"*.ts\" ! -name \"*.test.ts\" -exec wc -l {} +)"
     ]
   }
 }
