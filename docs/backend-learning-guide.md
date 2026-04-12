@@ -68,6 +68,22 @@ Provider（调用 AI 模型）
 
 ## 三、让我们一层一层看代码
 
+### 先认识当前的目录分层
+
+现在 `packages/worker/src` 里和主链路最相关的目录大致分成这几组：
+
+- `handlers/`：HTTP 路由入口，负责接请求和返回响应
+- `core/`：Task 生命周期、步骤编排、状态存储
+- `skills/`：按输入类型组织的业务技能
+- `providers/`：实际调用模型接口的适配层
+- `retrieval/rag/`：代码 RAG 检索与片段选择
+- `retrieval/text/`：长文本切块、建索引、文本检索
+- `model/`：默认模型和模型选择逻辑
+- `upload/`：分片上传、Durable Object、R2 合并
+- `infrastructure/`：日志、中间件、SSE、可观测性等基础设施
+
+理解这个分层后，再顺着“入口 -> 编排 -> Skill -> Provider -> 上传/检索”的顺序看，会更容易。
+
 ### 第 1 层：入口点（`index.ts`）
 
 ```typescript
@@ -256,44 +272,67 @@ export class TaskStepRunner {
 
 ### 第 5 层：技能执行（Skill 实现）
 
-项目中有 3 个 Skill，我们以 `textProvider` 为例：
+项目中有 3 个 Skill，我们以 `textSkill + textProvider` 这条链路为例：
+
+```typescript
+// packages/worker/src/skills/textSkill.ts
+
+export const textSkill: Skill = {
+  name: 'text-chat',
+  type: 'text',
+  async *execute(input, context) {
+    const providerConfig = resolveTextProvider(input, context);
+    if (!providerConfig) {
+      throw new Error('No available text provider');
+    }
+
+    yield {
+      type: 'step',
+      step: {
+        name: 'text_generation',
+        status: 'running',
+        message: `正在使用 ${providerConfig.model} 生成回复`,
+      },
+    };
+
+    yield* executeTextProviderStream(
+      providerConfig,
+      input.messages,
+      typeof input.temperature === 'number' ? input.temperature : 0.7,
+    );
+  },
+};
+```
+
+真正发请求给模型的是 Provider：
 
 ```typescript
 // packages/worker/src/providers/textProvider.ts
 
-export class TextProvider {
-  async *execute(task: Task, request: ChatRequest): AsyncIterable<TaskStreamEvent> {
-    const { messages } = request;
-    const model = this.selectModel();
-
-    yield { type: 'step', data: { name: 'start_text_generation', model } };
-
-    try {
-      // 调用 AI 模型的流式 API
-      const stream = await this.callModel(model, messages);
-
-      // 一字一字处理模型的输出
-      for await (const chunk of stream) {
-        yield {
-          type: 'content',
-          data: { content: chunk.text, status: 'streaming' },
-        };
-      }
-
-      yield {
-        type: 'content',
-        data: { content: '', status: 'finished' },
-      };
-    } catch (error) {
-      yield { type: 'error', data: { error: String(error) } };
-    }
-  }
+export async function* executeTextProviderStream(
+  providerConfig: TextProviderConfig,
+  messages: Message[],
+  temperature: number,
+): AsyncIterable<SkillStreamChunk> {
+  yield* executeChatCompletionStream({
+    provider: providerConfig.provider,
+    model: providerConfig.model,
+    url: providerConfig.url,
+    apiKey: providerConfig.apiKey,
+    body: {
+      model: providerConfig.model,
+      messages,
+      stream: true,
+      temperature,
+    },
+  });
 }
 ```
 
 **学习要点**：
-- 如何调用第三方 AI API？
-- 流式响应是怎样被处理的？
+- Skill 为什么只保留“编排”而不直接写 fetch？
+- Provider 为什么适合做成“模型适配层”？
+- 流式响应是怎样从 Provider 一路传回前端的？
 
 ---
 
@@ -356,8 +395,9 @@ type TaskStreamEvent =
 
 学习路径：
 1. 先学上面的 5 层流程（必须）
-2. 再看 `uploadHandlers.ts` 和 `chunkStorage.ts`
-3. 再看 `fileProvider.ts` 中的"检索优先"逻辑
+2. 再看 `uploadHandlers.ts` 和 `upload/chunkStorage.ts`
+3. 再看 `skills/fileSkill.ts`、`skills/fileSkillCodeProcessing.ts`、`skills/fileSkillTextProcessing.ts`
+4. 如果想理解检索细节，再看 `retrieval/rag/` 和 `retrieval/text/`
 
 ---
 
@@ -374,13 +414,17 @@ type TaskStreamEvent =
 - [ ] `packages/worker/src/types.ts` - 数据结构定义
 
 ### Day 3（理解实现）
-- [ ] `packages/worker/src/providers/textProvider.ts` - 文本 Skill
-- [ ] `packages/worker/src/providers/multimodalProvider.ts` - 多模态 Skill
+- [ ] `packages/worker/src/skills/textSkill.ts` - 文本 Skill
+- [ ] `packages/worker/src/providers/textProvider.ts` - 文本 Provider
+- [ ] `packages/worker/src/providers/multimodalProvider.ts` - 多模态 Provider
 - [ ] 在本地打个断点，单步追踪一个请求
 
 ### Day 4（进阶）
 - [ ] `packages/worker/src/handlers/uploadHandlers.ts` - 文件上传
-- [ ] `packages/worker/src/chunkStorage.ts` - 分片存储
+- [ ] `packages/worker/src/upload/chunkStorage.ts` - 分片存储入口
+- [ ] `packages/worker/src/upload/chunkStorageService.ts` - 分片存储核心逻辑
+- [ ] `packages/worker/src/retrieval/rag/ragRetriever.ts` - 代码 RAG 检索
+- [ ] `packages/worker/src/retrieval/text/textRetriever.ts` - 文本检索
 - [ ] `packages/worker/src/mcp/client.ts` - MCP 客户端（工具调用）
 
 ---
@@ -418,7 +462,7 @@ type TaskStreamEvent =
 **A**：用 `logger` 工具：
 
 ```typescript
-import { logger } from '../utils/logger';
+import { logger } from '../infrastructure/logger';
 
 logger.info('任务开始', { taskId, model, skill });
 logger.error('任务失败', { taskId, error });
