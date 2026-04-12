@@ -16,7 +16,7 @@ import {
   createTextRetrievalMessages,
   createTextRetrievalNarrowScopeMessage,
 } from "../utils/filePromptBuilders";
-import { getTextModelProviderLabel, resolveDefaultTextModel } from "../utils/textModel";
+import { getTextModelProviderLabel, resolveDefaultTextModel } from "../model/textModel";
 import { textSkill } from "./textSkill";
 
 /**

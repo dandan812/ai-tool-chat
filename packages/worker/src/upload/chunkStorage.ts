@@ -7,8 +7,8 @@
  * - 上传完成后，合并后的文件正文写入 R2，DO 只保留元数据和完成标记
  * - 断点续传依赖 metadata 中的 receivedIndices 恢复缺失分片
  */
-import type { Env } from './types';
-import { logger } from './utils/logger';
+import type { Env } from '../types';
+import { logger } from '../infrastructure/logger';
 import { ChunkStorageService } from './chunkStorageService';
 
 export class ChunkStorage implements DurableObject {

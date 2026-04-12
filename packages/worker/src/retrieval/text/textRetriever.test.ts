@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createMockEnv, MemoryR2Bucket } from '../test/mocks';
-import type { ResolvedFileContent } from '../types';
+import { createMockEnv, MemoryR2Bucket } from '../../test/mocks';
+import type { ResolvedFileContent } from '../../types';
 import {
   formatRetrievedText,
   getOrCreateTextRetrievalIndex,

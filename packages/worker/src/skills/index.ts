@@ -21,7 +21,7 @@ import {
   isBailianTextModel,
   resolveDefaultMultimodalModel,
   resolveDefaultTextModel,
-} from "../utils/textModel";
+} from '../model/textModel';
 
 /**
  * Skill 注册表

@@ -5,10 +5,10 @@ import type {
   UploadStatusResponse,
 } from '../types';
 import { ValidationError } from '../types';
-import { createChunkStorageUrl, getChunkStorageStub } from '../utils/uploadedFileStorage';
-import { createJSONResponse, safeJSONParse } from '../utils/middleware';
-import { logger } from '../utils/logger';
-import { createErrorDetails, ERROR_CODES } from '../utils/observability';
+import { createChunkStorageUrl, getChunkStorageStub } from '../upload/uploadedFileStorage';
+import { createJSONResponse, safeJSONParse } from '../infrastructure/middleware';
+import { logger } from '../infrastructure/logger';
+import { createErrorDetails, ERROR_CODES } from '../infrastructure/observability';
 
 /**
  * 上传链路天然更复杂：前端分片、DO 状态、R2 正文合并都在这里汇合。

@@ -1,7 +1,7 @@
-import type { Env, ResolvedFileContent } from "../types";
-import { estimateTokens, findSafeSplitPoint } from "./chunker";
-import { logger } from "./logger";
-import { getUploadedFileTextIndexObjectKey } from "./uploadedFileStorage";
+import type { Env, ResolvedFileContent } from '../../types';
+import { estimateTokens, findSafeSplitPoint } from '../../utils/chunker';
+import { logger } from "../../infrastructure/logger";
+import { getUploadedFileTextIndexObjectKey } from "../../upload/uploadedFileStorage";
 
 const TEXT_INDEX_VERSION = 1;
 const ENGLISH_STOPWORDS = new Set([

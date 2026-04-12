@@ -15,8 +15,8 @@ import {
   withErrorHandler,
   withValidation,
   withLogging,
-} from './utils/middleware';
-import { ChunkStorage } from "./chunkStorage";
+} from './infrastructure/middleware';
+import { ChunkStorage } from "./upload/chunkStorage";
 import { handleChatRequest } from './handlers/chatHandlers';
 import { handleUploadChunk, handleUploadComplete, handleUploadStatus, handleUploadDelete } from './handlers/uploadHandlers';
 import { handleHealthCheck, handleStatsRequest } from './handlers/systemHandlers';

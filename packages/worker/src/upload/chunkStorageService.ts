@@ -1,10 +1,10 @@
-import type { Env } from './types';
-import { logger } from './utils/logger';
+import type { Env } from '../types';
+import { logger } from '../infrastructure/logger';
 import {
   getUploadedFileChunkObjectKey,
   getUploadedFileObjectKey,
   getUploadedFileTextIndexObjectKey,
-} from './utils/uploadedFileStorage';
+} from './uploadedFileStorage';
 import {
   createUploadedFileRef,
   type FileMetadata,

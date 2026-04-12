@@ -1,6 +1,6 @@
 import type { ChatRequest, Step, Task, TaskMetadata, ToolingMode } from '../types';
 import { generateId, now } from '../utils/id';
-import { logger } from '../utils/logger';
+import { logger } from '../infrastructure/logger';
 
 const MAX_TASKS_CACHE = 100;
 

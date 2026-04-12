@@ -1,6 +1,6 @@
 import type { Env, ResolvedFileContent, UploadedFileRef } from '../types';
 import { ValidationError, WorkerError } from '../types';
-import { createErrorDetails, ERROR_CODES } from './observability';
+import { createErrorDetails, ERROR_CODES } from '../infrastructure/observability';
 
 export function getChunkStorageStub(env: Env, fileId: string) {
   const id = env.CHUNK_STORAGE.idFromName(fileId);

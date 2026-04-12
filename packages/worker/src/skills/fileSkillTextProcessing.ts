@@ -5,14 +5,14 @@ import type {
   SkillStreamChunk,
 } from '../types'
 import { addContextToChunks, estimateTokens, splitByTokens } from '../utils/chunker'
-import { logger } from '../utils/logger'
-import { ERROR_CODES } from '../utils/observability'
+import { logger } from '../infrastructure/logger'
+import { ERROR_CODES } from '../infrastructure/observability'
 import {
   formatRetrievedText,
   getOrCreateTextRetrievalIndex,
   retrieveOverviewText,
   retrieveRelevantText,
-} from '../utils/textRetriever'
+} from '../retrieval/text/textRetriever'
 import {
   createChunkSummaryMessages,
   createLargeFileAnswerMessages,

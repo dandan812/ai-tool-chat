@@ -1,4 +1,4 @@
-import type { UploadedFileRef } from './types';
+import type { UploadedFileRef } from '../types';
 
 export interface FileMetadata {
   fileId: string;

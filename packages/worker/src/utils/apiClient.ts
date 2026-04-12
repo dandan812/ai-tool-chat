@@ -3,8 +3,8 @@
  * 统一处理流式 API 调用和 SSE 解析
  */
 
-import { withTimeout } from './retry';
-import { logger } from './logger';
+import { withTimeout } from '../infrastructure/retry';
+import { logger } from '../infrastructure/logger';
 
 export interface APIClientConfig {
   baseURL: string;

@@ -6,7 +6,7 @@
  * 只负责把输入交给百炼兼容 provider，并在失败时统一兜底。
  */
 import type { Skill, SkillInput, SkillContext, SkillStreamChunk, Message } from '../types';
-import { logger } from '../utils/logger';
+import { logger } from '../infrastructure/logger';
 import {
   executeTextProviderStream,
   resolveTextProvider,

@@ -9,7 +9,7 @@
  */
 import type { ChatRequest, Env, Task } from '../types';
 import { now } from '../utils/id';
-import { logger } from '../utils/logger';
+import { logger } from '../infrastructure/logger';
 import { TaskStepRunner } from './taskStepRunner';
 import type { TaskStreamEvent } from './taskManagerTypes';
 import { TaskStore } from './taskStore';

@@ -5,7 +5,7 @@ import type {
   SkillInput,
   SkillStreamChunk,
 } from '../types';
-import { resolveDefaultMultimodalModel } from '../utils/textModel';
+import { resolveDefaultMultimodalModel } from '../model/textModel';
 import { executeChatCompletionStream } from './chatCompletionStream';
 
 export interface QwenMultimodalProviderConfig {

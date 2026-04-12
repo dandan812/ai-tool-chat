@@ -3,7 +3,7 @@ import {
   DEFAULT_QWEN_TEXT_MODEL,
   isBailianTextModel,
   resolveDefaultTextModel,
-} from '../utils/textModel';
+} from '../model/textModel';
 import { executeChatCompletionStream } from './chatCompletionStream';
 
 export type TextProviderName = 'bailian';

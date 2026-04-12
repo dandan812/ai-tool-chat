@@ -1,4 +1,4 @@
-import { logger } from '../utils/logger';
+import { logger } from '../infrastructure/logger';
 import { TaskStore } from './taskStore';
 
 export const TASK_TIMEOUT_MS = 5 * 60 * 1000;

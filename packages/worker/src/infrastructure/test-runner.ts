@@ -7,11 +7,11 @@ console.log('🚀 Starting Worker Test Suite\n');
 console.log('='.repeat(50));
 
 // 按顺序运行测试
-import './utils/id.test';
-import './utils/cache.test';
-import './types/errors.test';
-import './core/taskManager.test';
-import './mcp/client.test';
+import '../utils/id.test';
+import '../utils/cache.test';
+import '../types/errors.test';
+import '../core/taskManager.test';
+import '../mcp/client.test';
 import './integration.test';
 
 console.log('\n' + '='.repeat(50));

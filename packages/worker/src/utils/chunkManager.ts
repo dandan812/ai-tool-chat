@@ -10,7 +10,7 @@
  * @package worker/src/utils
  */
 
-import { logger } from './logger';
+import { logger } from '../infrastructure/logger';
 
 /**
  * 分片元数据

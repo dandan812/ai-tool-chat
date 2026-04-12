@@ -11,7 +11,7 @@ import type {
   SkillInput,
   SkillStreamChunk,
 } from '../types';
-import { logger } from '../utils/logger';
+import { logger } from '../infrastructure/logger';
 import {
   executeQwenMultimodalStream,
   resolveQwenMultimodalProviderConfig,

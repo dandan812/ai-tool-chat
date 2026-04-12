@@ -10,8 +10,8 @@ import {
   detectLanguage,
   formatRetrievedCode,
   retrieveRelevantCode,
-} from '../utils/ragRetriever';
-import { logger } from '../utils/logger';
+} from '../retrieval/rag/ragRetriever';
+import { logger } from '../infrastructure/logger';
 import {
   createMixedFileMessages,
   createRagMessages,

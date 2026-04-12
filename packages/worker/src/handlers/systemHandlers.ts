@@ -1,6 +1,6 @@
 import type { Env } from '../types';
 import { TaskManager } from '../core/taskManager';
-import { createJSONResponse } from '../utils/middleware';
+import { createJSONResponse } from '../infrastructure/middleware';
 
 /**
  * 健康检查只暴露当前运行时能否调用百炼能力，

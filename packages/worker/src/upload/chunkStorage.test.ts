@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ChunkStorage } from './chunkStorage';
-import { createMockEnv, MemoryDurableObjectState, MemoryR2Bucket } from './test/mocks';
-import { getUploadedFileChunkObjectKey } from './utils/uploadedFileStorage';
+import { createMockEnv, MemoryDurableObjectState, MemoryR2Bucket } from '../test/mocks';
+import { getUploadedFileChunkObjectKey } from './uploadedFileStorage';
 
 function createChunkFormData(overrides: Partial<{
   fileId: string;
@@ -39,7 +39,7 @@ describe('ChunkStorage', () => {
     const state = new MemoryDurableObjectState();
     const env = createMockEnv();
     const storage = new ChunkStorage(
-      state as unknown as DurableObjectState,
+      state as unknown as MemoryDurableObjectState,
       env,
     );
 
@@ -68,7 +68,7 @@ describe('ChunkStorage', () => {
     const state = new MemoryDurableObjectState();
     const env = createMockEnv();
     const storage = new ChunkStorage(
-      state as unknown as DurableObjectState,
+      state as unknown as MemoryDurableObjectState,
       env,
     );
     const bucket = env.UPLOADED_FILES as unknown as MemoryR2Bucket;
@@ -127,7 +127,7 @@ describe('ChunkStorage', () => {
     const state = new MemoryDurableObjectState();
     const env = createMockEnv();
     const storage = new ChunkStorage(
-      state as unknown as DurableObjectState,
+      state as unknown as MemoryDurableObjectState,
       env,
     );
 
@@ -163,7 +163,7 @@ describe('ChunkStorage', () => {
     const state = new MemoryDurableObjectState();
     const env = createMockEnv();
     const storage = new ChunkStorage(
-      state as unknown as DurableObjectState,
+      state as unknown as MemoryDurableObjectState,
       env,
     );
     const bucket = env.UPLOADED_FILES as unknown as MemoryR2Bucket;

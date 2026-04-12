@@ -1,6 +1,6 @@
 import type { SkillStreamChunk } from '../types';
-import { logger } from '../utils/logger';
-import { parseChatCompletionSSELine } from '../utils/sse';
+import { logger } from '../infrastructure/logger';
+import { parseChatCompletionSSELine } from '../infrastructure/sse';
 
 export interface ChatCompletionStreamRequest {
   provider: string;

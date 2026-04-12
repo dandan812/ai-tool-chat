@@ -16,8 +16,8 @@ import type {
   SkillStreamChunk,
 } from "../types";
 import { estimateTokens } from "../utils/chunker";
-import { logger } from "../utils/logger";
-import { getUploadedFileContent } from "../utils/uploadedFileStorage";
+import { logger } from "../infrastructure/logger";
+import { getUploadedFileContent } from "../upload/uploadedFileStorage";
 import {
   buildResolvedFileSection,
   isCodeFile,

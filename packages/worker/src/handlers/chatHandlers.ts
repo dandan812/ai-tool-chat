@@ -5,9 +5,9 @@ import {
   createJSONResponse,
   safeJSONParse,
   serializeSSEEvent,
-} from '../utils/middleware';
-import { logger } from '../utils/logger';
-import { createErrorDetails, ERROR_CODES } from '../utils/observability';
+} from '../infrastructure/middleware';
+import { logger } from '../infrastructure/logger';
+import { createErrorDetails, ERROR_CODES } from '../infrastructure/observability';
 
 /**
  * 聊天接口是后端主链路的入口。

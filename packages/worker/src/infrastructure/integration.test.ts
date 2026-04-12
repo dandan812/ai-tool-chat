@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Cache } from './utils/cache';
-import { TaskManager } from './core/taskManager';
-import { createMCPClient } from './mcp/client';
-import { createMockEnv } from './test/mocks';
-import type { ChatRequest } from './types';
+import { Cache } from '../utils/cache';
+import { TaskManager } from '../core/taskManager';
+import { createMCPClient } from '../mcp/client';
+import { createMockEnv } from '../test/mocks';
+import type { ChatRequest } from '../types';
 
-vi.mock('./skills', () => ({
+vi.mock('../skills', () => ({
   selectSkill: () => ({
     skill: {
       name: 'mock-text',
