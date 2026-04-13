@@ -5,6 +5,35 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
 
+  build: {
+    target: 'es2020',
+    sourcemap: false,
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router')) {
+              return 'framework'
+            }
+
+            if (id.includes('markdown-it')) {
+              return 'markdown'
+            }
+          }
+
+          if (id.includes('/src/components/') || id.includes('\\src\\components\\')) {
+            return 'ui'
+          }
+
+          if (id.includes('/src/api/') || id.includes('\\src\\api\\')) {
+            return 'network'
+          }
+        },
+      },
+    },
+  },
+
   server: {
     // 代理上传端点到 Worker（开发环境）
     proxy: {

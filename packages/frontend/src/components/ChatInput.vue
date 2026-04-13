@@ -10,7 +10,7 @@
  */
 
 import { toRefs } from 'vue'
-import type { ImageData, UploadedFileRef } from '../types/task'
+import type { UploadedFileRef } from '../types/task'
 import ImageUploader from './ImageUploader.vue'
 import FileUploader from './FileUploader.vue'
 import { useChatComposer } from '../composables/useChatComposer'
@@ -18,20 +18,23 @@ import { useChatComposer } from '../composables/useChatComposer'
 interface Props {
   /** 是否正在生成回复 */
   loading?: boolean
+  /** 当前会话 ID */
+  sessionId: string
 }
 
 const props = defineProps<Props>()
-const { loading } = toRefs(props)
+const { loading, sessionId } = toRefs(props)
 
 const emit = defineEmits<{
   /** 发送消息 */
-  send: [content: string, images: ImageData[], files: UploadedFileRef[]]
+  send: [content: string, images: import('../types/task').ImageData[], files: UploadedFileRef[]]
   /** 停止生成 */
   stop: []
 }>()
 
 const composer = useChatComposer({
   loading,
+  sessionId,
   onSend: (content, images, files) => emit('send', content, images, files),
 })
 
@@ -48,7 +51,6 @@ const {
   statusText,
   statusTone,
   resize,
-  addImage,
   removeImage,
   addFile,
   removeFile,
@@ -59,6 +61,14 @@ const {
   sendMessage,
   clearComposer,
 } = composer
+
+async function handleImageAdd(file: File) {
+  try {
+    await composer.addImage(file)
+  } catch (error) {
+    composer.handleUploadError(error instanceof Error ? error.message : '图片处理失败')
+  }
+}
 
 defineExpose({
   clear: clearComposer,
@@ -118,7 +128,7 @@ defineExpose({
           <span class="attachment-title">图片附件</span>
           <span class="attachment-caption">拖拽图片、粘贴截图或直接选择文件。</span>
         </div>
-        <ImageUploader :images="images" @add="addImage" @remove="removeImage" />
+        <ImageUploader :images="images" @add="handleImageAdd" @remove="removeImage" />
       </section>
 
       <section v-if="showFileUploader || files.length > 0 || hasPendingUploads" class="attachment-block">

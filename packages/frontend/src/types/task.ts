@@ -239,6 +239,25 @@ export interface ImageData {
   file?: File;
 }
 
+/**
+ * 草稿图片引用
+ *
+ * 草稿阶段不再把完整 base64 常驻在组件状态里，
+ * 只保留预览地址和 IndexedDB key。
+ */
+export interface DraftImage {
+  /** 草稿图片唯一 ID */
+  id: string;
+  /** IndexedDB 中的存储键 */
+  draftKey: string;
+  /** 预览地址 */
+  previewUrl: string;
+  /** 图片 MIME 类型 */
+  mimeType: string;
+  /** 原始文件名或描述 */
+  description?: string;
+}
+
 // ==================== 文件上传类型 ====================
 
 /**

@@ -5,19 +5,16 @@ export function setRuntimeMapValue<T>(
   sessionId: string,
   value: T,
 ): Record<string, T> {
-  return {
-    ...currentMap,
-    [sessionId]: value
-  }
+  currentMap[sessionId] = value
+  return currentMap
 }
 
 export function removeRuntimeSession<T>(
   currentMap: Record<string, T>,
   sessionId: string,
 ): Record<string, T> {
-  const nextMap = { ...currentMap }
-  delete nextMap[sessionId]
-  return nextMap
+  delete currentMap[sessionId]
+  return currentMap
 }
 
 export function clearSessionRuntimeMaps(
@@ -44,16 +41,13 @@ export function upsertSessionStep(
 ): Record<string, Step[]> {
   const currentSteps = currentMap[sessionId] ?? []
   const index = currentSteps.findIndex((item) => item.id === step.id)
-  const nextSteps = [...currentSteps]
 
   if (index === -1) {
-    nextSteps.push(step)
+    currentSteps.push(step)
   } else {
-    nextSteps[index] = { ...nextSteps[index], ...step }
+    currentSteps[index] = { ...currentSteps[index], ...step }
   }
 
-  return {
-    ...currentMap,
-    [sessionId]: nextSteps
-  }
+  currentMap[sessionId] = currentSteps
+  return currentMap
 }

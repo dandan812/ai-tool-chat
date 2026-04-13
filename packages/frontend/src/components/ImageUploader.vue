@@ -10,11 +10,11 @@
  */
 
 import { ref } from 'vue'
-import type { ImageData } from '../types/task'
+import type { DraftImage } from '../types/task'
 
 interface Props {
   /** 已选择图片 */
-  images: ImageData[]
+  images: DraftImage[]
   /** 最大数量 */
   maxImages?: number
 }
@@ -25,7 +25,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   /** 添加图片 */
-  add: [image: ImageData]
+  add: [file: File]
   /** 移除图片 */
   remove: [id: string]
 }>()
@@ -72,27 +72,7 @@ async function processFiles(files: File[]) {
       break
     }
 
-    try {
-      const imageData = await new Promise<ImageData>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-          const base64 = (event.target?.result as string).split(',')[1]
-          resolve({
-            id: crypto.randomUUID(),
-            base64: base64 || '',
-            mimeType: file.type,
-            description: file.name
-          })
-        }
-        reader.onerror = () => reject(new Error('读取图片失败'))
-        reader.readAsDataURL(file)
-      })
-
-      emit('add', imageData)
-    } catch (error) {
-      console.error('Failed to process image:', error)
-      alert(`处理图片失败: ${file.name}`)
-    }
+    emit('add', file)
   }
 }
 
@@ -115,7 +95,7 @@ function removeImage(id: string) {
     <div v-if="images.length > 0" class="image-strip">
       <article v-for="image in images" :key="image.id" class="image-card">
         <img
-          :src="`data:${image.mimeType};base64,${image.base64}`"
+          :src="image.previewUrl"
           :alt="image.description || '上传图片'"
         />
 

@@ -13,6 +13,7 @@
 
 import { createRouter, createWebHistory } from 'vue-router'
 import Chat from '../views/Chat.vue'
+import { reportAppError } from '../utils/error'
 
 /**
  * 路由配置
@@ -85,7 +86,7 @@ router.afterEach(() => {
  * 捕获路由导航错误
  */
 router.onError((error) => {
-  console.error('[Router] Navigation error:', error)
+  reportAppError(error, 'router.navigation')
   // 可以在这里添加错误上报或用户提示
 })
 

@@ -13,6 +13,7 @@ import ChatMessages from '../components/ChatMessages.vue'
 import ChatInput from '../components/ChatInput.vue'
 import StepIndicator from '../components/StepIndicator.vue'
 import Toast from '../components/Toast.vue'
+import ErrorBoundary from '../components/ErrorBoundary.vue'
 
 // ==================== 状态管理 ====================
 
@@ -65,26 +66,33 @@ function handleStop() {
     />
 
     <!-- 侧边栏 -->
-    <Sidebar :is-open="isSidebarOpen" />
+    <ErrorBoundary title="侧边栏渲染失败" message="会话列表暂时无法显示，请重试。">
+      <Sidebar :is-open="isSidebarOpen" />
+    </ErrorBoundary>
 
     <!-- 主聊天区域 -->
     <div class="chat-layout">
       <div class="chat-stage">
         <ChatHeader @toggle-sidebar="toggleSidebar" />
         <div class="chat-stream">
-          <ChatMessages @send="handleSend" />
+          <ErrorBoundary title="消息区域渲染失败" message="消息列表暂时无法显示，请重试。">
+            <ChatMessages @send="handleSend" />
+          </ErrorBoundary>
         </div>
         <footer class="chat-footer">
           <div class="composer-shell">
-            <StepIndicator
-              :task="store.getCurrentTask(store.currentSessionId)"
-              :steps="store.getSteps(store.currentSessionId)"
-            />
-            <ChatInput
-              :loading="store.isSessionLoading(store.currentSessionId)"
-              @send="handleSend"
-              @stop="handleStop"
-            />
+            <ErrorBoundary title="输入区域渲染失败" message="输入区暂时不可用，请重试。">
+              <StepIndicator
+                :task="store.getCurrentTask(store.currentSessionId)"
+                :steps="store.getSteps(store.currentSessionId)"
+              />
+              <ChatInput
+                :session-id="store.currentSessionId"
+                :loading="store.isSessionLoading(store.currentSessionId)"
+                @send="handleSend"
+                @stop="handleStop"
+              />
+            </ErrorBoundary>
           </div>
         </footer>
       </div>

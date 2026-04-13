@@ -12,9 +12,13 @@
 
 import { computed, watch } from 'vue'
 import { useChatStore } from '../stores/chat'
-import { useScroll } from '../composables/useScroll'
+import { useScroll, useVirtualScroll } from '../composables/useScroll'
 import ChatMessage from './ChatMessage.vue'
 import ChatWelcome from './ChatWelcome.vue'
+
+const VIRTUAL_SCROLL_THRESHOLD = 100
+const ESTIMATED_MESSAGE_HEIGHT = 220
+const VIRTUAL_OVERSCAN = 8
 
 const emit = defineEmits<{
   /** 发送消息 */
@@ -23,6 +27,7 @@ const emit = defineEmits<{
 
 const store = useChatStore()
 const { container, isAtBottom, scrollToBottom, shouldAutoScroll } = useScroll()
+const virtualScroll = useVirtualScroll(ESTIMATED_MESSAGE_HEIGHT, VIRTUAL_OVERSCAN)
 
 /** 展示中的消息列表 */
 const displayMessages = computed(() => {
@@ -42,6 +47,35 @@ const displayMessages = computed(() => {
 
     return message
   })
+})
+
+const shouldUseVirtualScroll = computed(() => {
+  return displayMessages.value.length >= VIRTUAL_SCROLL_THRESHOLD
+})
+
+const virtualRange = computed(() => {
+  return virtualScroll.getVisibleRange(displayMessages.value.length)
+})
+
+const virtualMessages = computed(() => {
+  if (!shouldUseVirtualScroll.value) {
+    return displayMessages.value
+  }
+
+  return displayMessages.value.slice(virtualRange.value.startIndex, virtualRange.value.endIndex)
+})
+
+const topSpacerHeight = computed(() => {
+  return shouldUseVirtualScroll.value ? virtualRange.value.offsetY : 0
+})
+
+const bottomSpacerHeight = computed(() => {
+  if (!shouldUseVirtualScroll.value) {
+    return 0
+  }
+
+  const remainingCount = displayMessages.value.length - virtualRange.value.endIndex
+  return Math.max(0, remainingCount * ESTIMATED_MESSAGE_HEIGHT)
 })
 
 /** 是否显示回到底部按钮 */
@@ -69,25 +103,42 @@ watch(
 function handleSuggestion(suggestion: string) {
   emit('send', suggestion)
 }
+
+function setMessageContainer(
+  element:
+    | Element
+    | import('vue').ComponentPublicInstance
+    | null,
+) {
+  const htmlElement = element instanceof HTMLElement ? element : null
+  container.value = htmlElement
+  virtualScroll.container.value = htmlElement
+}
 </script>
 
 <template>
-  <main ref="container" class="messages">
+  <main :ref="setMessageContainer" class="messages">
     <div class="messages-shell">
       <ChatWelcome
         v-if="displayMessages.length === 0"
         @select="handleSuggestion"
       />
 
-      <div v-else class="message-list">
+      <div
+        v-else
+        class="message-list"
+        :class="{ 'is-virtual': shouldUseVirtualScroll }"
+      >
+        <div v-if="shouldUseVirtualScroll" class="virtual-spacer" :style="{ height: `${topSpacerHeight}px` }" />
         <ChatMessage
-          v-for="(message, index) in displayMessages"
-          :key="`${index}-${message.role}`"
-          :index="index"
+          v-for="(message, index) in virtualMessages"
+          :key="`${shouldUseVirtualScroll ? virtualRange.startIndex + index : index}-${message.role}`"
+          :index="shouldUseVirtualScroll ? virtualRange.startIndex + index : index"
           :role="message.role"
           :content="message.content"
           @delete="store.deleteMessage"
         />
+        <div v-if="shouldUseVirtualScroll" class="virtual-spacer" :style="{ height: `${bottomSpacerHeight}px` }" />
       </div>
     </div>
 
@@ -128,6 +179,18 @@ function handleSuggestion(suggestion: string) {
   flex-direction: column;
   gap: var(--space-6);
   padding-bottom: var(--space-8);
+}
+
+.message-list.is-virtual {
+  gap: 0;
+}
+
+.virtual-spacer {
+  flex: 0 0 auto;
+}
+
+.message-list.is-virtual :deep(.message-row) {
+  margin-bottom: var(--space-6);
 }
 
 .scroll-bottom-btn {

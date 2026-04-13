@@ -10,6 +10,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { initTheme } from './composables/useTheme'
 import { isStorageAvailable, isOnline, debug, isDevelopment } from './config'
+import { reportAppError } from './utils/error'
 
 // ==================== 样式导入 ====================
 
@@ -75,7 +76,7 @@ if (isDevelopment) {
  * 捕获未处理的 Promise 拒绝
  */
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('[App] Unhandled Promise rejection:', event.reason)
+  reportAppError(event.reason instanceof Error ? event.reason : String(event.reason), 'unhandledrejection')
   // 阻止默认的控制台错误输出
   event.preventDefault()
 
@@ -89,7 +90,7 @@ window.addEventListener('unhandledrejection', (event) => {
  * 捕获全局错误
  */
 window.addEventListener('error', (event) => {
-  console.error('[App] Global error:', event.error)
+  reportAppError(event.error instanceof Error ? event.error : String(event.message), 'window.error')
 
   // 防止加载错误（如脚本、图片加载失败）影响应用运行
   if (event.target && (event.target as HTMLElement).tagName) {
@@ -103,6 +104,13 @@ window.addEventListener('error', (event) => {
  * 创建 Vue 应用实例
  */
 const app = createApp(App)
+app.config.errorHandler = (error, instance, info) => {
+  const component = (instance as { type?: { __name?: string; name?: string } } | null)?.type
+  reportAppError(error as Error, 'vue.errorHandler', {
+    info,
+    component: component?.__name || component?.name || 'anonymous',
+  })
+}
 
 /**
  * 注册 Pinia 状态管理

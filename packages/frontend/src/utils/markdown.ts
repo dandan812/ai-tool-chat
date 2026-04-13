@@ -1,4 +1,6 @@
 import MarkdownIt from 'markdown-it'
+import { LRUCache } from './lru'
+import { createSafeMarkdownRenderer, escapeHtml } from './safeMarkdown'
 
 /**
  * Markdown 处理工具 - 优化版
@@ -9,11 +11,7 @@ import MarkdownIt from 'markdown-it'
 let mdInstance: MarkdownIt | null = null
 
 // 渲染结果缓存
-const renderCache = new Map<string, string>()
-const MAX_CACHE_SIZE = 100
-
-type FenceRenderer = NonNullable<MarkdownIt['renderer']['rules']['fence']>
-type LinkOpenRenderer = NonNullable<MarkdownIt['renderer']['rules']['link_open']>
+const renderCache = new LRUCache<string, string>(100)
 
 /**
  * 获取 MarkdownIt 实例（单例模式）
@@ -21,60 +19,12 @@ type LinkOpenRenderer = NonNullable<MarkdownIt['renderer']['rules']['link_open']
 export function getMarkdownRenderer(): MarkdownIt {
   if (mdInstance) return mdInstance
 
-  mdInstance = new MarkdownIt({
-    html: true,
-    linkify: true,
-    typographer: true,
-    breaks: true,
-    highlight: (str, lang) => {
-      // 简单的代码高亮包装
-      const langClass = lang ? `language-${lang}` : ''
-      return `<pre class="code-block-wrapper"><div class="code-block-header"><span class="code-lang">${lang || 'text'}</span><button class="copy-code-btn" data-code="${escapeHtml(str)}">复制</button></div><code class="${langClass}">${escapeHtml(str)}</code></pre>`
-    }
+  mdInstance = createSafeMarkdownRenderer((str, lang) => {
+    const langClass = lang ? `language-${lang}` : ''
+    return `<pre class="code-block-wrapper"><div class="code-block-header"><span class="code-lang">${lang || 'text'}</span><button class="copy-code-btn" data-code="${escapeHtml(str)}">复制</button></div><code class="${langClass}">${escapeHtml(str)}</code></pre>`
   })
 
-  // 自定义代码块渲染
-  mdInstance.renderer.rules.fence = ((tokens, idx) => {
-    const token = tokens[idx]
-    if (!token) return ''
-    const code = token.content
-    const lang = token.info?.trim() || ''
-
-    return `
-      <div class="code-block-wrapper">
-        <div class="code-block-header">
-          <span class="code-lang">${lang || 'plaintext'}</span>
-          <button class="copy-code-btn" data-code="${escapeHtml(code)}">复制</button>
-        </div>
-        <pre><code class="language-${lang || 'plaintext'}">${escapeHtml(code)}</code></pre>
-      </div>
-    `
-  }) as FenceRenderer
-
-  const defaultLinkRender: LinkOpenRenderer =
-    mdInstance.renderer.rules.link_open ||
-    ((tokens, idx, options, _env, self) => {
-      return self.renderToken(tokens, idx, options)
-    })
-
-  // 自定义链接渲染（添加安全属性）
-  mdInstance.renderer.rules.link_open = ((tokens, idx, options, env, self) => {
-    if (!tokens[idx]) return ''
-    tokens[idx].attrSet('target', '_blank')
-    tokens[idx].attrSet('rel', 'noopener noreferrer')
-    return defaultLinkRender(tokens, idx, options, env, self)
-  }) as LinkOpenRenderer
-
   return mdInstance
-}
-
-/**
- * HTML 转义
- */
-function escapeHtml(text: string): string {
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML
 }
 
 /**
@@ -92,13 +42,6 @@ export function renderMarkdown(content: string): string {
   const md = getMarkdownRenderer()
   const result = md.render(content)
 
-  // 存入缓存
-  if (renderCache.size >= MAX_CACHE_SIZE) {
-    const firstKey = renderCache.keys().next().value
-    if (firstKey !== undefined) {
-      renderCache.delete(firstKey)
-    }
-  }
   renderCache.set(content, result)
 
   return result

@@ -84,9 +84,9 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     sessionList.value.unshift(newSession)
-    messagesMap.value = { ...messagesMap.value, [id]: initialMessages ?? [] }
-    currentTaskMap.value = { ...currentTaskMap.value, [id]: null }
-    stepMap.value = { ...stepMap.value, [id]: [] }
+    messagesMap.value[id] = initialMessages ?? []
+    currentTaskMap.value[id] = null
+    stepMap.value[id] = []
     currentSessionId.value = id
     saveToStorage()
 
@@ -124,9 +124,7 @@ export const useChatStore = defineStore('chat', () => {
 
     sessionList.value.splice(index, 1)
 
-    const newMessagesMap = { ...messagesMap.value }
-    delete newMessagesMap[id]
-    messagesMap.value = newMessagesMap
+    delete messagesMap.value[id]
 
     currentTaskMap.value = removeRuntimeSession(currentTaskMap.value, id)
     stepMap.value = removeRuntimeSession(stepMap.value, id)
@@ -154,7 +152,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function addMessage(sessionId: string, message: ChatMessage): void {
     if (!messagesMap.value[sessionId]) {
-      messagesMap.value = { ...messagesMap.value, [sessionId]: [] }
+      messagesMap.value[sessionId] = []
     }
 
     messagesMap.value[sessionId]!.push(message)
@@ -175,7 +173,6 @@ export const useChatStore = defineStore('chat', () => {
     if (!sessionMessages) return
 
     sessionMessages.splice(index, 1)
-    messagesMap.value = { ...messagesMap.value }
     saveToStorage()
   }
 
@@ -183,7 +180,7 @@ export const useChatStore = defineStore('chat', () => {
     stopGeneration()
     if (!currentSessionId.value) return
 
-    messagesMap.value = { ...messagesMap.value, [currentSessionId.value]: [] }
+    messagesMap.value[currentSessionId.value] = []
     clearSessionRuntimeState(currentSessionId.value)
     saveToStorage()
   }

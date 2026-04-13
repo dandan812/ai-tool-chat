@@ -161,3 +161,15 @@ export function formatError(error: Error | string, context?: Record<string, unkn
     timestamp: Date.now()
   })
 }
+
+/**
+ * 统一上报前端异常。
+ * 当前先收敛到控制台，后续如果接入埋点平台，只需要改这一处。
+ */
+export function reportAppError(
+  error: Error | string,
+  source: string,
+  context?: Record<string, unknown>,
+): void {
+  console.error('[AppError]', formatError(error, { source, ...(context || {}) }))
+}
