@@ -403,12 +403,11 @@ export const useChatStore = defineStore('chat', () => {
     const requestMessages = buildRequestMessages(sessionMessages, userMessage)
 
     // 先写入用户消息，再插入一个空 assistant 占位消息。
-    // 流式 chunk 回来时，会持续追加到这条占位消息上。
     addMessage(sessionId, userMessage)
+    // 流式 chunk 回来时，会持续追加到这条占位消息上。
     addMessage(sessionId, { role: 'assistant', content: '' })
-
+    // 记录 assistant 这条消息的下标
     const assistantIndex = (messagesMap.value[sessionId] ?? []).length - 1
-
     // 如果存在旧请求，先中止。
     if (abortController.value) {
       abortController.value.abort()
@@ -426,11 +425,13 @@ export const useChatStore = defineStore('chat', () => {
     clearStreamingContent()
 
     try {
+      // 真正发请求
       await sendTaskRequest(
         {
           messages: requestMessages,
           images: images.length > 0 ? images : undefined,
           files: files.length > 0 ? files : undefined,
+          // 温度参数
           temperature: 0.7
         },
         {
