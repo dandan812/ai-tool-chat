@@ -7,8 +7,9 @@
 :root {
   /* 布局系统 */
   --layout-sidebar-width: 304px;
-  --layout-content-max: 980px;
-  --layout-message-max: 920px;
+  /* 放宽桌面端聊天版心，避免宽屏下主工作区被压成窄列 */
+  --layout-content-max: 1360px;
+  --layout-message-max: 1120px;
 
   /* 字体系统 */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
