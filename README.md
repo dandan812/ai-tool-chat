@@ -274,6 +274,8 @@ Task 主要服务于单次请求生命周期中的实时展示，目前不承诺
 ## 相关文档
 
 - [`AGENTS.md`](./AGENTS.md)
+- [`docs/api-reference.md`](./docs/api-reference.md)
+- [`docs/openapi.yaml`](./docs/openapi.yaml)
 - [`docs/frontend-learning-guide.md`](./docs/frontend-learning-guide.md)
 - [`docs/reference/ERROR_LOG.md`](./docs/reference/ERROR_LOG.md)
 - [`docs/plans/2026-03-29-task-pipeline-unification.md`](./docs/plans/2026-03-29-task-pipeline-unification.md)

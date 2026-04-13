@@ -1,0 +1,831 @@
+openapi: 3.0.3
+info:
+  title: AI Tool Chat API
+  version: 1.0.0
+  description: |
+    基于当前仓库代码整理的 OpenAPI 规范，可直接导入 Apifox。
+
+    说明：
+    - `/` 与 `/chat` 是同一聊天接口的两个入口
+    - 聊天接口默认走 SSE 流式返回，响应媒体类型为 `text/event-stream`
+    - 当请求体里 `stream=false` 时，聊天接口返回普通 JSON
+    - 文件上传采用分片上传 + 状态查询 + 合并确认的方式
+
+servers:
+  - url: https://api.i-tool-chat.store
+    description: 生产环境
+  - url: http://127.0.0.1:8787
+    description: 本地开发环境
+
+tags:
+  - name: Chat
+    description: 聊天与任务流接口
+  - name: Upload
+    description: 分片上传与断点续传接口
+  - name: System
+    description: 健康检查与运行时统计
+
+paths:
+  /:
+    post:
+      tags:
+        - Chat
+      summary: 发起聊天任务（根路径别名）
+      description: |
+        根路径是 `/chat` 的别名。
+
+        默认返回 `text/event-stream`：
+        - `task`
+        - `step`
+        - `content`
+        - `error`
+        - `complete`
+        - 最终 `data: [DONE]`
+      operationId: createChatTaskAlias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: 聊天任务已创建，返回 SSE 流或非流式 JSON
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                sse:
+                  summary: SSE 响应示例
+                  value: |-
+                    data: {"type":"task","data":{"task":{"id":"task_xxx","type":"chat","status":"running","userMessage":"你好","steps":[],"createdAt":1710000000000,"updatedAt":1710000000000},"event":"started"}}
+
+                    data: {"type":"step","data":{"step":{"id":"step_xxx","taskId":"task_xxx","type":"plan","status":"completed","name":"分析需求","description":"理解用户意图并规划执行步骤","startedAt":1710000000100,"completedAt":1710000000200},"event":"complete"}}
+
+                    data: {"type":"content","data":{"content":"你好，"}}
+
+                    data: {"type":"complete","data":{"task":{"id":"task_xxx","type":"chat","status":"completed","userMessage":"你好","steps":[],"result":"你好，有什么我可以帮你？","createdAt":1710000000000,"updatedAt":1710000003000}}}
+
+                    data: [DONE]
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NonStreamChatResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: 服务端错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /chat:
+    post:
+      tags:
+        - Chat
+      summary: 发起聊天任务
+      description: |
+        发起一次聊天任务，支持纯文本、图片和文件引用输入。
+
+        技能选择规则：
+        - 传 `images` 时优先走多模态 Skill
+        - 传 `files` 时走文件分析 Skill
+        - 都不传时走文本 Skill
+
+        默认返回 `text/event-stream`：
+        - `task`
+        - `step`
+        - `content`
+        - `error`
+        - `complete`
+        - 最终 `data: [DONE]`
+      operationId: createChatTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+            examples:
+              textChat:
+                summary: 纯文本聊天
+                value:
+                  messages:
+                    - role: user
+                      content: 你好
+                  temperature: 0.7
+                  stream: true
+              fileChat:
+                summary: 带文件引用的聊天
+                value:
+                  messages:
+                    - role: user
+                      content: 总结这个文件
+                  files:
+                    - fileId: md5hash-102400
+                      fileName: report.txt
+                      mimeType: text/plain
+                      size: 102400
+                      fileHash: md5hash
+                      source: uploaded
+                  stream: true
+      responses:
+        '200':
+          description: 聊天任务已创建，返回 SSE 流或非流式 JSON
+          content:
+            text/event-stream:
+              schema:
+                type: string
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NonStreamChatResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: 服务端错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /upload/chunk:
+    post:
+      tags:
+        - Upload
+      summary: 上传单个文件分片
+      description: |
+        使用 `multipart/form-data` 上传文件分片。
+
+        当前前端默认：
+        - 分片大小 `100KB`
+        - `fileId = ${fileHash}-${file.size}`
+
+        接口支持重复分片去重，重复上传时可能返回 `duplicate=true`。
+      operationId: uploadChunk
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - fileId
+                - chunkIndex
+                - totalChunks
+                - chunk
+              properties:
+                fileId:
+                  type: string
+                  description: 稳定文件 ID
+                fileName:
+                  type: string
+                  description: 文件名
+                fileSize:
+                  type: string
+                  description: 文件总大小，前端以字符串形式传递
+                chunkIndex:
+                  type: string
+                  description: 分片下标，从 0 开始
+                totalChunks:
+                  type: string
+                  description: 分片总数
+                fileHash:
+                  type: string
+                  description: 文件 MD5
+                chunk:
+                  type: string
+                  format: binary
+                  description: 当前二进制分片
+                mimeType:
+                  type: string
+                  description: 文件 MIME 类型
+      responses:
+        '200':
+          description: 分片上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadChunkResponse'
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: 服务端错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /upload/complete:
+    post:
+      tags:
+        - Upload
+      summary: 确认上传完成并合并分片
+      description: |
+        通知服务端执行分片合并。
+        成功后返回一个 `UploadedFileRef`，后续可直接放入 `/chat` 请求的 `files` 字段。
+      operationId: completeUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadCompleteRequest'
+      responses:
+        '200':
+          description: 文件合并成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadCompleteResponse'
+        '400':
+          description: 参数错误或分片不完整
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: 服务端错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /upload/status:
+    get:
+      tags:
+        - Upload
+      summary: 查询上传状态
+      description: 用于断点续传，返回已上传分片列表与完成百分比。
+      operationId: getUploadStatus
+      parameters:
+        - in: query
+          name: fileId
+          required: true
+          schema:
+            type: string
+          description: 稳定文件 ID
+      responses:
+        '200':
+          description: 上传状态查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadStatusResponse'
+        '404':
+          description: 文件不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadStatusNotFoundResponse'
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /upload/delete:
+    post:
+      tags:
+        - Upload
+      summary: 删除上传中的残留状态
+      description: 删除上传元数据、分片对象和已合并文件。
+      operationId: deleteUpload
+      parameters:
+        - in: query
+          name: fileId
+          required: true
+          schema:
+            type: string
+          description: 稳定文件 ID
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: 服务端错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /health:
+    get:
+      tags:
+        - System
+      summary: 健康检查
+      description: 返回当前运行时可用能力的轻量探针。
+      operationId: getHealth
+      responses:
+        '200':
+          description: 健康检查成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /stats:
+    get:
+      tags:
+        - System
+      summary: 查看当前实例任务统计
+      description: 返回当前 Worker 实例内的任务统计，不代表全局持久化监控。
+      operationId: getStats
+      responses:
+        '200':
+          description: 统计信息返回成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+
+components:
+  schemas:
+    MessageRole:
+      type: string
+      enum:
+        - system
+        - user
+        - assistant
+
+    TaskStatus:
+      type: string
+      enum:
+        - pending
+        - running
+        - completed
+        - failed
+
+    StepStatus:
+      type: string
+      enum:
+        - pending
+        - running
+        - completed
+        - failed
+
+    StepType:
+      type: string
+      enum:
+        - plan
+        - skill
+        - mcp
+        - think
+        - respond
+
+    ChatMessage:
+      type: object
+      required:
+        - role
+        - content
+      properties:
+        role:
+          $ref: '#/components/schemas/MessageRole'
+        content:
+          type: string
+        name:
+          type: string
+        timestamp:
+          type: number
+
+    ImageData:
+      type: object
+      required:
+        - id
+        - base64
+        - mimeType
+      properties:
+        id:
+          type: string
+        base64:
+          type: string
+          description: 不包含 data URI 前缀
+        mimeType:
+          type: string
+        description:
+          type: string
+        width:
+          type: number
+        height:
+          type: number
+
+    UploadedFileRef:
+      type: object
+      required:
+        - fileId
+        - fileName
+        - mimeType
+        - size
+        - fileHash
+        - source
+      properties:
+        fileId:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        size:
+          type: number
+        fileHash:
+          type: string
+        source:
+          type: string
+          enum:
+            - uploaded
+
+    TaskMetadata:
+      type: object
+      additionalProperties: true
+      properties:
+        model:
+          type: string
+        skill:
+          type: string
+        temperature:
+          type: number
+        tokenCount:
+          type: number
+        processingTime:
+          type: number
+        toolingMode:
+          type: string
+          enum:
+            - disabled
+            - experimental
+            - active
+
+    Step:
+      type: object
+      required:
+        - id
+        - taskId
+        - type
+        - status
+        - name
+      properties:
+        id:
+          type: string
+        taskId:
+          type: string
+        type:
+          $ref: '#/components/schemas/StepType'
+        status:
+          $ref: '#/components/schemas/StepStatus'
+        name:
+          type: string
+        description:
+          type: string
+        input:
+          nullable: true
+        output:
+          nullable: true
+        error:
+          type: string
+        startedAt:
+          type: number
+        completedAt:
+          type: number
+        metadata:
+          type: object
+          additionalProperties: true
+
+    Task:
+      type: object
+      required:
+        - id
+        - type
+        - status
+        - userMessage
+        - steps
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - chat
+            - code
+            - image
+            - file
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        userMessage:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/Step'
+        result:
+          type: string
+        error:
+          type: string
+        createdAt:
+          type: number
+        updatedAt:
+          type: number
+        metadata:
+          $ref: '#/components/schemas/TaskMetadata'
+
+    ChatRequest:
+      type: object
+      required:
+        - messages
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageData'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/UploadedFileRef'
+        temperature:
+          type: number
+          example: 0.7
+        maxTokens:
+          type: number
+        stream:
+          type: boolean
+          default: true
+        enableTools:
+          type: boolean
+          default: false
+        model:
+          type: string
+
+    TaskEventData:
+      type: object
+      required:
+        - task
+        - event
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        event:
+          type: string
+          example: started
+
+    StepEventData:
+      type: object
+      required:
+        - step
+        - event
+      properties:
+        step:
+          $ref: '#/components/schemas/Step'
+        event:
+          type: string
+          enum:
+            - start
+            - complete
+            - error
+
+    ContentEventData:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+
+    ErrorEventData:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+
+    CompleteEventData:
+      type: object
+      required:
+        - task
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+
+    NonStreamChatResponse:
+      type: object
+      required:
+        - task
+        - chunks
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        chunks:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    UploadChunkResponse:
+      type: object
+      required:
+        - success
+        - chunkIndex
+        - fileId
+        - receivedChunks
+        - receivedIndices
+      properties:
+        success:
+          type: boolean
+          example: true
+        duplicate:
+          type: boolean
+          description: 是否为重复分片
+        chunkIndex:
+          type: number
+        fileId:
+          type: string
+        receivedChunks:
+          type: number
+        receivedIndices:
+          type: array
+          items:
+            type: number
+
+    UploadCompleteRequest:
+      type: object
+      required:
+        - fileId
+        - fileHash
+        - fileName
+        - mimeType
+      properties:
+        fileId:
+          type: string
+        fileHash:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+
+    UploadCompleteResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          example: true
+        file:
+          $ref: '#/components/schemas/UploadedFileRef'
+        error:
+          type: string
+
+    UploadStatusResponse:
+      type: object
+      required:
+        - fileId
+      properties:
+        fileId:
+          type: string
+        fileName:
+          type: string
+        fileHash:
+          type: string
+        totalChunks:
+          type: number
+        receivedChunks:
+          type: number
+        receivedIndices:
+          type: array
+          items:
+            type: number
+        percentage:
+          type: number
+        isComplete:
+          type: boolean
+
+    UploadStatusNotFoundResponse:
+      type: object
+      required:
+        - error
+        - code
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          example: UPLOAD_STATUS_NOT_FOUND
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - version
+        - features
+      properties:
+        status:
+          type: string
+          example: ok
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+          example: 2.0.0
+        features:
+          type: object
+          required:
+            - bailianText
+            - bailianMultimodal
+          properties:
+            bailianText:
+              type: boolean
+            bailianMultimodal:
+              type: boolean
+
+    TaskStats:
+      type: object
+      required:
+        - total
+        - pending
+        - running
+        - completed
+        - failed
+      properties:
+        total:
+          type: number
+        pending:
+          type: number
+        running:
+          type: number
+        completed:
+          type: number
+        failed:
+          type: number
+
+    StatsResponse:
+      type: object
+      required:
+        - tasks
+        - timestamp
+      properties:
+        tasks:
+          $ref: '#/components/schemas/TaskStats'
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorDetails:
+      type: object
+      additionalProperties: true
+
+    ErrorObject:
+      type: object
+      required:
+        - message
+        - code
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+        details:
+          $ref: '#/components/schemas/ErrorDetails'
+
+    ErrorEnvelope:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorObject'
