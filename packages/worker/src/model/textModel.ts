@@ -1,7 +1,7 @@
 import type { Env } from "../types";
 
 export const DEFAULT_QWEN_TEXT_MODEL = "qwen3.5-flash-2026-02-23";
-export const DEFAULT_QWEN_MULTIMODAL_MODEL = "qwen3.5-plus";
+export const DEFAULT_QWEN_MULTIMODAL_MODEL = "qwen-vl-plus";
 
 type TextEnv = Pick<Env, "DEFAULT_MODEL" | "QWEN_API_KEY">;
 

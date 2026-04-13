@@ -26,6 +26,6 @@ describe('textModel', () => {
   });
 
   it('未配置时应返回默认多模态模型', () => {
-    expect(resolveDefaultMultimodalModel()).toBe('qwen3.5-plus');
+    expect(resolveDefaultMultimodalModel()).toBe('qwen-vl-plus');
   });
 });

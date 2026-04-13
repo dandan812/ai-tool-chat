@@ -12,6 +12,7 @@
 
 import { computed } from 'vue'
 import { handleMessageMarkdownClick, renderMessageMarkdown } from '../utils/messageMarkdown'
+import { useChatStore } from '../stores/chat'
 
 interface Props {
   /** 消息角色 */
@@ -23,6 +24,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const store = useChatStore()
 
 const emit = defineEmits<{
   /** 删除消息 */
@@ -37,6 +39,16 @@ const isUser = computed(() => props.role === 'user')
 
 /** 消息角色文案 */
 const roleLabel = computed(() => (isUser.value ? '你' : 'AI 助手'))
+
+/** AI 空消息占位态 */
+const showPendingPlaceholder = computed(() => {
+  return (
+    props.role === 'assistant' &&
+    !props.content.trim() &&
+    !!store.currentSessionId &&
+    store.isSessionLoading(store.currentSessionId)
+  )
+})
 
 </script>
 
@@ -73,7 +85,11 @@ const roleLabel = computed(() => (isUser.value ? '你' : 'AI 助手'))
       </div>
 
       <div class="bubble">
+        <div v-if="showPendingPlaceholder" class="pending-placeholder">
+          正在生成内容...
+        </div>
         <div
+          v-else
           class="markdown-body"
           :class="{ 'user-text': isUser }"
           v-html="htmlContent"
@@ -216,6 +232,12 @@ const roleLabel = computed(() => (isUser.value ? '你' : 'AI 助手'))
   background: var(--message-ai-bg);
   border: 1px solid var(--message-ai-border);
   box-shadow: var(--shadow-panel);
+}
+
+.pending-placeholder {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: 1.7;
 }
 
 .message-row.user .bubble {
