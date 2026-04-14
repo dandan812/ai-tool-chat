@@ -83,7 +83,7 @@ const currentStatus = computed(() => {
 
 <style scoped>
 .header {
-  padding: var(--space-5) var(--space-6) var(--space-4);
+  padding: var(--space-5) calc(var(--space-6) + var(--layout-scrollbar-compensation, 0px)) var(--space-4) var(--space-6);
   background: transparent;
   border-bottom: 1px solid var(--border-subtle);
 }

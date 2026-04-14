@@ -244,6 +244,7 @@ function handleStop() {
 
 /* 页面内部真正的聊天舞台，负责承载头部、消息流和底部输入区。 */
 .chat-stage {
+  --layout-scrollbar-compensation: 14px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -289,7 +290,7 @@ function handleStop() {
   position: sticky;
   bottom: 0;
   z-index: 20;
-  padding: 0 var(--space-6) var(--space-5);
+  padding: 0 calc(var(--space-6) + var(--layout-scrollbar-compensation)) var(--space-5) var(--space-6);
   background:
     linear-gradient(180deg, rgba(252, 251, 248, 0) 0%, rgba(252, 251, 248, 0.78) 24%, rgba(252, 251, 248, 0.96) 100%);
   backdrop-filter: blur(14px);
@@ -313,6 +314,10 @@ function handleStop() {
 
 /* 移动端下适当收紧底部留白和版心间距。 */
 @media (max-width: 768px) {
+  .chat-stage {
+    --layout-scrollbar-compensation: 0px;
+  }
+
   .chat-stream {
     scroll-padding-bottom: 180px;
   }

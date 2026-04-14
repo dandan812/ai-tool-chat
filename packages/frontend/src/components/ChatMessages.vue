@@ -259,6 +259,7 @@ function setMessageContainer(
   height: 100%;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding: var(--space-4) var(--space-6) var(--space-6);
