@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SkillContext, SkillInput } from '../types';
+import { DEFAULT_QWEN_TEXT_MODEL } from '../model/textModel';
 import { resolveTextProvider } from './textProvider';
 
 function createContext(env: Partial<SkillContext['env']>): SkillContext {
@@ -27,7 +28,7 @@ describe('resolveTextProvider', () => {
 
     expect(provider).not.toBeNull();
     expect(provider?.provider).toBe('bailian');
-    expect(provider?.model).toBe('qwen3.5-flash-2026-02-23');
+    expect(provider?.model).toBe(DEFAULT_QWEN_TEXT_MODEL);
   });
 
   it('显式指定 kimi 模型时仍然走百炼兼容接口', () => {
@@ -54,12 +55,12 @@ describe('resolveTextProvider', () => {
     const provider = resolveTextProvider(
       createInput(),
       createContext({
-        DEFAULT_MODEL: 'qwen3.5-flash-2026-02-23',
+        DEFAULT_MODEL: DEFAULT_QWEN_TEXT_MODEL,
         QWEN_API_KEY: 'qwen-key',
       }),
     );
 
     expect(provider?.provider).toBe('bailian');
-    expect(provider?.model).toBe('qwen3.5-flash-2026-02-23');
+    expect(provider?.model).toBe(DEFAULT_QWEN_TEXT_MODEL);
   });
 });
