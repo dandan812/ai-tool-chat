@@ -102,27 +102,20 @@ const showPendingPlaceholder = computed(() => {
 
 <style scoped>
 .message-row {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  gap: var(--space-4);
-  align-items: start;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
   animation: slide-in var(--transition-base) ease-out;
 }
 
 .message-row.user {
-  grid-template-columns: minmax(0, 1fr) 40px;
-}
-
-.message-row.user .avatar {
-  grid-column: 2;
-  justify-self: end;
-}
-
-.message-row.user .message-frame {
-  grid-column: 1;
+  justify-content: flex-end;
 }
 
 .avatar {
+  position: absolute;
+  top: 0;
   width: 40px;
   height: 40px;
   display: flex;
@@ -133,9 +126,17 @@ const showPendingPlaceholder = computed(() => {
 }
 
 .message-row.ai .avatar {
+  left: calc(-1 * (40px + var(--space-4)));
+}
+
+.message-row.ai .avatar {
   background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
   color: white;
   box-shadow: var(--shadow-warm);
+}
+
+.message-row.user .avatar {
+  right: calc(-1 * (40px + var(--space-4)));
 }
 
 .message-row.user .avatar {
@@ -148,6 +149,7 @@ const showPendingPlaceholder = computed(() => {
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
+  width: min(100%, var(--layout-message-max));
 }
 
 .message-row.user .message-frame {
@@ -222,7 +224,7 @@ const showPendingPlaceholder = computed(() => {
 }
 
 .bubble {
-  width: min(100%, var(--layout-message-max));
+  width: 100%;
   padding: 1.05rem 1.15rem;
   border-radius: 22px;
   overflow-wrap: break-word;
@@ -383,16 +385,26 @@ const showPendingPlaceholder = computed(() => {
 
 @media (max-width: 768px) {
   .message-row {
-    grid-template-columns: 36px minmax(0, 1fr);
+    padding-left: 44px;
   }
 
   .message-row.user {
-    grid-template-columns: minmax(0, 1fr) 36px;
+    padding-left: 0;
+    padding-right: 44px;
   }
 
   .avatar {
+    position: absolute;
     width: 36px;
     height: 36px;
+  }
+
+   .message-row.ai .avatar {
+    left: 0;
+  }
+
+  .message-row.user .avatar {
+    right: 0;
   }
 
   .bubble,
