@@ -13,12 +13,16 @@
 import { RouterView } from 'vue-router'
 import { onMounted } from 'vue'
 import { isOnline, debug } from './config'
+import { useChatStore } from './stores/chat'
+
+const chatStore = useChatStore()
 
 /**
  * 组件挂载时的初始化操作
  */
 onMounted(() => {
   debug.log('[App] Root component mounted')
+  chatStore.resetTransientState()
 
   /**
    * 监听网络状态变化

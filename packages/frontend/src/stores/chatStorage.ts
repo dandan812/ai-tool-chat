@@ -68,6 +68,34 @@ export function pruneStoredMessages(
   return nextMessagesMap
 }
 
+export function sanitizeRestoredMessages(messages: ChatMessage[]): ChatMessage[] {
+  const nextMessages = [...messages]
+
+  while (nextMessages.length > 0) {
+    const lastMessage = nextMessages[nextMessages.length - 1]
+
+    if (lastMessage?.role === 'assistant' && lastMessage.content.trim().length === 0) {
+      nextMessages.pop()
+      continue
+    }
+
+    break
+  }
+
+  return nextMessages
+}
+
+export function sanitizeRestoredMessagesMap(
+  messagesMap: Record<string, ChatMessage[]>,
+): Record<string, ChatMessage[]> {
+  return Object.fromEntries(
+    Object.entries(messagesMap).map(([sessionId, messages]) => [
+      sessionId,
+      sanitizeRestoredMessages(Array.isArray(messages) ? messages : []),
+    ]),
+  )
+}
+
 export function loadChatStorage(): StorageData | null {
   try {
     const sessionListData = localStorage.getItem(STORAGE_KEYS.SESSION_LIST)
@@ -77,14 +105,19 @@ export function loadChatStorage(): StorageData | null {
     if (!sessionListData || !messagesMapData) return null
 
     const sessionList: ChatSession[] = JSON.parse(sessionListData)
-    const messagesMap: Record<string, ChatMessage[]> = JSON.parse(messagesMapData)
+    const rawMessagesMap: Record<string, ChatMessage[]> = JSON.parse(messagesMapData)
 
     if (!Array.isArray(sessionList)) return null
+    const messagesMap = sanitizeRestoredMessagesMap(rawMessagesMap)
+    const restoredCurrentSessionId =
+      currentId && sessionList.some((session) => session.id === currentId)
+        ? currentId
+        : sessionList[0]?.id ?? ''
 
     return {
       sessionList,
       messagesMap,
-      currentSessionId: currentId ?? sessionList[0]?.id ?? ''
+      currentSessionId: restoredCurrentSessionId
     }
   } catch (error) {
     console.error('Storage load failed:', error)

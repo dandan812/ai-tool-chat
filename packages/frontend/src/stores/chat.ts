@@ -12,6 +12,7 @@ import {
   loadChatStorage,
   MAX_STORAGE_SIZE,
   pruneStoredMessages,
+  sanitizeRestoredMessagesMap,
   saveChatStorage,
   STORAGE_SAVE_DEBOUNCE_MS,
   TITLE_MAX_LENGTH,
@@ -294,6 +295,31 @@ export const useChatStore = defineStore('chat', () => {
    */
   function clearStreamingContent() {
     streamingContent.value = null
+  }
+
+  /**
+   * 重置所有仅存在于前端内存中的瞬时运行态
+   *
+   * 典型场景：
+   * - 页面刷新后，浏览器不可能续上之前的 SSE 流
+   * - 开发态热更新时，Pinia 可能暂时保留旧运行态
+   *
+   * 所以应用重新挂载时，要把“执行中 / 当前任务 / 步骤 / 流式展示”
+   * 全部回收，并顺手清理历史里尾部残留的空 assistant 占位消息。
+   */
+  function resetTransientState(): void {
+    if (abortController.value) {
+      abortController.value.abort()
+      abortController.value = null
+    }
+
+    isLoading.value = false
+    sessionLoadingMap.value = {}
+    currentTaskMap.value = {}
+    stepMap.value = {}
+    streamingContent.value = null
+    messagesMap.value = sanitizeRestoredMessagesMap(messagesMap.value)
+    saveToStorage()
   }
 
   /**
@@ -581,6 +607,7 @@ export const useChatStore = defineStore('chat', () => {
     stopGeneration,
     clearChat: clearMessages,
     cleanupOldMessages,
+    resetTransientState,
     setStreamingContent,
     clearStreamingContent,
     getMessageContent,
