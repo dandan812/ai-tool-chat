@@ -16,7 +16,7 @@
  * @package frontend/src/components
  */
 
-import { computed, watch } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useScroll, useVirtualScroll } from '../composables/useScroll'
 import ChatMessage from './ChatMessage.vue'
@@ -46,7 +46,7 @@ const store = useChatStore()
 // - 判断当前是否已在底部
 // - 提供滚到底部的方法
 // - 判断当前是否适合自动滚动
-const { container, isAtBottom, scrollToBottom, shouldAutoScroll } = useScroll()
+const { container, isAtBottom, scrollToBottom, scrollToTop, shouldAutoScroll } = useScroll()
 
 // useVirtualScroll 负责：
 // - 计算当前应该渲染哪一段消息
@@ -138,8 +138,29 @@ const showScrollButton = computed(() => {
 // - 或插入了一条 assistant 占位消息
 // 这时直接滚到底部，让用户看到最新区域。
 watch(() => displayMessages.value.length, () => {
+  if (displayMessages.value.length === 0) {
+    void nextTick(() => {
+      scrollToTop(true)
+    })
+    return
+  }
+
   scrollToBottom()
 })
+
+// 切换会话时，如果目标会话为空，说明当前应该展示欢迎页。
+// 这时必须把滚动容器复位到顶部，否则会沿用上一会话的 scrollTop，
+// 导致欢迎页从中间被裁开，看起来像布局错乱。
+watch(
+  () => store.currentSessionId,
+  () => {
+    if (displayMessages.value.length > 0) return
+
+    void nextTick(() => {
+      scrollToTop(true)
+    })
+  }
+)
 
 // 当最后一条消息内容变化时，通常表示流式输出还在继续。
 // 只有当用户当前接近底部时，才自动跟随滚动；
@@ -262,13 +283,15 @@ function setMessageContainer(
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: var(--space-4) var(--space-6) var(--space-6);
+  padding: var(--space-4) 0 var(--space-6);
 }
 
 /* 统一欢迎页和消息列表的内容版心宽度。 */
 .messages-shell {
   width: min(100%, var(--layout-content-max));
   margin: 0 auto;
+  padding: 0 var(--space-6);
+  box-sizing: border-box;
 }
 
 /* 普通模式下，消息列表按列排布并保持统一间距。 */
@@ -323,7 +346,11 @@ function setMessageContainer(
 /* 移动端收紧内边距，避免消息区显得过窄。 */
 @media (max-width: 768px) {
   .messages {
-    padding: var(--space-3) var(--space-4) var(--space-5);
+    padding: var(--space-3) 0 var(--space-5);
+  }
+
+  .messages-shell {
+    padding: 0 var(--space-4);
   }
 
   .message-list {

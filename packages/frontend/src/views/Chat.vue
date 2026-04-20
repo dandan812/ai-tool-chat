@@ -244,7 +244,6 @@ function handleStop() {
 
 /* 页面内部真正的聊天舞台，负责承载头部、消息流和底部输入区。 */
 .chat-stage {
-  --layout-scrollbar-compensation: 14px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -277,11 +276,15 @@ function handleStop() {
 /* 消息流区域独立占满剩余高度，内部真正滚动由 ChatMessages 组件承担。 */
 .chat-stream {
   flex: 1;
-  display: flex;
   min-height: 0;
   position: relative;
   overflow: hidden;
   scroll-padding-bottom: 220px;
+}
+
+.chat-stream :deep(.error-boundary) {
+  width: 100%;
+  height: 100%;
 }
 
 /* 底部输入区使用 sticky，滚动长对话时仍保持可见。 */
@@ -290,7 +293,7 @@ function handleStop() {
   position: sticky;
   bottom: 0;
   z-index: 20;
-  padding: 0 calc(var(--space-6) + var(--layout-scrollbar-compensation)) var(--space-5) var(--space-6);
+  padding: 0 var(--space-6) var(--space-5);
   background:
     linear-gradient(180deg, rgba(252, 251, 248, 0) 0%, rgba(252, 251, 248, 0.78) 24%, rgba(252, 251, 248, 0.96) 100%);
   backdrop-filter: blur(14px);
@@ -314,10 +317,6 @@ function handleStop() {
 
 /* 移动端下适当收紧底部留白和版心间距。 */
 @media (max-width: 768px) {
-  .chat-stage {
-    --layout-scrollbar-compensation: 0px;
-  }
-
   .chat-stream {
     scroll-padding-bottom: 180px;
   }

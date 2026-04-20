@@ -145,9 +145,13 @@ export function useScroll(options: UseScrollOptions = {}) {
   /**
    * 滚动到顶部
    */
-  function scrollToTop(): void {
+  function scrollToTop(immediate = false): void {
     if (!container.value) return
-    container.value.scrollTo({ top: 0, behavior: opts.behavior })
+    container.value.scrollTo({
+      top: 0,
+      behavior: immediate ? 'auto' : opts.behavior
+    })
+    updateScrollState()
   }
 
   /**
