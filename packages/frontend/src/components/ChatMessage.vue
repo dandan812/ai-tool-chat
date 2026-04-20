@@ -106,14 +106,14 @@ const showPendingPlaceholder = computed(() => {
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
-  padding-left: 56px;
+  padding-left: 60px;
   animation: slide-in var(--transition-base) ease-out;
 }
 
 .message-row.user {
   justify-content: flex-end;
   padding-left: 0;
-  padding-right: 56px;
+  padding-right: 60px;
 }
 
 .avatar {
@@ -129,7 +129,7 @@ const showPendingPlaceholder = computed(() => {
 }
 
 .message-row.ai .avatar {
-  left: 0;
+  left: 8px;
 }
 
 .message-row.ai .avatar {
@@ -139,7 +139,7 @@ const showPendingPlaceholder = computed(() => {
 }
 
 .message-row.user .avatar {
-  right: 0;
+  right: 8px;
 }
 
 .message-row.user .avatar {
@@ -388,12 +388,12 @@ const showPendingPlaceholder = computed(() => {
 
 @media (max-width: 768px) {
   .message-row {
-    padding-left: 44px;
+    padding-left: 48px;
   }
 
   .message-row.user {
     padding-left: 0;
-    padding-right: 44px;
+    padding-right: 48px;
   }
 
   .avatar {
@@ -403,11 +403,11 @@ const showPendingPlaceholder = computed(() => {
   }
 
    .message-row.ai .avatar {
-    left: 0;
+    left: 4px;
   }
 
   .message-row.user .avatar {
-    right: 0;
+    right: 4px;
   }
 
   .bubble,
