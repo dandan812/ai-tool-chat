@@ -32,8 +32,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run worker tests
-        run: pnpm --filter @ai-tool-chat/worker test
+      - name: Run worker checks
+        run: pnpm run check:worker
 
       - name: Deploy worker
         run: pnpm --filter @ai-tool-chat/worker run deploy

@@ -253,7 +253,7 @@ export class ChunkManager {
     let totalChunks = 0;
     let totalBytes = 0;
 
-    for (const [fileId, meta] of this.metadata.entries()) {
+    for (const [, meta] of this.metadata.entries()) {
       totalChunks += meta.totalChunks;
       totalBytes += meta.totalSize;
     }

@@ -1,5 +1,9 @@
 node_modules
 dist/
+# 仓库统一使用根目录 lockfile，禁止包内嵌套 lockfile。
+packages/**/package-lock.json
+packages/**/pnpm-lock.yaml
+packages/**/yarn.lock
 packages/worker/.dev.vars
 packages/worker/.wrangler/
 frontend-dev.out.log

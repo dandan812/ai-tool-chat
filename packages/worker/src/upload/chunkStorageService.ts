@@ -13,6 +13,22 @@ import {
   UPLOAD_TTL_MS,
 } from './chunkStorageSupport';
 
+type UploadFormDataValue = string | File | null;
+
+function isFormDataFile(value: UploadFormDataValue): value is File {
+  return typeof value === 'object' && value !== null && 'arrayBuffer' in value;
+}
+
+function getFormDataString(formData: FormData, key: string): string {
+  const value = formData.get(key);
+  return typeof value === 'string' ? value : '';
+}
+
+function getFormDataFile(formData: FormData, key: string): File | null {
+  const value = formData.get(key);
+  return isFormDataFile(value) ? value : null;
+}
+
 /**
  * 上传状态服务把“状态修复、分片合并、R2 正文操作”集中到一层，
  * Durable Object 本体只负责接 action 和返回响应。
@@ -45,14 +61,14 @@ export class ChunkStorageService {
 
   private async handleStoreChunk(request: Request): Promise<Response> {
     const formData = await request.formData();
-    const fileId = formData.get('fileId') as string;
-    const fileName = (formData.get('fileName') as string) || '';
-    const fileSize = Number.parseInt((formData.get('fileSize') as string) || '0', 10);
-    const chunkIndex = Number.parseInt((formData.get('chunkIndex') as string) || '0', 10);
-    const totalChunks = Number.parseInt((formData.get('totalChunks') as string) || '0', 10);
-    const fileHash = formData.get('fileHash') as string;
-    const chunk = formData.get('chunk') as File;
-    const mimeType = (formData.get('mimeType') as string) || 'text/plain';
+    const fileId = getFormDataString(formData, 'fileId');
+    const fileName = getFormDataString(formData, 'fileName');
+    const fileSize = Number.parseInt(getFormDataString(formData, 'fileSize') || '0', 10);
+    const chunkIndex = Number.parseInt(getFormDataString(formData, 'chunkIndex') || '0', 10);
+    const totalChunks = Number.parseInt(getFormDataString(formData, 'totalChunks') || '0', 10);
+    const fileHash = getFormDataString(formData, 'fileHash');
+    const chunk = getFormDataFile(formData, 'chunk');
+    const mimeType = getFormDataString(formData, 'mimeType') || 'text/plain';
 
     if (!fileId || !chunk || Number.isNaN(chunkIndex)) {
       return this.jsonResponse({ error: 'Missing required fields' }, 400);

@@ -117,7 +117,7 @@ export default {
    * 这里没有直接把 `handleRequest` 导出去，而是先交给 `app`，
    * 因为我们希望所有请求默认都经过统一的中间件链。
    */
-  fetch: async (request: Request, env: Env, ctx?: any): Promise<Response> => {
+  fetch: async (request: Request, env: Env, _ctx?: unknown): Promise<Response> => {
     return app(request, env);
   },
 };

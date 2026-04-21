@@ -2,7 +2,7 @@
  * HTTP 中间件工具
  */
 
-import type { Env, Handler, Middleware } from '../types';
+import type { Handler, Middleware } from '../types';
 import { WorkerError, ValidationError } from '../types';
 import { logger } from './logger';
 import { createErrorDetails, ERROR_CODES, getErrorCode, getRequestType } from './observability';

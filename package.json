@@ -10,9 +10,10 @@
     "deploy:worker": "pnpm --filter @ai-tool-chat/worker run deploy",
     "test:frontend": "pnpm --filter @ai-tool-chat/frontend test",
     "test:worker": "pnpm --filter @ai-tool-chat/worker test",
+    "check:repo": "node ./scripts/check-repo.mjs",
     "check:frontend": "pnpm --filter @ai-tool-chat/frontend lint && pnpm --filter @ai-tool-chat/frontend build && pnpm --filter @ai-tool-chat/frontend test",
-    "check:worker": "pnpm --filter @ai-tool-chat/worker test && pnpm --filter @ai-tool-chat/worker exec wrangler deploy --dry-run",
-    "check": "pnpm run check:frontend && pnpm run check:worker"
+    "check:worker": "pnpm --filter @ai-tool-chat/worker lint && pnpm --filter @ai-tool-chat/worker typecheck && pnpm --filter @ai-tool-chat/worker test && pnpm --filter @ai-tool-chat/worker exec wrangler deploy --dry-run",
+    "check": "pnpm run check:repo && pnpm run check:frontend && pnpm run check:worker"
   },
   "devDependencies": {
     "husky": "^9.0.11",

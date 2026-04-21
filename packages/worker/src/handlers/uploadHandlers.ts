@@ -3,6 +3,7 @@ import type {
   UploadCompleteRequest,
   UploadCompleteResponse,
   UploadStatusResponse,
+  UploadedFileRef,
 } from "../types";
 import { ValidationError } from "../types";
 import {
@@ -18,6 +19,32 @@ import {
   createErrorDetails,
   ERROR_CODES,
 } from "../infrastructure/observability";
+import type { FileMetadata } from "../upload/chunkStorageSupport";
+
+interface UploadChunkStoreResponse {
+  success?: boolean;
+  duplicate?: boolean;
+  chunkIndex?: number;
+  fileId?: string;
+  receivedChunks?: number;
+  receivedIndices?: number[];
+}
+
+type UploadFormDataValue = string | File | null;
+
+function isFormDataFile(value: UploadFormDataValue): value is File {
+  return typeof value === "object" && value !== null && "arrayBuffer" in value;
+}
+
+function getFormDataString(formData: FormData, key: string): string {
+  const value = formData.get(key);
+  return typeof value === "string" ? value : "";
+}
+
+function getFormDataFile(formData: FormData, key: string): File | null {
+  const value = formData.get(key);
+  return isFormDataFile(value) ? value : null;
+}
 
 /**
  * 上传链路天然更复杂：前端分片、DO 状态、R2 正文合并都在这里汇合。
@@ -32,18 +59,18 @@ export async function handleUploadChunk(
     // 分片上传用 multipart/form-data，
     // 因为同一请求里既要带二进制 chunk，也要带 fileId、chunkIndex 这类元数据。
     const formData = await request.formData();
-    const fileId = formData.get("fileId") as string;
+    const fileId = getFormDataString(formData, "fileId");
     const chunkIndex = Number.parseInt(
-      (formData.get("chunkIndex") as string) || "0",
+      getFormDataString(formData, "chunkIndex") || "0",
       10,
     );
     const totalChunks = Number.parseInt(
-      (formData.get("totalChunks") as string) || "0",
+      getFormDataString(formData, "totalChunks") || "0",
       10,
     );
-    const fileHash = formData.get("fileHash") as string;
-    const chunk = formData.get("chunk") as File;
-    const mimeType = (formData.get("mimeType") as string) || "text/plain";
+    const fileHash = getFormDataString(formData, "fileHash");
+    const chunk = getFormDataFile(formData, "chunk");
+    const mimeType = getFormDataString(formData, "mimeType") || "text/plain";
 
     if (!fileId || !chunk || Number.isNaN(chunkIndex)) {
       throw new ValidationError(
@@ -93,7 +120,7 @@ export async function handleUploadChunk(
       );
     }
 
-    const result = await durableResponse.json();
+    const result = (await durableResponse.json()) as UploadChunkStoreResponse;
     logger.info("Chunk stored", {
       route: "/upload/chunk",
       requestType: "upload_chunk",
@@ -148,7 +175,7 @@ export async function handleUploadComplete(
       `/?action=getMetadata&fileId=${encodeURIComponent(fileId)}`,
     );
     const checkResponse = await chunkStorage.fetch(checkDurableUrl);
-    const checkData = await checkResponse.json();
+    const checkData = (await checkResponse.json()) as Partial<FileMetadata> | null;
     logger.info("Metadata check before merge", {
       route: "/upload/complete",
       requestType: "upload_complete",
@@ -179,7 +206,7 @@ export async function handleUploadComplete(
       );
     }
 
-    const result = await durableResponse.json();
+    const result = (await durableResponse.json()) as UploadCompleteResponse;
     logger.info("Chunks merged", {
       route: "/upload/complete",
       requestType: "upload_complete",
@@ -196,10 +223,12 @@ export async function handleUploadComplete(
       );
     }
 
-    return createJSONResponse({
+    const responseBody: UploadCompleteResponse = {
       success: true,
-      file: result.file,
-    });
+      file: result.file as UploadedFileRef,
+    };
+
+    return createJSONResponse(responseBody);
   } catch (error) {
     logger.error("Upload complete error", {
       route: "/upload/complete",
@@ -261,7 +290,7 @@ export async function handleUploadStatus(
       );
     }
 
-    const metadata = await durableResponse.json();
+    const metadata = (await durableResponse.json()) as FileMetadata | null;
     logger.info("Got upload metadata", {
       route: "/upload/status",
       requestType: "upload_status",
@@ -281,7 +310,7 @@ export async function handleUploadStatus(
         ? Math.round((metadata.receivedChunks / metadata.totalChunks) * 100)
         : 0;
 
-    return createJSONResponse({
+    const responseBody: UploadStatusResponse = {
       fileId,
       fileName: metadata.fileName,
       fileHash: metadata.fileHash,
@@ -290,7 +319,9 @@ export async function handleUploadStatus(
       receivedIndices: metadata.receivedIndices,
       percentage,
       isComplete: metadata.receivedChunks >= metadata.totalChunks,
-    });
+    };
+
+    return createJSONResponse(responseBody);
   } catch (error) {
     logger.error("Upload status error", {
       route: "/upload/status",
