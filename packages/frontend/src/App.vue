@@ -22,6 +22,7 @@ const chatStore = useChatStore()
  */
 onMounted(() => {
   debug.log('[App] Root component mounted')
+  // 重置所有仅存在于前端内存中的瞬时运行态数据
   chatStore.resetTransientState()
 
   /**
