@@ -16,7 +16,8 @@ import {
   createTextRetrievalMessages,
   createTextRetrievalNarrowScopeMessage,
 } from "../utils/filePromptBuilders";
-import { getTextModelProviderLabel, resolveDefaultTextModel } from "../model/textModel";
+import { resolveDefaultFileModel } from "../model/defaultModels";
+import { getTextModelProviderLabel } from "../model/textModel";
 import { textSkill } from "./textSkill";
 
 /**
@@ -161,7 +162,7 @@ export function selectFileTextExecutor(
     return createTextExecutor(requestedModel);
   }
 
-  return createTextExecutor(resolveDefaultTextModel(context.env));
+  return createTextExecutor(resolveDefaultFileModel(context.env));
 }
 
 /**

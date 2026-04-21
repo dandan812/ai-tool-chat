@@ -19,6 +19,9 @@ import { fileSkill } from './fileSkill';
 import {
   getTextModelProviderLabel,
   isBailianTextModel,
+} from '../model/textModel';
+import {
+  resolveDefaultFileModel,
   resolveDefaultMultimodalModel,
   resolveDefaultTextModel,
 } from '../model/textModel';
@@ -102,6 +105,7 @@ export function selectSkill(
   input: { images?: unknown[]; files?: unknown[]; model?: string },
   env?: {
     DEFAULT_MODEL?: string;
+    DEFAULT_FILE_MODEL?: string;
     DEFAULT_MULTIMODAL_MODEL?: string;
     QWEN_API_KEY?: string;
   }
@@ -138,7 +142,7 @@ export function selectSkill(
   }
 
   function createFileSelection(): SelectedSkill {
-    const selectedModel = resolveDefaultTextModel(env);
+    const selectedModel = resolveDefaultFileModel(env);
     return createSelection(
       fileSkill,
       selectedModel,

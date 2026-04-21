@@ -318,6 +318,7 @@ export interface Env {
   REQUEST_TIMEOUT?: string;
   ENABLE_CACHE?: string;
   DEFAULT_MODEL?: string;  // 默认使用的模型
+  DEFAULT_FILE_MODEL?: string;  // 默认使用的文件模型
   DEFAULT_MULTIMODAL_MODEL?: string;  // 默认使用的图片模型
 }
 

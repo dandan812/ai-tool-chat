@@ -1,9 +1,9 @@
 import type { Message, SkillContext, SkillInput, SkillStreamChunk } from '../types';
 import {
   DEFAULT_QWEN_TEXT_MODEL,
-  isBailianTextModel,
   resolveDefaultTextModel,
-} from '../model/textModel';
+} from '../model/defaultModels';
+import { isBailianTextModel } from '../model/textModel';
 import { executeChatCompletionStream } from './chatCompletionStream';
 
 export type TextProviderName = 'bailian';

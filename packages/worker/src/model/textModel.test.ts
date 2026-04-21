@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_QWEN_FILE_MODEL,
   DEFAULT_QWEN_MULTIMODAL_MODEL,
   DEFAULT_QWEN_TEXT_MODEL,
+  resolveDefaultFileModel,
+  resolveDefaultMultimodalModel,
+  resolveDefaultModelConfig,
+  resolveDefaultTextModel,
+} from './defaultModels';
+import {
   getTextModelProviderLabel,
   isBailianTextModel,
-  resolveDefaultMultimodalModel,
-  resolveDefaultTextModel,
 } from './textModel';
 
 describe('textModel', () => {
@@ -15,6 +20,34 @@ describe('textModel', () => {
 
   it('显式配置 DEFAULT_MODEL 时应优先返回配置值', () => {
     expect(resolveDefaultTextModel({ DEFAULT_MODEL: 'kimi-k2.5' })).toBe('kimi-k2.5');
+  });
+
+  it('未配置 DEFAULT_FILE_MODEL 时应回退到文本默认模型', () => {
+    expect(resolveDefaultFileModel({ DEFAULT_MODEL: 'qwen-plus' })).toBe('qwen-plus');
+    expect(resolveDefaultFileModel()).toBe(DEFAULT_QWEN_FILE_MODEL);
+  });
+
+  it('显式配置 DEFAULT_FILE_MODEL 时应优先返回文件模型配置', () => {
+    expect(
+      resolveDefaultFileModel({
+        DEFAULT_MODEL: 'qwen-plus',
+        DEFAULT_FILE_MODEL: 'qwen-long',
+      }),
+    ).toBe('qwen-long');
+  });
+
+  it('应统一返回三类默认模型配置', () => {
+    expect(
+      resolveDefaultModelConfig({
+        DEFAULT_MODEL: 'qwen-plus',
+        DEFAULT_FILE_MODEL: 'qwen-long',
+        DEFAULT_MULTIMODAL_MODEL: 'qwen-vl-max',
+      }),
+    ).toEqual({
+      text: 'qwen-plus',
+      file: 'qwen-long',
+      multimodal: 'qwen-vl-max',
+    });
   });
 
   it('应识别百炼兼容的文本模型前缀', () => {
