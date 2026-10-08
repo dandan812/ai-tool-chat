@@ -12,14 +12,13 @@
 
 import { computed, ref } from 'vue'
 import type { Step, Task } from '../types/task'
+import { Check, LoaderCircle, CircleX, ChevronDown, Square } from '@lucide/vue'
 import {
   formatTaskDuration,
   getActiveStepText,
   getCompletedStepCount,
   getStepTypeLabel,
-  getTaskDurationSeconds,
-  getTaskModelLabel,
-  getTaskStatusText,
+  getTaskDurationSeconds
 } from '../utils/taskPresentation'
 
 interface Props {
@@ -34,17 +33,11 @@ const props = defineProps<Props>()
 /** 控制明细展开状态 */
 const isExpanded = ref(false)
 
-/** 当前模型 */
-const currentModel = computed(() => getTaskModelLabel(props.task, props.steps))
-
 /** 已完成步骤数量 */
 const completedCount = computed(() => getCompletedStepCount(props.steps))
 
-/** 状态文案 */
-const statusText = computed(() => getTaskStatusText(props.task, props.steps))
-
 /** 当前步骤说明 */
-const currentStepText = computed(() => getActiveStepText(props.steps))
+const currentStepText = computed(() => getActiveStepText(props.steps, props.task))
 
 /** 总耗时（秒） */
 const totalDuration = computed(() => getTaskDurationSeconds(props.steps))
@@ -56,6 +49,7 @@ const showDuration = computed(() => totalDuration.value > 0)
 const statusClass = computed(() => {
   if (props.task?.status === 'failed') return 'is-failed'
   if (props.task?.status === 'completed') return 'is-completed'
+  if (props.task?.status === 'cancelled') return 'is-cancelled'
   return 'is-running'
 })
 
@@ -67,338 +61,46 @@ function toggleExpand() {
 
 <template>
   <section
-    v-if="task && steps.length > 0"
+    v-if="task && steps.length"
     class="activity-band"
     :class="[statusClass, { expanded: isExpanded }]"
   >
-    <button
-      class="band-summary"
-      type="button"
-      :aria-expanded="isExpanded"
-      @click="toggleExpand"
-    >
-      <div class="summary-main">
-        <span class="model-chip">{{ currentModel }}</span>
-        <span class="status-pill">{{ statusText }}</span>
-        <p class="step-copy">{{ currentStepText }}</p>
-      </div>
-
-      <div class="summary-meta">
-        <span class="meta-item">{{ completedCount }}/{{ steps.length }} 步</span>
-        <span v-if="showDuration" class="meta-item">{{ formatTaskDuration(totalDuration) }}</span>
-        <span class="expand-toggle">
-          {{ isExpanded ? '收起' : '详情' }}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            :class="{ rotated: isExpanded }"
-          >
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </span>
-      </div>
+    <button class="band-summary" :aria-expanded="isExpanded" @click="toggleExpand">
+      <span class="summary-main">
+        <Check v-if="task.status === 'completed'" /><CircleX v-else-if="task.status === 'failed'" />
+        <Square v-else-if="task.status === 'cancelled'" /><LoaderCircle v-else class="spin" />
+        <span class="step-copy">{{ currentStepText }}</span>
+      </span>
+      <span class="summary-meta"
+        ><span>{{ completedCount }}/{{ steps.length }}</span>
+        <span v-if="showDuration">{{ formatTaskDuration(totalDuration) }}</span>
+        <ChevronDown :class="{ rotated: isExpanded }"
+      /></span>
     </button>
-
     <div v-show="isExpanded" class="band-details">
       <div class="timeline">
         <article
-          v-for="(step, index) in steps"
+          v-for="step in steps"
           :key="step.id"
           class="timeline-item"
           :class="`status-${step.status}`"
         >
-          <div class="timeline-rail">
-            <span class="timeline-dot"></span>
-            <span v-if="index !== steps.length - 1" class="timeline-line"></span>
+          <div class="timeline-head">
+            <h3 class="timeline-title">{{ getStepTypeLabel(step.type, step.name) }}</h3>
+            <span class="timeline-state">{{
+              step.status === 'completed'
+                ? '完成'
+                : step.status === 'failed'
+                  ? '失败'
+                  : step.status === 'pending'
+                    ? '等待'
+                    : '执行中'
+            }}</span>
           </div>
-
-          <div class="timeline-card">
-            <div class="timeline-head">
-              <div class="timeline-title-group">
-                <span class="timeline-index">0{{ index + 1 }}</span>
-                <h3 class="timeline-title">
-                  {{ getStepTypeLabel(step.type, step.name) }}
-                </h3>
-              </div>
-
-              <span class="timeline-state">
-                {{ step.status === 'completed' ? '完成' : step.status === 'failed' ? '失败' : '进行中' }}
-              </span>
-            </div>
-
-            <p v-if="step.description" class="timeline-desc">{{ step.description }}</p>
-            <p v-if="step.error" class="timeline-error">{{ step.error }}</p>
-          </div>
+          <p v-if="step.description" class="timeline-desc">{{ step.description }}</p>
+          <p v-if="step.error" class="timeline-error">{{ step.error }}</p>
         </article>
       </div>
     </div>
   </section>
 </template>
-
-<style scoped>
-.activity-band {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  background: linear-gradient(180deg, var(--surface-panel) 0%, var(--surface-strong) 100%);
-  box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(20px);
-  overflow: hidden;
-}
-
-.activity-band.is-running {
-  border-color: rgba(201, 106, 23, 0.2);
-}
-
-.activity-band.is-completed {
-  border-color: rgba(34, 197, 94, 0.2);
-}
-
-.activity-band.is-failed {
-  border-color: rgba(239, 68, 68, 0.22);
-}
-
-.band-summary {
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-4);
-  align-items: center;
-  padding: var(--space-4) var(--space-5);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  transition: background-color var(--transition-fast);
-}
-
-.band-summary:hover {
-  background: rgba(255, 255, 255, 0.18);
-}
-
-.summary-main {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.model-chip,
-.status-pill,
-.meta-item {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0.25rem 0.7rem;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.model-chip {
-  background: var(--accent-soft);
-  color: var(--accent-primary);
-}
-
-.status-pill {
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-}
-
-.activity-band.is-completed .status-pill {
-  background: var(--success-soft);
-  color: var(--success-dark);
-}
-
-.activity-band.is-failed .status-pill {
-  background: var(--danger-soft);
-  color: var(--error);
-}
-
-.step-copy {
-  min-width: min(100%, 260px);
-  flex: 1 1 320px;
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.summary-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.meta-item {
-  background: transparent;
-  color: var(--text-tertiary);
-  padding-inline: 0;
-  min-height: auto;
-}
-
-.expand-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  font-weight: 700;
-}
-
-.expand-toggle svg {
-  transition: transform var(--transition-fast);
-}
-
-.expand-toggle svg.rotated {
-  transform: rotate(180deg);
-}
-
-.band-details {
-  border-top: 1px solid var(--border-subtle);
-  padding: 0 var(--space-5) var(--space-5);
-}
-
-.timeline {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding-top: var(--space-4);
-}
-
-.timeline-item {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  gap: var(--space-3);
-}
-
-.timeline-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.timeline-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--border-default);
-  box-shadow: 0 0 0 4px rgba(120, 113, 108, 0.08);
-}
-
-.timeline-line {
-  flex: 1;
-  width: 1px;
-  margin-top: var(--space-1);
-  background: var(--border-subtle);
-}
-
-.timeline-item.status-running .timeline-dot {
-  background: var(--accent-primary);
-  box-shadow: 0 0 0 4px var(--accent-soft);
-}
-
-.timeline-item.status-completed .timeline-dot {
-  background: var(--success);
-  box-shadow: 0 0 0 4px var(--success-soft);
-}
-
-.timeline-item.status-failed .timeline-dot {
-  background: var(--error);
-  box-shadow: 0 0 0 4px var(--danger-soft);
-}
-
-.timeline-card {
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--surface-strong);
-}
-
-.timeline-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.timeline-title-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.timeline-index {
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-weight: 700;
-}
-
-.timeline-title {
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.timeline-state {
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.timeline-item.status-running .timeline-state {
-  color: var(--accent-primary);
-}
-
-.timeline-item.status-completed .timeline-state {
-  color: var(--success-dark);
-}
-
-.timeline-item.status-failed .timeline-state {
-  color: var(--error);
-}
-
-.timeline-desc,
-.timeline-error {
-  margin-top: var(--space-2);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-
-.timeline-desc {
-  color: var(--text-secondary);
-}
-
-.timeline-error {
-  color: var(--error);
-}
-
-@media (max-width: 768px) {
-  .band-summary {
-    grid-template-columns: 1fr;
-    padding: var(--space-4);
-  }
-
-  .summary-meta {
-    justify-content: flex-start;
-  }
-
-  .band-details {
-    padding: 0 var(--space-4) var(--space-4);
-  }
-}
-</style>

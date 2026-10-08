@@ -1,0 +1,14 @@
+{
+  "name": "@ai-tool-chat/server",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.13.0" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node dist/server.mjs",
+    "preview": "node scripts/preview.mjs",
+    "package": "node scripts/package.mjs",
+    "test": "node scripts/build.mjs && node --test test/*.test.mjs"
+  },
+  "devDependencies": { "esbuild": "0.27.2" }
+}

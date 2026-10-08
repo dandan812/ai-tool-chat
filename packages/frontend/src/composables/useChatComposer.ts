@@ -1,4 +1,5 @@
-import { computed, onMounted, ref, type Ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, type Ref, watch } from 'vue'
+import { MAX_IMAGES } from '../config'
 import type { DraftImage, ImageData, UploadedFileRef, UploadProgress } from '../types/task'
 import { useAutoResize } from './useAutoResize'
 import { isSupportedTextFile } from '../utils/file'
@@ -10,7 +11,7 @@ import {
   resolveDraftImage,
   revokeDraftPreviews,
   saveDraftImage,
-  syncDraftImageRefs,
+  syncDraftImageRefs
 } from '../utils/draftImageStore'
 
 interface UseChatComposerOptions {
@@ -34,6 +35,9 @@ export function useChatComposer(options: UseChatComposerOptions) {
   const showFileUploader = ref(false)
   const uploadError = ref('')
   const pendingUploads = ref<Record<string, UploadProgress>>({})
+  const pendingImages = ref(0)
+  const sending = ref(false)
+  let revision = 0
 
   const { textareaRef, resize, reset } = useAutoResize()
 
@@ -42,7 +46,9 @@ export function useChatComposer(options: UseChatComposerOptions) {
     syncDraftImageRefs(options.sessionId.value, images.value)
   }
 
-  const hasPendingUploads = computed(() => Object.keys(pendingUploads.value).length > 0)
+  const hasPendingUploads = computed(
+    () => Object.keys(pendingUploads.value).length > 0 || pendingImages.value > 0
+  )
   const pendingUploadList = computed(() => Object.values(pendingUploads.value))
   const hasAttachments = computed(() => images.value.length > 0 || files.value.length > 0)
 
@@ -60,13 +66,14 @@ export function useChatComposer(options: UseChatComposerOptions) {
     return (
       (input.value.trim() || hasAttachments.value) &&
       !options.loading.value &&
+      !sending.value &&
       !hasPendingUploads.value
     )
   })
 
   const statusText = computed(() => {
     if (hasPendingUploads.value) {
-      return '文件仍在上传，完成后再发送会更稳定。'
+      return pendingImages.value > 0 ? '图片处理中…' : '文件上传中…'
     }
 
     if (uploadError.value) {
@@ -92,6 +99,7 @@ export function useChatComposer(options: UseChatComposerOptions) {
   })
 
   async function clearComposer() {
+    revision++
     input.value = ''
     const currentImages = [...images.value]
     images.value = []
@@ -100,11 +108,12 @@ export function useChatComposer(options: UseChatComposerOptions) {
     showFileUploader.value = false
     uploadError.value = ''
     pendingUploads.value = {}
+    pendingImages.value = 0
     reset()
-    await clearDraftImages(currentImages)
     if (options.sessionId.value) {
       syncDraftImageRefs(options.sessionId.value, [])
     }
+    await clearDraftImages(currentImages)
   }
 
   async function handlePasteImage(event: ClipboardEvent) {
@@ -146,9 +155,21 @@ export function useChatComposer(options: UseChatComposerOptions) {
   }
 
   async function addImage(file: File) {
-    const image = await saveDraftImage(file)
-    images.value.push(image)
-    persistDraftImages()
+    if (images.value.length + pendingImages.value >= MAX_IMAGES)
+      throw new Error(`最多选择 ${MAX_IMAGES} 张图片`)
+    const startedAt = revision
+    pendingImages.value++
+    try {
+      const image = await saveDraftImage(file)
+      if (startedAt !== revision) {
+        await removeDraftImage(image.draftKey, image.previewUrl)
+        return
+      }
+      images.value.push(image)
+      persistDraftImages()
+    } finally {
+      if (startedAt === revision) pendingImages.value--
+    }
   }
 
   async function removeImage(id: string) {
@@ -188,24 +209,30 @@ export function useChatComposer(options: UseChatComposerOptions) {
     uploadError.value = ''
 
     return uploadChunkedFile(file, {
-      onProgress: handleUploadProgress,
+      onProgress: handleUploadProgress
     })
   }
 
   async function sendMessage() {
     if (!canSend.value) return
-
+    sending.value = true
+    const startedAt = revision
     try {
-      const resolvedImages = await Promise.all(images.value.map((image) => resolveDraftImage(image)))
+      const resolvedImages = await Promise.all(
+        images.value.map((image) => resolveDraftImage(image))
+      )
+      if (startedAt !== revision) return
       options.onSend(input.value.trim(), resolvedImages, files.value)
       await clearComposer()
     } catch (error) {
       uploadError.value = error instanceof Error ? error.message : '图片处理失败'
+    } finally {
+      sending.value = false
     }
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
       event.preventDefault()
       sendMessage()
     }
@@ -217,8 +244,16 @@ export function useChatComposer(options: UseChatComposerOptions) {
   }
 
   async function restoreDraftImages(sessionId: string) {
+    const startedAt = ++revision
+    pendingImages.value = 0
     revokeDraftPreviews(images.value)
-    images.value = sessionId ? await loadDraftImages(sessionId) : []
+    images.value = []
+    const restored = sessionId ? await loadDraftImages(sessionId) : []
+    if (startedAt !== revision) {
+      revokeDraftPreviews(restored)
+      return
+    }
+    images.value = restored
   }
 
   watch(
@@ -226,13 +261,12 @@ export function useChatComposer(options: UseChatComposerOptions) {
     (sessionId) => {
       void restoreDraftImages(sessionId)
     },
-    { immediate: true },
+    { immediate: true }
   )
 
-  onMounted(() => {
-    if (options.sessionId.value) {
-      void restoreDraftImages(options.sessionId.value)
-    }
+  onScopeDispose(() => {
+    revision++
+    revokeDraftPreviews(images.value)
   })
 
   return {
@@ -260,6 +294,6 @@ export function useChatComposer(options: UseChatComposerOptions) {
     handleKeydown,
     handlePaste,
     sendMessage,
-    clearComposer,
+    clearComposer
   }
 }

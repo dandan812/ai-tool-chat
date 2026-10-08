@@ -35,12 +35,12 @@ const DEFAULT_OPTIONS: Required<UseScrollOptions> = {
  */
 export function useScroll(options: UseScrollOptions = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options }
-  
+
   const container = ref<HTMLElement | null>(null)
   const isScrolling = ref(false)
   const isAtBottom = ref(true)
   const scrollProgress = ref(0)
-  
+
   let scrollTimeout: ReturnType<typeof setTimeout> | null = null
   let rafId: number | null = null
 
@@ -53,9 +53,7 @@ export function useScroll(options: UseScrollOptions = {}) {
 
     const { scrollTop, scrollHeight, clientHeight } = el
     const distanceToBottom = scrollHeight - scrollTop - clientHeight
-    const progress = scrollHeight > clientHeight 
-      ? scrollTop / (scrollHeight - clientHeight)
-      : 0
+    const progress = scrollHeight > clientHeight ? scrollTop / (scrollHeight - clientHeight) : 0
 
     return {
       scrollTop,
@@ -90,7 +88,7 @@ export function useScroll(options: UseScrollOptions = {}) {
       }
 
       isScrolling.value = true
-      
+
       const doScroll = () => {
         const el = container.value
         if (!el) {
@@ -100,7 +98,7 @@ export function useScroll(options: UseScrollOptions = {}) {
         }
 
         const targetScroll = el.scrollHeight - el.clientHeight
-        
+
         if (immediate) {
           el.scrollTop = targetScroll
           updateScrollState()
@@ -123,7 +121,7 @@ export function useScroll(options: UseScrollOptions = {}) {
               rafId = requestAnimationFrame(checkScroll)
             }
           }
-          
+
           // 设置超时防止卡住
           setTimeout(() => {
             if (isScrolling.value) {
@@ -133,7 +131,7 @@ export function useScroll(options: UseScrollOptions = {}) {
               resolve()
             }
           }, 500)
-          
+
           rafId = requestAnimationFrame(checkScroll)
         }
       }
@@ -159,11 +157,11 @@ export function useScroll(options: UseScrollOptions = {}) {
    */
   function scrollToElement(element: HTMLElement, offset = 0): void {
     if (!container.value) return
-    
+
     const containerRect = container.value.getBoundingClientRect()
     const elementRect = element.getBoundingClientRect()
     const relativeTop = elementRect.top - containerRect.top + container.value.scrollTop - offset
-    
+
     container.value.scrollTo({
       top: relativeTop,
       behavior: opts.behavior
@@ -226,12 +224,12 @@ export function useScroll(options: UseScrollOptions = {}) {
   return {
     // 引用
     container,
-    
+
     // 状态
     isScrolling: readonly(isScrolling),
     isAtBottom: readonly(isAtBottom),
     scrollProgress: readonly(scrollProgress),
-    
+
     // 方法
     scrollToBottom,
     scrollToTop,
@@ -241,51 +239,3 @@ export function useScroll(options: UseScrollOptions = {}) {
     stopScroll
   }
 }
-
-/**
- * 创建虚拟滚动优化（用于超长列表）
- */
-export function useVirtualScroll(itemHeight: number, overscan = 5) {
-  const container = ref<HTMLElement | null>(null)
-  const scrollTop = ref(0)
-  const viewportHeight = ref(0)
-
-  function getVisibleRange(totalItems: number) {
-    const start = Math.floor(scrollTop.value / itemHeight)
-    const visibleCount = Math.ceil(viewportHeight.value / itemHeight)
-    
-    const startIndex = Math.max(0, start - overscan)
-    const endIndex = Math.min(totalItems, start + visibleCount + overscan)
-    
-    return {
-      startIndex,
-      endIndex,
-      offsetY: startIndex * itemHeight,
-      visibleCount: endIndex - startIndex
-    }
-  }
-
-  function onScroll() {
-    if (!container.value) return
-    scrollTop.value = container.value.scrollTop
-    viewportHeight.value = container.value.clientHeight
-  }
-
-  onMounted(() => {
-    if (container.value) {
-      viewportHeight.value = container.value.clientHeight
-      container.value.addEventListener('scroll', onScroll, { passive: true })
-    }
-  })
-
-  onUnmounted(() => {
-    container.value?.removeEventListener('scroll', onScroll)
-  })
-
-  return {
-    container,
-    scrollTop,
-    getVisibleRange
-  }
-}
-

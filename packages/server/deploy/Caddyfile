@@ -1,0 +1,11 @@
+chat.i-tool-chat.store {
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		X-Frame-Options DENY
+	}
+	reverse_proxy 127.0.0.1:3200 {
+		header_up X-Real-IP {remote_host}
+		flush_interval -1
+	}
+}

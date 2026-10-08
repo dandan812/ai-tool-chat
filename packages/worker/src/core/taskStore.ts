@@ -13,8 +13,7 @@ export class TaskStore {
   private readonly tasks = new Map<string, Task>();
   private readonly taskAccessOrder: string[] = [];
 
-  createTask(request: ChatRequest): Task {
-    const taskId = generateId();
+  createTask(request: ChatRequest, taskId = generateId()): Task {
     const currentTime = now();
     const toolingMode: ToolingMode = request.enableTools ? 'experimental' : 'disabled';
 
@@ -52,7 +51,7 @@ export class TaskStore {
       return { error: 'Task is already running' };
     }
 
-    if (task.status === 'completed' || task.status === 'failed') {
+    if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
       return { error: 'Task has already been executed' };
     }
 

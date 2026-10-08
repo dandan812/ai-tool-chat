@@ -11,7 +11,6 @@ import type {
   SkillInput,
   SkillStreamChunk,
 } from '../types';
-import { logger } from '../infrastructure/logger';
 import {
   executeQwenMultimodalStream,
   resolveQwenMultimodalProviderConfig,
@@ -34,16 +33,6 @@ export const multimodalSkill: Skill = {
       return;
     }
 
-    try {
-      yield* executeQwenMultimodalStream(
-        providerConfig,
-        messages,
-        images,
-        temperature,
-      );
-    } catch (error) {
-      logger.error('Qwen API request failed', error);
-      yield { type: 'error', error: String(error) };
-    }
+    yield* executeQwenMultimodalStream(providerConfig, messages, images, temperature);
   },
 };

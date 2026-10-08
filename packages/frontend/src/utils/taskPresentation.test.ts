@@ -5,6 +5,7 @@ import {
   getActiveStep,
   getActiveStepText,
   getCompletedStepCount,
+  getStepTypeLabel,
   getTaskModelLabel,
   getTaskStatusText,
 } from './taskPresentation';
@@ -42,6 +43,18 @@ const steps: Step[] = [
 ];
 
 describe('taskPresentation', () => {
+  it('终态摘要不会继续显示正在检索或生成', () => {
+    const completedSteps: Step[] = [{ ...steps[1]!, status: 'completed', description: '正在检索原文...' }];
+    expect(getActiveStepText(completedSteps, { ...baseTask, status: 'completed' })).toBe('处理完成');
+    expect(getActiveStepText(completedSteps, { ...baseTask, status: 'failed' })).toBe('处理失败');
+    expect(getActiveStepText(completedSteps, { ...baseTask, status: 'cancelled' })).toBe('任务已取消');
+  });
+  it('显示实际能力名称，同时兼容旧任务类型', () => {
+    expect(getStepTypeLabel('route', 'route')).toBe('选择处理方式');
+    expect(getStepTypeLabel('skill', '文件分析')).toBe('文件分析');
+    expect(getStepTypeLabel('plan', 'legacy')).toBe('分析请求');
+    expect(getStepTypeLabel('respond', 'legacy')).toBe('生成内容');
+  });
   it('应该返回当前活动步骤', () => {
     expect(getActiveStep(steps)?.id).toBe('step-2');
   });

@@ -1,22 +1,15 @@
-import type { Env, ResolvedFileContent } from '../../types';
-import { estimateTokens, findSafeSplitPoint } from '../../utils/chunker';
+import type { Env, ResolvedFileContent, EvidenceSource } from "../../types";
+import {
+  createEvidenceSource,
+  formatEvidenceSources,
+  MAX_EVIDENCE_EXCERPT_CHARS,
+} from "../evidence";
+import { splitTextRanges } from "../../utils/chunker";
+import { rankTextContents, type TextMatchExplanation } from "./lexicalRanking";
 import { logger } from "../../infrastructure/logger";
 import { getUploadedFileTextIndexObjectKey } from "../../upload/uploadedFileStorage";
 
-const TEXT_INDEX_VERSION = 1;
-const ENGLISH_STOPWORDS = new Set([
-  "the", "and", "for", "with", "that", "this", "from", "into", "about",
-  "please", "what", "when", "where", "which", "who", "whom", "whose",
-  "there", "their", "have", "has", "had", "been", "will", "would",
-  "could", "should", "into", "after", "before", "does", "did", "are",
-  "was", "were", "your", "my", "our", "can", "how", "why",
-]);
-const CHINESE_STOPWORDS = new Set([
-  "这个", "那个", "这些", "那些", "文件", "内容", "里面", "其中", "一下", "一下子",
-  "请问", "帮我", "告诉", "说明", "分析", "总结", "概括", "概述", "整体", "全文",
-  "主要", "哪些", "什么", "怎么", "有没有", "是否", "以及", "还有", "一下", "一下吧",
-  "一下吗", "一下呢", "部分", "章节", "段落", "文章", "文本", "资料",
-]);
+const TEXT_INDEX_VERSION = 3;
 
 export interface TextChunk {
   id: string;
@@ -25,12 +18,14 @@ export interface TextChunk {
   chunkIndex: number;
   tokenCount: number;
   content: string;
+  evidence: EvidenceSource;
 }
 
 export interface TextRetrievalIndex {
   version: number;
   fileId: string;
   fileName: string;
+  fileHash: string;
   totalTokens: number;
   chunkSizeTokens: number;
   createdAt: number;
@@ -39,6 +34,7 @@ export interface TextRetrievalIndex {
 
 export interface RetrievedTextChunk extends TextChunk {
   relevanceScore: number;
+  explanation?: TextMatchExplanation;
 }
 
 export interface TextRetrievalResult {
@@ -72,7 +68,13 @@ export async function getOrCreateTextRetrievalIndex(
   if (existing) {
     try {
       const parsed = JSON.parse(await existing.text()) as TextRetrievalIndex;
-      if (parsed.version === TEXT_INDEX_VERSION && parsed.chunkSizeTokens === chunkSizeTokens) {
+      if (
+        parsed.version === TEXT_INDEX_VERSION &&
+        parsed.chunkSizeTokens === chunkSizeTokens &&
+        parsed.fileId === file.fileId &&
+        parsed.fileHash === file.fileHash &&
+        parsed.fileName === file.fileName
+      ) {
         return parsed;
       }
     } catch (error) {
@@ -110,17 +112,19 @@ export function retrieveRelevantText(
   query: string,
   options: TextRetrievalOptions,
 ): TextRetrievalResult {
-  const extractedKeywords = extractTextKeywords(query);
-  const scoredChunks = indices
-    .flatMap((index) =>
-      index.chunks.map((chunk) => ({
-        ...chunk,
-        relevanceScore: calculateTextRelevance(chunk.content, extractedKeywords, query),
-      })),
-    )
+  const allChunks = indices.flatMap((index) => index.chunks);
+  const { keywords: extractedKeywords, scores } = rankTextContents(
+    allChunks.map((chunk) => chunk.content),
+    query,
+  );
+  const scoredChunks = allChunks
+    .map((chunk, index) => ({ ...chunk, ...scores[index] }))
     .sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-  const initialSelection = scoredChunks.filter((chunk) => chunk.relevanceScore >= options.minRelevance);
+  const initialSelection = scoredChunks.filter(
+    (chunk) =>
+      chunk.relevanceScore > 0 && chunk.relevanceScore >= options.minRelevance,
+  );
   const selectedChunks: RetrievedTextChunk[] = [];
   let selectedTokens = 0;
   let budgetExceeded = false;
@@ -148,7 +152,7 @@ export function retrieveRelevantText(
     for (const chunk of fallbackCandidates) {
       if (selectedTokens + chunk.tokenCount > options.maxPromptTokens) {
         budgetExceeded = true;
-        break;
+        continue;
       }
 
       selectedChunks.push(chunk);
@@ -156,9 +160,16 @@ export function retrieveRelevantText(
     }
   }
 
-  const totalTokens = indices.reduce((sum, index) => sum + index.totalTokens, 0);
-  const hasDirectMatch = selectedChunks.some((chunk) => chunk.relevanceScore >= 0.35);
-  const insufficient = selectedChunks.length === 0 || (!hasDirectMatch && extractedKeywords.length > 0);
+  const totalTokens = indices.reduce(
+    (sum, index) => sum + index.totalTokens,
+    0,
+  );
+  const hasDirectMatch = selectedChunks.some(
+    (chunk) => chunk.relevanceScore >= 0.35,
+  );
+  const insufficient =
+    selectedChunks.length === 0 ||
+    (!hasDirectMatch && extractedKeywords.length > 0);
 
   return {
     query,
@@ -229,7 +240,10 @@ export function retrieveOverviewText(
     selectedTokens += chunk.tokenCount;
   }
 
-  const totalTokens = indices.reduce((sum, index) => sum + index.totalTokens, 0);
+  const totalTokens = indices.reduce(
+    (sum, index) => sum + index.totalTokens,
+    0,
+  );
 
   return {
     query,
@@ -250,8 +264,12 @@ export function formatRetrievedText(result: TextRetrievalResult): string {
 
   parts.push(`### 文本检索结果`);
   parts.push(`- 查询: ${result.query}`);
-  parts.push(`- 关键词: ${result.extractedKeywords.join("、") || "无显式关键词"}`);
-  parts.push(`- 选中片段: ${result.selectedChunks.length}/${result.totalChunks}`);
+  parts.push(
+    `- 关键词: ${result.extractedKeywords.join("、") || "无显式关键词"}`,
+  );
+  parts.push(
+    `- 选中片段: ${result.selectedChunks.length}/${result.totalChunks}`,
+  );
   parts.push(`- 估算覆盖率: ${(result.coverageRatio * 100).toFixed(2)}%`);
   if (result.budgetExceeded) {
     parts.push(`- 说明: 已按预算截断片段，请优先回答当前范围内的问题`);
@@ -260,16 +278,23 @@ export function formatRetrievedText(result: TextRetrievalResult): string {
 
   for (const chunk of result.selectedChunks) {
     parts.push(`#### 文件 ${chunk.fileName} / 片段 ${chunk.chunkIndex + 1}`);
-    parts.push(`- 相关性: ${(chunk.relevanceScore * 100).toFixed(0)}%`);
+    parts.push(
+      `- 词法匹配得分: ${chunk.relevanceScore.toFixed(3)}（不是事实支持概率）`,
+    );
+    if (chunk.explanation) {
+      parts.push(
+        `- 命中词: ${chunk.explanation.matchedTerms.map((match) => match.term).join("、")}`,
+      );
+    }
     parts.push(`- 大小: ${chunk.tokenCount} tokens`);
-    parts.push(chunk.content);
+    parts.push(formatEvidenceSources([chunk.evidence]));
     parts.push("");
   }
 
   return parts.join("\n");
 }
 
-function buildTextRetrievalIndex(
+export function buildTextRetrievalIndex(
   file: ResolvedFileContent,
   chunkSizeTokens: number,
 ): TextRetrievalIndex {
@@ -280,6 +305,7 @@ function buildTextRetrievalIndex(
     version: TEXT_INDEX_VERSION,
     fileId: file.fileId,
     fileName: file.fileName,
+    fileHash: file.fileHash,
     totalTokens,
     chunkSizeTokens,
     createdAt: Date.now(),
@@ -291,127 +317,17 @@ function splitTextIntoRetrievalChunks(
   file: ResolvedFileContent,
   chunkSizeTokens: number,
 ): TextChunk[] {
-  const targetChars = Math.max(chunkSizeTokens * 3, 1200);
-  const chunks: TextChunk[] = [];
-  let start = 0;
-  let chunkIndex = 0;
-
-  while (start < file.content.length) {
-    const remainingChars = file.content.length - start;
-    let end = file.content.length;
-
-    if (remainingChars > targetChars) {
-      end = findSafeSplitPoint(file.content, start + targetChars);
-      if (end <= start) {
-        end = Math.min(file.content.length, start + targetChars);
-      }
-    }
-
-    const content = file.content.slice(start, end).trim();
-    if (content) {
-      chunks.push({
-        id: `${file.fileId}-chunk-${chunkIndex}`,
-        fileId: file.fileId,
-        fileName: file.fileName,
-        chunkIndex,
-        tokenCount: estimateTokens(content),
-        content,
-      });
-      chunkIndex++;
-    }
-
-    start = end;
-  }
-
-  return chunks;
-}
-
-function extractTextKeywords(query: string): string[] {
-  const keywords = new Set<string>();
-  const trimmedQuery = query.trim();
-  if (!trimmedQuery) {
-    return [];
-  }
-
-  const quotedMatches = [...trimmedQuery.matchAll(/["'“”‘’`]+([^"'“”‘’`]+)["'“”‘’`]+/g)];
-  for (const match of quotedMatches) {
-    const value = match[1]?.trim();
-    if (value) {
-      keywords.add(value);
-    }
-  }
-
-  const englishWords = trimmedQuery.toLowerCase().match(/[a-z0-9][a-z0-9_-]{2,}/g) || [];
-  for (const word of englishWords) {
-    if (!ENGLISH_STOPWORDS.has(word)) {
-      keywords.add(word);
-    }
-  }
-
-  const chineseParts = trimmedQuery
-    .replace(/[^\u4e00-\u9fff0-9]+/g, " ")
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  for (const part of chineseParts) {
-    if (part.length <= 4) {
-      if (!CHINESE_STOPWORDS.has(part)) {
-        keywords.add(part);
-      }
-      continue;
-    }
-
-    for (let size = Math.min(4, part.length); size >= 2; size--) {
-      for (let index = 0; index <= part.length - size; index++) {
-        const slice = part.slice(index, index + size);
-        if (!CHINESE_STOPWORDS.has(slice)) {
-          keywords.add(slice);
-        }
-      }
-    }
-  }
-
-  return [...keywords].slice(0, 24);
-}
-
-function calculateTextRelevance(content: string, keywords: string[], query: string): number {
-  const lowerContent = content.toLowerCase();
-  const normalizedQuery = query.trim().toLowerCase();
-  let score = 0;
-
-  if (normalizedQuery && normalizedQuery.length >= 6 && lowerContent.includes(normalizedQuery)) {
-    score += 0.55;
-  }
-
-  for (const keyword of keywords) {
-    const normalizedKeyword = keyword.toLowerCase();
-    if (!normalizedKeyword) {
-      continue;
-    }
-
-    if (lowerContent.includes(normalizedKeyword)) {
-      const lengthWeight = Math.min(normalizedKeyword.length / 6, 1);
-      score += 0.12 + lengthWeight * 0.1;
-      const matches = lowerContent.split(normalizedKeyword).length - 1;
-      score += Math.min(matches * 0.03, 0.18);
-    }
-  }
-
-  if (keywords.length === 0 && normalizedQuery) {
-    const compactQuery = normalizedQuery.replace(/\s+/g, "");
-    if (compactQuery && lowerContent.includes(compactQuery)) {
-      score += 0.25;
-    }
-  }
-
-  const tokenCount = estimateTokens(content);
-  if (tokenCount < 300) {
-    score -= 0.05;
-  }
-  if (tokenCount > 4500) {
-    score -= 0.08;
-  }
-
-  return Math.max(0, Math.min(1, score));
+  return splitTextRanges(
+    file.content,
+    chunkSizeTokens,
+    MAX_EVIDENCE_EXCERPT_CHARS,
+  ).map((range, chunkIndex) => ({
+    id: `${file.fileId}-chunk-${chunkIndex}`,
+    fileId: file.fileId,
+    fileName: file.fileName,
+    chunkIndex,
+    tokenCount: range.tokenCount,
+    content: file.content.slice(range.startOffset, range.endOffset),
+    evidence: createEvidenceSource(file, range.startOffset, range.endOffset),
+  }));
 }

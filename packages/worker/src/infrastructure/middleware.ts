@@ -12,25 +12,24 @@ import { createErrorDetails, ERROR_CODES, getErrorCode, getRequestType } from '.
  */
 export function withCORS(handler: Handler): Handler {
   return async (request, env) => {
-    // 处理预检请求
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Max-Age': '86400',
-        },
-      });
+    const origin = request.headers.get('Origin');
+    const allowed = (env.ALLOWED_ORIGINS || 'https://i-tool-chat.store').split(',').map(value => value.trim()).filter(Boolean);
+    if ((origin && !allowed.includes(origin)) || (request.method !== 'GET' && request.method !== 'OPTIONS' && !origin)) {
+      return createJSONResponse({ error: { message: 'Request origin is not allowed', code: 'ORIGIN_REJECTED' } }, 403);
     }
-
-    const response = await handler(request, env);
-
-    // 添加 CORS 头
-    response.headers.set('Access-Control-Allow-Origin', '*');
-
-    return response;
+    const response = request.method === 'OPTIONS' ? new Response(null, { status: 204 }) : await handler(request, env);
+    const headers = new Headers(response.headers);
+    if (origin) {
+      headers.set('Access-Control-Allow-Origin', origin);
+      headers.set('Access-Control-Allow-Credentials', 'true');
+    }
+    headers.set('Vary', 'Origin');
+    headers.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Idempotency-Key, X-Account-ID');
+    headers.set('Access-Control-Max-Age', '600');
+    headers.set('Cache-Control', 'no-store');
+    headers.set('X-Content-Type-Options', 'nosniff');
+    return new Response(response.body, { status: response.status, headers });
   };
 }
 
@@ -127,6 +126,26 @@ export function withValidation(handler: Handler): Handler {
       );
     }
 
+    // Bound the actual stream as well as Content-Length before parsers allocate it.
+    if (request.body) {
+      const limit = contentType.includes('multipart/form-data') ? 6 * 1024 * 1024 : 2 * 1024 * 1024;
+      const reader = request.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.byteLength;
+          if (total > limit) { await reader.cancel(); throw new WorkerError('Request body too large', 'BODY_TOO_LARGE', 413); }
+          chunks.push(value);
+        }
+      } finally { reader.releaseLock(); }
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+      return handler(new Request(request, { body: bytes }), env);
+    }
     return handler(request, env);
   };
 }

@@ -9,6 +9,9 @@ import { executeChatCompletionStream } from './chatCompletionStream';
 export type TextProviderName = 'bailian';
 
 export interface TextProviderConfig {
+  runtime?: SkillContext["env"]["RUNTIME_CONTROL"];
+  mock?: boolean;
+  maxOutputTokens?: number;
   provider: TextProviderName;
   model: string;
   url: string;
@@ -32,11 +35,13 @@ export function resolveTextProvider(
   const requestedModel = typeof input.model === 'string' ? input.model : '';
   const defaultModel = resolveDefaultTextModel(context.env);
 
-  return (
+  if (context.env.ENVIRONMENT === "development" && context.env.MOCK_MODEL === "true") return { provider: "bailian", model: requestedModel || defaultModel, url: "https://mock.invalid", apiKey: "local-mock", mock: true, runtime: context.env.RUNTIME_CONTROL, maxOutputTokens: input.maxTokens };
+  const config = (
     resolveRequestedProvider(requestedModel, context) ??
     resolveDefaultProvider(defaultModel, context) ??
     resolveAvailableProviderFallback(context)
   );
+  return config ? { ...config, runtime: context.env.RUNTIME_CONTROL, maxOutputTokens: input.maxTokens } : null;
 }
 
 function resolveRequestedProvider(
@@ -99,10 +104,14 @@ export async function* executeTextProviderStream(
     model: providerConfig.model,
     url: providerConfig.url,
     apiKey: providerConfig.apiKey,
+    runtime: providerConfig.runtime,
+    mock: providerConfig.mock,
     body: {
       model: providerConfig.model,
       messages,
       stream: true,
+      max_tokens: providerConfig.maxOutputTokens ?? 2048,
+      stream_options: { include_usage: true },
       temperature,
     },
   });

@@ -12,3 +12,9 @@ worker-dev.out.log
 worker-dev.err.log
 frontend-dev.log
 worker-dev.log
+packages/server/data/
+packages/server/.env
+packages/server/.env.*
+!packages/server/.env.example
+packages/server/owner-credentials.txt
+generated/node-server-deployment/

@@ -5,10 +5,13 @@ import type {
   SkillInput,
   SkillStreamChunk,
 } from '../types';
-import { resolveDefaultMultimodalModel } from '../model/defaultModels';
+import { resolveMultimodalModel } from '../model/defaultModels';
 import { executeChatCompletionStream } from './chatCompletionStream';
 
 export interface QwenMultimodalProviderConfig {
+  runtime?: SkillContext["env"]["RUNTIME_CONTROL"];
+  mock?: boolean;
+  maxOutputTokens?: number;
   model: string;
   apiKey: string;
   url: string;
@@ -24,33 +27,35 @@ export function resolveQwenMultimodalProviderConfig(
   input: SkillInput,
   context: SkillContext,
 ): QwenMultimodalProviderConfig | null {
-  if (!context.env.QWEN_API_KEY) {
+  const mock = context.env.ENVIRONMENT === "development" && context.env.MOCK_MODEL === "true";
+  if (!context.env.QWEN_API_KEY && !mock) {
     return null;
   }
 
   const requestedModel = typeof input.model === 'string' ? input.model : '';
-  const model = requestedModel
-    ? requestedModel
-    : resolveDefaultMultimodalModel(context.env);
+  const model = resolveMultimodalModel(requestedModel, context.env);
 
   return {
     model,
-    apiKey: context.env.QWEN_API_KEY,
+    apiKey: context.env.QWEN_API_KEY ?? "local-mock",
+    runtime: context.env.RUNTIME_CONTROL,
+    mock,
+    maxOutputTokens: input.maxTokens,
     url: QWEN_MULTIMODAL_URL,
   };
 }
 
 /**
- * 这里保留现有数据拼接方式：
- * 只要当前请求携带图片，所有用户消息都会附带这些图片。
- * 这不是最理想的长期形态，但它能保持现有前端请求语义不变，避免这轮重构顺手改行为。
+ * 本次上传的图片只属于最后一条用户消息，不改写历史消息的语义。
  */
 export function buildQwenMultimodalMessages(
   messages: Message[],
   images: ImageData[],
 ): unknown[] {
-  return messages.map((message) => {
-    if (message.role !== 'user' || images.length === 0) {
+  let lastUserIndex = messages.length - 1;
+  while (lastUserIndex >= 0 && messages[lastUserIndex].role !== 'user') lastUserIndex--;
+  return messages.map((message, index) => {
+    if (index !== lastUserIndex || images.length === 0) {
       return {
         role: message.role,
         content: message.content,
@@ -87,10 +92,14 @@ export async function* executeQwenMultimodalStream(
     model: providerConfig.model,
     url: providerConfig.url,
     apiKey: providerConfig.apiKey,
+    runtime: providerConfig.runtime,
+    mock: providerConfig.mock,
     body: {
       model: providerConfig.model,
       messages: buildQwenMultimodalMessages(messages, images),
       stream: true,
+      max_tokens: providerConfig.maxOutputTokens ?? 2048,
+      stream_options: { include_usage: true },
       temperature,
     },
   });

@@ -20,3 +20,21 @@ preview_bucket_name = "ai-tool-chat-uploaded-files-preview"
 tag = "v1"
 new_sqlite_classes = ["ChunkStorage"]
 
+# Isolated additions; deployment requires explicit approval.
+[[durable_objects.bindings]]
+name = "ACCOUNTS"
+class_name = "AccountDirectory"
+
+[[durable_objects.bindings]]
+name = "TASKS"
+class_name = "DurableTask"
+
+[[migrations]]
+tag = "v2-account-tasks"
+new_sqlite_classes = ["AccountDirectory", "DurableTask"]
+
+[vars]
+ENVIRONMENT = "production"
+ALLOWED_ORIGINS = "https://i-tool-chat.store"
+ALLOW_REGISTRATION = "false"
+

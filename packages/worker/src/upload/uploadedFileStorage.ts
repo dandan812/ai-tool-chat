@@ -1,6 +1,7 @@
 import type { Env, ResolvedFileContent, UploadedFileRef } from '../types';
 import { ValidationError, WorkerError } from '../types';
 import { createErrorDetails, ERROR_CODES } from '../infrastructure/observability';
+export { resolveOwnedUploadedFiles } from './ownedFiles';
 
 export function getChunkStorageStub(env: Env, fileId: string) {
   const id = env.CHUNK_STORAGE.idFromName(fileId);
@@ -40,6 +41,9 @@ export async function getUploadedFileContent(
     );
   }
 
+  if (!/^[a-f0-9]{64}$/.test(file.fileHash) || object.customMetadata?.serverContentHash !== file.fileHash) {
+    throw new WorkerError('File version changed or is unverified; please upload and create a new task', 'FILE_VERSION_CHANGED', 410);
+  }
   try {
     const content = await object.text();
     return {

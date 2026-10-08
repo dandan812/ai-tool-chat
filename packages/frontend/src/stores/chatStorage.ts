@@ -1,4 +1,6 @@
+import { accountStorageKey } from '../api/account'
 import type { ChatMessage, ImageData, UploadedFileRef } from '../types/task'
+import { isSource } from '../features/tasks/taskProtocol'
 
 export interface ChatSession {
   id: string
@@ -44,7 +46,11 @@ export function generateFallbackTitle(content: string): string {
   return content.trim().replace(/\s+/g, ' ').slice(0, TITLE_MAX_LENGTH) || '新对话'
 }
 
-export function buildUserMessageContent(content: string, images: ImageData[], files: UploadedFileRef[]): string {
+export function buildUserMessageContent(
+  content: string,
+  images: ImageData[],
+  files: UploadedFileRef[]
+): string {
   const trimmed = content.trim()
   if (trimmed) return trimmed
   if (images.length > 0) return '[图片]'
@@ -54,7 +60,7 @@ export function buildUserMessageContent(content: string, images: ImageData[], fi
 
 export function pruneStoredMessages(
   sessionList: ChatSession[],
-  messagesMap: Record<string, ChatMessage[]>,
+  messagesMap: Record<string, ChatMessage[]>
 ): Record<string, ChatMessage[]> {
   if (sessionList.length <= 3) return messagesMap
 
@@ -74,7 +80,12 @@ export function sanitizeRestoredMessages(messages: ChatMessage[]): ChatMessage[]
   while (nextMessages.length > 0) {
     const lastMessage = nextMessages[nextMessages.length - 1]
 
-    if (lastMessage?.role === 'assistant' && lastMessage.content.trim().length === 0) {
+    if (
+      lastMessage?.role === 'assistant' &&
+      lastMessage.content.trim().length === 0 &&
+      !lastMessage.taskId &&
+      !lastMessage.requestKey
+    ) {
       nextMessages.pop()
       continue
     }
@@ -86,33 +97,81 @@ export function sanitizeRestoredMessages(messages: ChatMessage[]): ChatMessage[]
 }
 
 export function sanitizeRestoredMessagesMap(
-  messagesMap: Record<string, ChatMessage[]>,
+  messagesMap: Record<string, ChatMessage[]>
 ): Record<string, ChatMessage[]> {
   return Object.fromEntries(
     Object.entries(messagesMap).map(([sessionId, messages]) => [
       sessionId,
-      sanitizeRestoredMessages(Array.isArray(messages) ? messages : []),
-    ]),
+      sanitizeRestoredMessages(Array.isArray(messages) ? messages : [])
+    ])
   )
 }
 
 export function loadChatStorage(): StorageData | null {
   try {
-    const sessionListData = localStorage.getItem(STORAGE_KEYS.SESSION_LIST)
-    const messagesMapData = localStorage.getItem(STORAGE_KEYS.MESSAGES_MAP)
-    const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID)
+    const sessionListData = localStorage.getItem(accountStorageKey(STORAGE_KEYS.SESSION_LIST))
+    const messagesMapData = localStorage.getItem(accountStorageKey(STORAGE_KEYS.MESSAGES_MAP))
+    const currentId = localStorage.getItem(accountStorageKey(STORAGE_KEYS.CURRENT_SESSION_ID))
 
     if (!sessionListData || !messagesMapData) return null
 
     const sessionList: ChatSession[] = JSON.parse(sessionListData)
-    const rawMessagesMap: Record<string, ChatMessage[]> = JSON.parse(messagesMapData)
+    const rawMessagesMap: unknown = JSON.parse(messagesMapData)
 
-    if (!Array.isArray(sessionList)) return null
-    const messagesMap = sanitizeRestoredMessagesMap(rawMessagesMap)
+    if (
+      !Array.isArray(sessionList) ||
+      !sessionList.every(
+        (session) =>
+          session &&
+          typeof session.id === 'string' &&
+          session.id.length > 0 &&
+          typeof session.title === 'string' &&
+          Number.isFinite(session.createdAt) &&
+          Number.isFinite(session.updatedAt)
+      )
+    )
+      return null
+    if (new Set(sessionList.map((session) => session.id)).size !== sessionList.length) return null
+    if (!rawMessagesMap || typeof rawMessagesMap !== 'object' || Array.isArray(rawMessagesMap))
+      return null
+    const messagesMap = sanitizeRestoredMessagesMap(
+      Object.fromEntries(
+        sessionList.map((session) => {
+          const items = (rawMessagesMap as Record<string, unknown>)[session.id]
+          const messages = Array.isArray(items)
+            ? items
+                .filter(
+                  (item): item is ChatMessage =>
+                    item &&
+                    ['user', 'assistant', 'system'].includes(item.role) &&
+                    typeof item.content === 'string'
+                )
+                .map((item) => ({
+                  ...item,
+                  taskId: typeof item.taskId === 'string' && item.taskId ? item.taskId : undefined,
+                  requestKey:
+                    typeof item.requestKey === 'string' && item.requestKey
+                      ? item.requestKey
+                      : undefined,
+                  sources: Array.isArray(item.sources) ? item.sources.filter(isSource) : undefined
+                }))
+            : []
+          return [session.id, messages]
+        })
+      )
+    )
+    for (const messages of Object.values(messagesMap)) {
+      const usedIds = new Set<string>()
+      for (const message of messages) {
+        if (typeof message.id !== 'string' || !message.id || usedIds.has(message.id))
+          message.id = crypto.randomUUID()
+        usedIds.add(message.id)
+      }
+    }
     const restoredCurrentSessionId =
       currentId && sessionList.some((session) => session.id === currentId)
         ? currentId
-        : sessionList[0]?.id ?? ''
+        : (sessionList[0]?.id ?? '')
 
     return {
       sessionList,
@@ -128,9 +187,9 @@ export function loadChatStorage(): StorageData | null {
 export function saveChatStorage(
   sessionList: ChatSession[],
   messagesMap: Record<string, ChatMessage[]>,
-  currentSessionId: string,
+  currentSessionId: string
 ): void {
-  localStorage.setItem(STORAGE_KEYS.SESSION_LIST, JSON.stringify(sessionList))
-  localStorage.setItem(STORAGE_KEYS.MESSAGES_MAP, JSON.stringify(messagesMap))
-  localStorage.setItem(STORAGE_KEYS.CURRENT_SESSION_ID, currentSessionId)
+  localStorage.setItem(accountStorageKey(STORAGE_KEYS.SESSION_LIST), JSON.stringify(sessionList))
+  localStorage.setItem(accountStorageKey(STORAGE_KEYS.MESSAGES_MAP), JSON.stringify(messagesMap))
+  localStorage.setItem(accountStorageKey(STORAGE_KEYS.CURRENT_SESSION_ID), currentSessionId)
 }

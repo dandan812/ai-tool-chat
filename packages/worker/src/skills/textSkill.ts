@@ -6,7 +6,6 @@
  * 只负责把输入交给百炼兼容 provider，并在失败时统一兜底。
  */
 import type { Skill, SkillInput, SkillContext, SkillStreamChunk, Message } from '../types';
-import { logger } from '../infrastructure/logger';
 import {
   executeTextProviderStream,
   resolveTextProvider,
@@ -26,15 +25,7 @@ export const textSkill: Skill = {
       return;
     }
 
-    try {
-      yield* executeTextProviderStream(
-        providerConfig,
-        messages as Message[],
-        temperature,
-      );
-    } catch (error) {
-      logger.error('Text provider request failed', error);
-      yield { type: 'error', error: String(error) };
-    }
+    // 让预算、取消与供应商异常保留原错误类型，统一由任务边界处理。
+    yield* executeTextProviderStream(providerConfig, messages as Message[], temperature);
   },
 };

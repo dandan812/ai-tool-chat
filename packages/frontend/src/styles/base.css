@@ -29,9 +29,7 @@ body {
   font-weight: 400;
   line-height: 1.6;
   color: var(--text-primary);
-  background:
-    radial-gradient(circle at top left, var(--accent-soft) 0%, transparent 24%),
-    linear-gradient(180deg, var(--surface-canvas) 0%, var(--bg-primary) 100%);
+  background: var(--bg-primary);
   transition: background-color var(--transition-slow), color var(--transition-slow), background var(--transition-slow);
 }
 
@@ -47,7 +45,7 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
   font-weight: 600;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   color: var(--text-primary);
 }
 
@@ -266,7 +264,7 @@ h6 { font-size: var(--text-base); font-weight: 600; }
 }
 
 [data-theme='dark'] .markdown-body pre {
-  background: var(--gray-950) !important;
+  background: var(--bg-secondary) !important;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
 }

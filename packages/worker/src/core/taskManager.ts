@@ -8,6 +8,7 @@
  * 方便初学者先理解主链路，再按需深入各个子层。
  */
 import type { ChatRequest, Env, Task } from '../types';
+import { WorkerError } from '../types';
 import { now } from '../utils/id';
 import { logger } from '../infrastructure/logger';
 import { TaskStepRunner } from './taskStepRunner';
@@ -19,13 +20,13 @@ export class TaskManager {
   private readonly taskStore: TaskStore;
   private readonly stepRunner: TaskStepRunner;
 
-  constructor(env: Env) {
+  constructor(private readonly env: Env) {
     this.taskStore = new TaskStore();
     this.stepRunner = new TaskStepRunner(env, this.taskStore);
   }
 
-  createTask(request: ChatRequest): Task {
-    return this.taskStore.createTask(request);
+  createTask(request: ChatRequest, taskId?: string): Task {
+    return this.taskStore.createTask(request, taskId);
   }
 
   async *executeTask(
@@ -41,14 +42,23 @@ export class TaskManager {
     yield { type: 'task', data: { task, event: 'started' } };
 
     const startTime = now();
-    const timeoutId = startTaskTimeout(this.taskStore, taskId, TASK_TIMEOUT_MS);
+    const timeoutId = this.env.RUNTIME_CONTROL
+      ? undefined
+      : startTaskTimeout(this.taskStore, taskId, TASK_TIMEOUT_MS);
 
     try {
+      this.env.RUNTIME_CONTROL?.signal.throwIfAborted();
       yield* this.stepRunner.run(task, request);
+      this.env.RUNTIME_CONTROL?.signal.throwIfAborted();
       clearTimeout(timeoutId);
 
       if (task.status === 'running') {
         this.taskStore.markCompleted(taskId);
+      }
+      if (task.status === 'completed') {
+        yield { type: 'complete', data: { task } };
+      } else {
+        yield { type: 'error', data: { task, error: task.error || 'Task did not complete' } };
       }
 
       logger.info('Task completed', {
@@ -59,7 +69,7 @@ export class TaskManager {
       clearTimeout(timeoutId);
       logger.error('Task execution failed', { taskId, error });
       this.taskStore.markFailed(taskId, String(error));
-      yield { type: 'error', data: { error: String(error), task } };
+      yield { type: 'error', data: { error: String(error), code: error instanceof WorkerError ? error.code : 'TASK_EXECUTION_FAILED', task } };
     }
   }
 

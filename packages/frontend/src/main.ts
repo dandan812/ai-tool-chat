@@ -50,11 +50,7 @@ if (!isOnline()) {
 if (isDevelopment) {
   // 页面加载时间
   window.addEventListener('load', () => {
-    const timing = performance.timing
-    if (timing) {
-      const pageLoadTime = timing.loadEventEnd - timing.navigationStart
-      debug.log(`[Performance] Page load time: ${pageLoadTime}ms`)
-    }
+    debug.log(`[Performance] Load event reached: ${Math.round(performance.now())}ms`)
   })
 
   // 首次内容绘制时间

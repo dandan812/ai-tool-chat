@@ -1,0 +1,40 @@
+[Unit]
+Description=AI Tool Chat Node backend
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=ai-tool-chat
+Group=ai-tool-chat
+WorkingDirectory=/opt/ai-tool-chat/current
+EnvironmentFile=/etc/ai-tool-chat/server.env
+ExecStart=/opt/ai-tool-chat/node/bin/node /opt/ai-tool-chat/current/backend/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+UMask=0077
+StateDirectory=ai-tool-chat
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/ai-tool-chat
+CPUQuota=50%
+MemoryHigh=384M
+MemoryMax=512M
+TasksMax=64
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target

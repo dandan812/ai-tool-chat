@@ -22,9 +22,9 @@ import {
 } from '../model/textModel';
 import {
   resolveDefaultFileModel,
-  resolveDefaultMultimodalModel,
   resolveDefaultTextModel,
 } from '../model/textModel';
+import { resolveMultimodalModel } from '../model/defaultModels';
 
 /**
  * Skill 注册表
@@ -91,11 +91,7 @@ export function getSkill(name: string): Skill | undefined {
  * @returns 最适合处理该输入的 Skill
  * 
  * 选择策略（优先级）：
- *   1. 如果指定了 model → 使用对应的 Skill
- *   2. 如果有图片 → 使用 multimodalSkill（多模态）
- *   3. 如果有文件 → 使用 fileSkill
- *   4. 根据 DEFAULT_MODEL 环境变量选择默认 Skill
- *   5. 默认 → textSkill（纯文本）
+ *   先按图片、文件、文本选择能力，再解析该能力的模型配置。
  * 
  * 为什么这样设计？
  *   自动选择让用户无需关心底层使用哪个 AI 模型，
@@ -141,32 +137,18 @@ export function selectSkill(
     return isBailianTextModel(selectedModel);
   }
 
-  function createFileSelection(): SelectedSkill {
-    const selectedModel = resolveDefaultFileModel(env);
-    return createSelection(
-      fileSkill,
-      selectedModel,
-      '文件分析',
-      `调用 ${selectedModel} 分析上传内容`
-    );
-  }
-
-  // 规则 1：如果指定了 model，使用对应的 Skill
-  if (model && hasKnownTextProvider(model)) {
-    return createTextSelection(model);
-  }
-
-  // 规则 2：如果有图片，使用多模态 Skill
+  // 先按输入选能力。模型只能调整配置，不能绕过文件读取或图片处理。
   if (images.length > 0) {
-    const multimodalModel = resolveDefaultMultimodalModel(env);
+    const multimodalModel = resolveMultimodalModel(model, env);
     return createSelection(multimodalSkill, multimodalModel, '多模态处理', `调用 ${multimodalModel} 处理图文`);
   }
 
-  // 规则 3：如果有文件，使用文件处理 Skill
   if (files.length > 0) {
-    return createFileSelection();
+    const selectedModel = model || resolveDefaultFileModel(env);
+    return createSelection(fileSkill, selectedModel, '文件分析', `调用 ${selectedModel} 分析上传内容`);
   }
 
+  if (model && hasKnownTextProvider(model)) return createTextSelection(model);
   const defaultTextModel = resolveDefaultTextModel(env);
   return createTextSelection(defaultTextModel);
 }

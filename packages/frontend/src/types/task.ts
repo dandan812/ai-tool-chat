@@ -6,7 +6,7 @@
  *
  * 架构说明：
  * - Task：表示单个聊天请求，管理整个任务的生命周期
- * - Steps：任务执行的顺序阶段（plan → skill → respond）
+ * - Steps：真实处理阶段（route → skill），Skill 内部进度更新同一个步骤
  * - Skills：可插拔的处理模块（textSkill、multimodalSkill 等）
  *
  * @package frontend/src/types
@@ -19,15 +19,21 @@
  * 前后端统一使用的最小消息结构
  */
 export interface ChatMessage {
+  /** Local identity; optional for older stored conversations and API callers. */
+  id?: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  taskId?: string;
+  requestKey?: string;
+  sources?: EvidenceSource[];
+  metrics?: TaskMetrics;
 }
 
 /**
  * 任务状态枚举
  * 表示任务在执行过程中的不同阶段
  */
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Task 任务接口
@@ -80,13 +86,13 @@ export type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
  * 步骤类型枚举
  * 定义了所有可能的步骤类型，对应任务执行的不同阶段
  *
- * - plan：分析用户输入，制定执行计划
+ * - route：根据输入选择处理能力，不调用模型进行规划
  * - skill：调用具体的 AI 模型
  * - mcp：执行模型上下文协议（MCP）工具
  * - think：内部思考过程（可选）
- * - respond：生成最终响应内容
+ * - plan/respond/mcp/think：保留用于读取旧任务记录
  */
-export type StepType = 'plan' | 'skill' | 'mcp' | 'think' | 'respond';
+export type StepType = 'route' | 'skill' | 'plan' | 'mcp' | 'think' | 'respond';
 
 /**
  * Step 步骤接口
@@ -119,6 +125,8 @@ export interface Step {
   name: string;
   /** 步骤详细描述（可选） */
   description?: string;
+  /** Skill 报告的实际处理进度，不代表模型 token 生成百分比。 */
+  progress?: { message: string; current: number; total: number };
   /** 步骤输入数据（类型取决于 step type） */
   input?: unknown;
   /**
@@ -374,3 +382,6 @@ export interface ToolResult {
   /** 是否为错误结果 */
   isError?: boolean;
 }
+
+export interface EvidenceSource { sourceId: string; fileId: string; fileName: string; fileHash: string; excerpt: string; startLine: number; endLine: number; startOffset: number; endOffset: number }
+export interface TaskMetrics { elapsedMs: number; firstContentMs: number | null; modelCalls: number; inputTokens: number | null; outputTokens: number | null; tokenSource: 'provider' | 'estimated' | 'unknown'; estimatedCost: number | null; currency: string | null; costSource: 'estimated' | 'unknown' }

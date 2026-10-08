@@ -5,9 +5,10 @@
 
 // ==================== 基础类型 ====================
 
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
-export type StepType = 'plan' | 'skill' | 'mcp' | 'think' | 'respond';
+// plan/respond 等旧类型保留，用于读取已有任务记录。
+export type StepType = 'route' | 'skill' | 'plan' | 'mcp' | 'think' | 'respond';
 export type SkillType = 'text' | 'multimodal' | 'code' | 'tool';
 export type ToolingMode = 'disabled' | 'experimental' | 'active';
 
@@ -84,6 +85,8 @@ export interface Task {
 }
 
 export interface TaskMetadata {
+  sources?: EvidenceSource[];
+  metrics?: TaskMetrics;
   model?: string;
   skill?: string;
   temperature?: number;
@@ -108,6 +111,7 @@ export interface Step {
   status: StepStatus;
   name: string;
   description?: string;
+  progress?: ProgressInfo;
   input?: unknown;
   output?: unknown;
   error?: string;
@@ -154,7 +158,9 @@ export interface SkillContext {
 }
 
 export interface SkillStreamChunk {
-  type: 'content' | 'tool_call' | 'tool_result' | 'error' | 'complete' | 'progress';
+  type: 'content' | 'tool_call' | 'tool_result' | 'error' | 'complete' | 'progress' | 'sources' | 'usage';
+  sources?: EvidenceSource[];
+  usage?: ModelUsage;
   content?: string;
   toolCall?: ToolCall;
   toolResult?: ToolResult;
@@ -306,7 +312,62 @@ export interface ToolResult {
 
 // ==================== 环境变量 ====================
 
+export interface EvidenceSource {
+  sourceId: string;
+  fileId: string;
+  fileName: string;
+  fileHash: string;
+  excerpt: string;
+  startLine: number;
+  endLine: number;
+  startOffset: number;
+  endOffset: number;
+}
+
+export interface ModelUsage {
+  callId: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  tokenSource: 'provider' | 'estimated' | 'unknown';
+  outcome: 'completed' | 'failed' | 'cancelled' | 'unknown';
+}
+
+export interface ModelRuntimeControl {
+  signal: AbortSignal;
+  beforeCall(input: {callId: string; model: string; estimatedInputTokens: number; maxOutputTokens: number}): Promise<void>;
+  afterCall(input: ModelUsage): Promise<void>;
+}
+
+export interface TaskMetrics {
+  elapsedMs: number;
+  firstContentMs: number | null;
+  modelCalls: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  tokenSource: 'provider' | 'estimated' | 'unknown';
+  estimatedCost: number | null;
+  currency: string | null;
+  costSource: 'estimated' | 'unknown';
+}
+
 export interface Env {
+  ACCOUNTS?: DurableObjectNamespace;
+  TASKS?: DurableObjectNamespace;
+  ALLOWED_ORIGINS?: string;
+  ALLOW_REGISTRATION?: string;
+  ALLOW_GUEST_ACCESS?: string;
+  MAX_GUEST_SESSIONS?: string;
+  ENVIRONMENT?: string;
+  DAILY_TOKEN_BUDGET?: string;
+  TASK_TOKEN_BUDGET?: string;
+  MAX_CONCURRENT_TASKS?: string;
+  MAX_MODEL_CALLS?: string;
+  MAX_FILE_BYTES?: string;
+  MAX_USER_FILE_BYTES?: string;
+  MODEL_PRICES_JSON?: string;
+  MOCK_MODEL?: string;
+  RUNTIME_CONTROL?: ModelRuntimeControl;
   QWEN_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;

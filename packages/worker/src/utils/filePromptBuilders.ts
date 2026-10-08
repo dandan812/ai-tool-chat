@@ -1,4 +1,5 @@
 import type { Message } from '../types';
+import { EVIDENCE_INSTRUCTIONS } from '../retrieval/evidence';
 
 interface TokenSummary {
   totalOriginalTokens: number;
@@ -32,7 +33,7 @@ export function createSmallFileMessages(fileContents: string, userQuestion: stri
   return [
     {
       role: 'system',
-      content: '你是一个文件分析助手。用户会上传一些文本文件，请根据文件内容回答用户的问题。',
+      content: `你是一个文件分析助手。用户会上传一些文本文件，请根据文件内容回答用户的问题。\n${EVIDENCE_INSTRUCTIONS}`,
     },
     {
       role: 'user',
@@ -57,9 +58,9 @@ export function createTextRetrievalMessages(
 注入模型大小: ${summary.totalProcessedTokens} tokens
 节省 Token: ${savedTokens}
 选中片段数: ${summary.selectedChunkCount}
-${summary.budgetExceeded ? '由于预算限制，部分相关片段未注入。' : '当前片段已覆盖主要相关内容。'}
+${summary.budgetExceeded ? '由于预算限制，部分相关片段未注入。' : '仅提供本次检索片段，不代表覆盖全文。'}
 
-请只基于提供的片段回答问题。如果信息不足，请明确说明，并建议用户缩小范围、指定章节、关键词或段落。`,
+请只基于提供的片段回答问题。如果信息不足，请明确说明，并建议用户缩小范围、指定章节、关键词或段落。\n${EVIDENCE_INSTRUCTIONS}`,
     },
     {
       role: 'user',
@@ -83,7 +84,7 @@ export function createTextOverviewMessages(
 代表性片段数: ${summary.selectedChunkCount}
 ${summary.budgetExceeded ? '片段数量受预算限制，回答时请明确说明可能存在遗漏。' : '片段已覆盖文件的多个位置。'}
 
-请基于这些代表性片段给出整体层面的概览、主题、结构和重点。如果无法确定某个细节，请明确说明该结论只是基于抽样片段。`,
+请基于这些代表性片段给出整体层面的概览、主题、结构和重点。如果无法确定某个细节，请明确说明该结论只是基于抽样片段。\n${EVIDENCE_INSTRUCTIONS}`,
     },
     {
       role: 'user',
@@ -107,7 +108,7 @@ export function createLargeFileAnswerMessages(
     {
       role: 'system',
       content:
-        '你是一个文件分析助手。用户上传了一个大文件，已经分块提取了摘要。请基于这些摘要回答用户问题。',
+        `你是一个文件分析助手。以下摘要是模型派生内容，不是原文证据，不能据此编造原文位置。\n${EVIDENCE_INSTRUCTIONS}`,
     },
     {
       role: 'user',
@@ -124,7 +125,7 @@ export function createChunkSummaryMessages(chunk: string): Message[] {
     {
       role: 'system',
       content:
-        '你是一个文件分析助手。用户上传了一个大文件，已经分块。请提取当前分块的核心内容和结构。',
+        `你是一个文件分析助手。用户上传了一个大文件，已经分块。请提取当前分块的核心内容和结构。\n${EVIDENCE_INSTRUCTIONS}`,
     },
     {
       role: 'user',
@@ -147,7 +148,7 @@ export function createRagMessages(
 检索后大小: ${summary.totalProcessedTokens} tokens
 Token 节省率: ${(summary.reductionRatio * 100).toFixed(1)}%
 
-请基于以下检索到的代码片段回答用户问题。如果信息不足，请告知用户需要查看更多代码。`,
+请基于以下检索到的代码片段回答用户问题。如果信息不足，请告知用户需要查看更多代码。\n${EVIDENCE_INSTRUCTIONS}`,
     },
     {
       role: 'user',
@@ -171,7 +172,7 @@ export function createMixedFileMessages(
 处理后大小: ${summary.totalProcessedTokens} tokens
 Token 节省率: ${(summary.reductionRatio * 100).toFixed(1)}%
 
-请基于以下文件内容回答用户问题。`,
+请基于以下文件内容回答用户问题。压缩文本不是原文证据，不能为其编造原文位置。\n${EVIDENCE_INSTRUCTIONS}`,
     },
     {
       role: 'user',

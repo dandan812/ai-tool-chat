@@ -3,6 +3,30 @@ import { createMockEnv } from '../test/mocks';
 import { selectSkill } from './index';
 
 describe('selectSkill', () => {
+  it.each(['glm-5', 'qwen-plus', 'unknown-text-model'])('图片请求不向上游传递文本模型 %s', (model) => {
+    const selected = selectSkill(
+      { model, images: [{}] },
+      createMockEnv({ DEFAULT_MULTIMODAL_MODEL: 'qwen-vl-plus' }),
+    );
+    expect(selected).toMatchObject({
+      skill: { name: 'multimodal-chat' }, model: 'qwen-vl-plus',
+    });
+  });
+  it('保留部署明确配置的图片模型', () => {
+    expect(selectSkill(
+      { model: 'configured-vision-model', images: [{}] },
+      createMockEnv({ DEFAULT_MULTIMODAL_MODEL: 'configured-vision-model' }),
+    ).model).toBe('configured-vision-model');
+  });
+  it('指定文本模型不能绕过文件或图片能力', () => {
+    const env = createMockEnv();
+    expect(selectSkill({ model: 'qwen-plus', files: [{}] }, env)).toMatchObject({
+      skill: { name: 'file-chat' }, model: 'qwen-plus',
+    });
+    expect(selectSkill({ model: 'qwen-vl-max', images: [{}] }, env)).toMatchObject({
+      skill: { name: 'multimodal-chat' }, model: 'qwen-vl-max',
+    });
+  });
   it('纯文本请求应选择文本技能和默认文本模型', () => {
     const selectedSkill = selectSkill(
       { messages: [{ role: 'user', content: '你好' }] },

@@ -72,3 +72,16 @@ export function resolveDefaultMultimodalModel(env?: Partial<DefaultModelEnv>): s
 
   return DEFAULT_QWEN_MULTIMODAL_MODEL;
 }
+
+export function resolveMultimodalModel(
+  requestedModel: string | undefined,
+  env?: Partial<DefaultModelEnv>,
+): string {
+  const fallback = resolveDefaultMultimodalModel(env);
+  const requested = requestedModel?.trim();
+  // 只接受已接入的视觉系列或部署配置的图片模型，不把文本模型直接传给图片接口。
+  if (requested && (requested === fallback || /^qwen(?:3)?-vl(?:-|$)/i.test(requested))) {
+    return requested;
+  }
+  return fallback;
+}

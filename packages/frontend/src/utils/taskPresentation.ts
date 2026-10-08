@@ -1,6 +1,7 @@
 import type { Step, Task } from '../types/task'
 
 const STEP_TYPE_LABELS: Record<string, string> = {
+  route: '选择处理方式',
   plan: '分析请求',
   skill: '调用模型',
   mcp: '执行工具',
@@ -27,6 +28,7 @@ const MODEL_LABELS: Record<string, string> = {
 }
 
 export function getStepTypeLabel(type: string, fallback: string): string {
+  if (type === 'skill' && fallback) return fallback
   return STEP_TYPE_LABELS[type] || fallback
 }
 
@@ -53,12 +55,16 @@ export function getActiveStep(steps: Step[]): Step | null {
 
 export function getTaskStatusText(task: Task | null, steps: Step[]): string {
   if (!task) return '等待执行'
+  if (task.status === 'cancelled') return '已取消'
   if (task.status === 'failed') return '执行失败'
   if (task.status === 'completed') return '已完成'
   return getActiveStep(steps) ? '执行中' : '准备中'
 }
 
-export function getActiveStepText(steps: Step[]): string {
+export function getActiveStepText(steps: Step[], task: Task | null = null): string {
+  if (task?.status === 'completed') return '处理完成'
+  if (task?.status === 'failed') return '处理失败'
+  if (task?.status === 'cancelled') return '任务已取消'
   const activeStep = getActiveStep(steps)
   if (!activeStep) return '等待新的任务开始'
 

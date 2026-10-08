@@ -1,9 +1,7 @@
 # 本地 Worker 开发环境变量
-# 至少填写一个可用的模型 API Key，文本对话推荐使用 GLM_API_KEY 或 QWEN_API_KEY
+# 当前 provider 使用百炼兼容接口；模型名称是示例，须确认账户已开通。
 
 DEFAULT_MODEL=qwen3.5-flash-2026-02-23
 DEFAULT_MULTIMODAL_MODEL=qwen3.5-plus
-GLM_API_KEY=your_glm_api_key_here
-# QWEN_API_KEY=your_qwen_api_key_here
-# OPENAI_API_KEY=your_openai_api_key_here
-# DEEPSEEK_API_KEY=your_deepseek_api_key_here
+QWEN_API_KEY=your_qwen_api_key_here
+# DEFAULT_FILE_MODEL 可独立配置，未设置时沿用 DEFAULT_MODEL
