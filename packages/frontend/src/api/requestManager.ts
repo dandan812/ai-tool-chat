@@ -1,4 +1,6 @@
-import { accountStorageKey, apiJSON } from './account'
+import { accountStorageKey, accountHeaders, getAccountRevision, APIError, apiJSON } from './account'
+import { API_BASE_URL } from '../config'
+import { readTaskEventStream } from './taskEventStream'
 import type {
   ChatMessage,
   EvidenceSource,
@@ -23,6 +25,7 @@ export interface TaskRequest {
   requestKey?: string
 }
 export interface TaskCallbacks {
+  onObservationReady?: (flushContent: () => void) => void
   onTaskStart?: (task: Task) => void
   onTaskUpdate?: (task: Task) => void
   onStepStart?: (step: Step) => void
@@ -46,7 +49,7 @@ function canRetry(error: unknown) {
     (error as Error & { status?: number; statusCode?: number }).status ??
     (error as Error & { statusCode?: number }).statusCode
   if (status !== undefined) return status === 429 || status >= 500
-  // apiJSON currently exposes HTTP failures as plain Error, fetch failures as TypeError.
+  // Fetch network failures have no HTTP status.
   return error instanceof TypeError
 }
 
@@ -68,17 +71,80 @@ async function delay(milliseconds: number, signal?: AbortSignal) {
 
 export class TaskRequestManager {
   private accountScope = accountStorageKey('task-observation')
+  private accountRevision = getAccountRevision()
   private callbacks: TaskCallbacks
   private signal?: AbortSignal
+  private content: string[] = []
+  private frame?: number
   constructor(callbacks: TaskCallbacks, signal?: AbortSignal) {
     this.callbacks = callbacks
     this.signal = signal
+    this.callbacks.onObservationReady?.(() => this.flushContent())
   }
 
   private ensureActive() {
     this.signal?.throwIfAborted()
-    if (accountStorageKey('task-observation') !== this.accountScope) {
+    if (!this.isCurrentAccount()) {
       throw new DOMException('Account changed', 'AbortError')
+    }
+  }
+
+  private isCurrentAccount() {
+    return (
+      getAccountRevision() === this.accountRevision &&
+      accountStorageKey('task-observation') === this.accountScope
+    )
+  }
+
+  private flushContent() {
+    if (this.frame !== undefined) cancelAnimationFrame(this.frame)
+    this.frame = undefined
+    const content = this.content.join('')
+    this.content = []
+    // An explicit stop preserves received text; an account switch must never leak it.
+    if (content && this.isCurrentAccount()) this.callbacks.onContent?.(content)
+  }
+
+  private async observe(path: string, receive: (page: unknown) => boolean): Promise<boolean> {
+    this.ensureActive()
+    const response = await fetch(API_BASE_URL + path, {
+      credentials: 'include',
+      headers: { ...accountHeaders(), Accept: 'text/event-stream' },
+      signal: this.signal
+    })
+    try {
+      this.ensureActive()
+      if (!response.ok) {
+        const result = await response.json().catch(() => null)
+        this.ensureActive()
+        const code = result?.code ?? result?.error?.code
+        if (response.status === 401 || code === 'ACCOUNT_CHANGED')
+          window.dispatchEvent(new Event('account-expired'))
+        const message = typeof result?.error === 'string' ? result.error : result?.error?.message
+        throw new APIError(
+          message || '请求失败（' + response.status + '）',
+          response.status,
+          code,
+          response.headers?.get('X-Request-ID')
+        )
+      }
+      const contentType = response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase()
+      if (contentType === 'application/json') {
+        const page: unknown = await response.json()
+        this.ensureActive()
+        return receive(page)
+      }
+      if (contentType !== 'text/event-stream' || !response.body) throw new TaskProtocolError()
+      for await (const page of readTaskEventStream(
+        response.body,
+        () => this.ensureActive(),
+        this.signal
+      )) {
+        if (receive(page)) return true
+      }
+      throw new TypeError('任务事件连接中断。任务记录保留，可从任务中心重新打开。')
+    } finally {
+      await response.body?.cancel().catch(() => {})
     }
   }
 
@@ -117,25 +183,34 @@ export class TaskRequestManager {
   async resume(taskId: string): Promise<void> {
     let cursor = 0
     let reportedError = false
+    let retries = 0
     try {
-      while (!this.signal?.aborted) {
+      while (true) {
         this.ensureActive()
-        if (document.visibilityState === 'hidden') {
-          await delay(1500, this.signal)
+        let terminal: boolean
+        try {
+          terminal = await this.observe(
+            '/tasks/' + encodeURIComponent(taskId) + '/events?after=' + cursor,
+            (input) => {
+              const page = readEventPage(input, taskId, cursor)
+              for (const event of page.events) {
+                this.ensureActive()
+                this.dispatch(event)
+                if (event.type === 'error') reportedError = true
+                cursor = event.id
+              }
+              return page.terminal
+            }
+          )
+        } catch (error) {
+          this.ensureActive()
+          if (!canRetry(error) || retries >= 4) throw error
+          this.flushContent()
+          await delay(Math.min(8000, ++retries * 1500), this.signal)
           continue
         }
-        const page = readEventPage(
-          await this.read('/tasks/' + encodeURIComponent(taskId) + '/events?after=' + cursor),
-          taskId,
-          cursor
-        )
-        for (const event of page.events) {
-          this.ensureActive()
-          this.dispatch(event)
-          if (event.type === 'error') reportedError = true
-          cursor = event.id
-        }
-        if (page.terminal) {
+        if (terminal) {
+          this.flushContent()
           // Retry this read without replaying already delivered content.
           const task = readTaskSnapshot(
             await this.read('/tasks/' + encodeURIComponent(taskId)),
@@ -154,20 +229,29 @@ export class TaskRequestManager {
             )
           return
         }
-        await delay(1000, this.signal)
+        // Only an explicitly negotiated JSON response reaches this compatibility path.
+        await delay(500, this.signal)
       }
     } catch (error) {
+      this.flushContent()
       this.report(error)
+    } finally {
+      this.flushContent()
     }
   }
 
   private dispatch(event: TaskEvent) {
+    if (event.type !== 'content' && event.type !== 'usage') {
+      this.flushContent()
+      this.ensureActive()
+    }
     switch (event.type) {
       case 'usage':
         // 用量由后端结算，最终快照提供汇总；仍消费事件以保持游标连续。
         break
       case 'content':
-        this.callbacks.onContent?.(event.data.content)
+        this.content.push(event.data.content)
+        if (this.frame === undefined) this.frame = requestAnimationFrame(() => this.flushContent())
         break
       case 'sources':
         this.callbacks.onSources?.(event.data.sources)
@@ -198,7 +282,7 @@ export class TaskRequestManager {
   private report(error: unknown) {
     if (
       this.signal?.aborted ||
-      accountStorageKey('task-observation') !== this.accountScope ||
+      !this.isCurrentAccount() ||
       (error instanceof Error && error.name === 'AbortError')
     )
       return

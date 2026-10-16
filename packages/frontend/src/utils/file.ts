@@ -4,13 +4,6 @@
  */
 
 /**
- * 生成唯一 ID
- */
-export function generateId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
-}
-
-/**
  * 支持的文本文件类型
  */
 export const SUPPORTED_TEXT_TYPES = [
@@ -23,7 +16,7 @@ export const SUPPORTED_TEXT_TYPES = [
   'text/yaml',
   'application/json',
   'application/xml',
-  'application/yaml',
+  'application/yaml'
   // 代码文件（按扩展名判断更可靠）
 ]
 
@@ -31,15 +24,52 @@ export const SUPPORTED_TEXT_TYPES = [
  * 支持的文本文件扩展名
  */
 export const SUPPORTED_EXTENSIONS = [
-  'txt', 'md', 'markdown',
-  'csv', 'json', 'xml', 'yaml', 'yml',
-  'js', 'ts', 'jsx', 'tsx', 'mjs',
-  'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cc',
-  'html', 'htm', 'css', 'scss', 'sass', 'less',
-  'go', 'rs', 'rb', 'php', 'swift', 'kt', 'kts',
-  'sql', 'sh', 'bash', 'ps1', 'zsh',
-  'log', 'conf', 'ini', 'env', 'properties',
-  'vue', 'svelte', 'svg'
+  'txt',
+  'md',
+  'markdown',
+  'csv',
+  'json',
+  'xml',
+  'yaml',
+  'yml',
+  'js',
+  'ts',
+  'jsx',
+  'tsx',
+  'mjs',
+  'py',
+  'java',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'cc',
+  'html',
+  'htm',
+  'css',
+  'scss',
+  'sass',
+  'less',
+  'go',
+  'rs',
+  'rb',
+  'php',
+  'swift',
+  'kt',
+  'kts',
+  'sql',
+  'sh',
+  'bash',
+  'ps1',
+  'zsh',
+  'log',
+  'conf',
+  'ini',
+  'env',
+  'properties',
+  'vue',
+  'svelte',
+  'svg'
 ]
 
 /**
@@ -50,10 +80,40 @@ export function isSupportedTextFile(file: File): boolean {
   if (SUPPORTED_TEXT_TYPES.includes(file.type)) {
     return true
   }
-  
+
   // 再检查扩展名（更可靠）
   const ext = file.name.split('.').pop()?.toLowerCase() || ''
   return SUPPORTED_EXTENSIONS.includes(ext)
+}
+
+export const SUPPORTED_DOCUMENT_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+]
+
+export const SUPPORTED_DOCUMENT_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx']
+
+export const SUPPORTED_UPLOAD_ACCEPT = [
+  ...SUPPORTED_TEXT_TYPES,
+  ...SUPPORTED_DOCUMENT_TYPES,
+  ...[...SUPPORTED_EXTENSIONS, ...SUPPORTED_DOCUMENT_EXTENSIONS].map((ext) => `.${ext}`)
+].join(',')
+
+/** Documents use server-side parsing; SVG source remains eligible for text/code upload. */
+export function isSupportedUploadFile(file: File): boolean {
+  const mimeType = file.type.toLowerCase()
+  if (mimeType.startsWith('image/')) {
+    return mimeType === 'image/svg+xml' && getFileExtension(file.name) === 'svg'
+  }
+
+  return (
+    isSupportedTextFile(file) ||
+    SUPPORTED_DOCUMENT_TYPES.includes(mimeType) ||
+    SUPPORTED_DOCUMENT_EXTENSIONS.includes(getFileExtension(file.name))
+  )
 }
 
 /**
@@ -72,75 +132,4 @@ export function formatFileSize(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
-}
-
-/**
- * 获取文件图标（根据扩展名）
- */
-export function getFileIcon(filename: string): string {
-  const ext = getFileExtension(filename)
-  
-  const iconMap: Record<string, string> = {
-    // 代码文件
-    'js': 'js', 'ts': 'ts', 'jsx': 'react', 'tsx': 'react',
-    'py': 'python',
-    'java': 'java',
-    'go': 'go',
-    'rs': 'rust',
-    'html': 'html', 'htm': 'html',
-    'css': 'css', 'scss': 'scss', 'sass': 'scss', 'less': 'css',
-    'json': 'json',
-    'xml': 'xml',
-    'sql': 'sql',
-    'md': 'markdown', 'markdown': 'markdown',
-    // 配置文件
-    'env': 'config', 'ini': 'config', 'conf': 'config',
-    'yaml': 'yaml', 'yml': 'yaml',
-    // 文本
-    'txt': 'text', 'log': 'text',
-    'csv': 'csv',
-  }
-  
-  return iconMap[ext] || 'file'
-}
-
-/**
- * 获取文件语言（用于代码高亮）
- */
-export function getFileLanguage(filename: string): string {
-  const ext = getFileExtension(filename)
-  
-  const langMap: Record<string, string> = {
-    'js': 'javascript',
-    'ts': 'typescript',
-    'jsx': 'jsx',
-    'tsx': 'tsx',
-    'py': 'python',
-    'java': 'java',
-    'c': 'c',
-    'cpp': 'cpp', 'cc': 'cpp', 'hpp': 'cpp',
-    'h': 'c',
-    'go': 'go',
-    'rs': 'rust',
-    'rb': 'ruby',
-    'php': 'php',
-    'swift': 'swift',
-    'kt': 'kotlin', 'kts': 'kotlin',
-    'html': 'html', 'htm': 'html',
-    'css': 'css',
-    'scss': 'scss', 'sass': 'scss',
-    'less': 'less',
-    'sql': 'sql',
-    'sh': 'bash', 'bash': 'bash',
-    'ps1': 'powershell',
-    'json': 'json',
-    'xml': 'xml',
-    'yaml': 'yaml', 'yml': 'yaml',
-    'md': 'markdown', 'markdown': 'markdown',
-    'vue': 'vue',
-    'svelte': 'svelte',
-    'svg': 'svg'
-  }
-  
-  return langMap[ext] || 'text'
 }

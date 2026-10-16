@@ -1,11 +1,11 @@
 const TIME_CONSTANTS = {
   ONE_DAY: 24 * 60 * 60 * 1000,
-  TWO_DAYS: 48 * 60 * 60 * 1000,
+  TWO_DAYS: 48 * 60 * 60 * 1000
 } as const
 
 export const SIDEBAR_THEME_OPTIONS = [
   { value: 'light', label: '浅色主题' },
-  { value: 'dark', label: '深色主题' },
+  { value: 'dark', label: '深色主题' }
 ] as const
 
 export function formatSessionTime(timestamp: number): string {

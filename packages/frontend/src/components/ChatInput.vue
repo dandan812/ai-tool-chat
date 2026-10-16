@@ -9,12 +9,14 @@
  * @package frontend/src/components
  */
 
-import { toRefs } from 'vue'
+import { nextTick, ref, toRefs, watch } from 'vue'
+import { MAX_IMAGES } from '../config'
 import type { UploadedFileRef } from '../types/task'
 import ImageUploader from './ImageUploader.vue'
 import FileUploader from './FileUploader.vue'
 import { useChatComposer } from '../composables/useChatComposer'
-import { Image, FileText, ArrowUp, Square } from '@lucide/vue'
+import { ImagePlus, Paperclip, ArrowUp, Square, Plus } from '@lucide/vue'
+import { useDetailsMenu } from '../composables/useDetailsMenu'
 
 interface Props {
   /** 是否正在生成回复 */
@@ -25,10 +27,29 @@ interface Props {
 
 const props = defineProps<Props>()
 const { loading, sessionId } = toRefs(props)
+const imageUploader = ref<InstanceType<typeof ImageUploader> | null>(null)
+const fileUploader = ref<InstanceType<typeof FileUploader> | null>(null)
+const fileUploading = ref(false)
+const dragging = ref(false)
+const enableTools = ref(false)
+const {
+  menu: attachmentMenu,
+  close: closeAttachments,
+  keydown: attachmentKeydown
+} = useDetailsMenu()
+watch(loading, (busy) => {
+  if (busy) closeAttachments()
+})
+let dragDepth = 0
 
 const emit = defineEmits<{
   /** 发送消息 */
-  send: [content: string, images: import('../types/task').ImageData[], files: UploadedFileRef[]]
+  send: [
+    content: string,
+    images: import('../types/task').ImageData[],
+    files: UploadedFileRef[],
+    enableTools?: boolean
+  ]
   /** 停止生成 */
   stop: []
 }>()
@@ -36,18 +57,21 @@ const emit = defineEmits<{
 const composer = useChatComposer({
   loading,
   sessionId,
-  onSend: (content, images, files) => emit('send', content, images, files)
+  uploadBusy: fileUploading,
+  onSend: (content, images, files) => {
+    closeAttachments()
+    if (enableTools.value && files.length && !images.length)
+      emit('send', content, images, files, true)
+    else emit('send', content, images, files)
+  }
 })
 
 const {
   input,
   images,
   files,
-  showImageUploader,
-  showFileUploader,
   pendingUploadList,
   hasPendingUploads,
-  showAttachmentTray,
   canSend,
   statusText,
   statusTone,
@@ -62,6 +86,9 @@ const {
   sendMessage,
   clearComposer
 } = composer
+watch([() => files.value.length, () => images.value.length, sessionId], () => {
+  if (!files.value.length || images.value.length) enableTools.value = false
+})
 
 async function handleImageAdd(file: File) {
   try {
@@ -71,31 +98,94 @@ async function handleImageAdd(file: File) {
   }
 }
 
+function hasDraggedFiles(event: DragEvent) {
+  return Array.from(event.dataTransfer?.types || []).includes('Files')
+}
+
+function handleDragEnter(event: DragEvent) {
+  if (!hasDraggedFiles(event)) return
+  event.preventDefault()
+  if (loading.value) return
+  dragDepth++
+  dragging.value = true
+}
+
+function handleDragLeave() {
+  dragDepth = Math.max(0, dragDepth - 1)
+  dragging.value = dragDepth > 0
+}
+
+function handleDragOver(event: DragEvent) {
+  if (!hasDraggedFiles(event)) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = loading.value ? 'none' : 'copy'
+}
+
+function handleDrop(event: DragEvent) {
+  dragDepth = 0
+  dragging.value = false
+  const dropped = Array.from(event.dataTransfer?.files || [])
+  if (!dropped.length) return
+  event.preventDefault()
+  if (loading.value) return
+  imageUploader.value?.addFiles(dropped.filter((file) => file.type.startsWith('image/')))
+  void fileUploader.value?.addFiles(dropped.filter((file) => !file.type.startsWith('image/')))
+}
+
+function openPicker(kind: 'image' | 'file') {
+  closeAttachments(true)
+  if (kind === 'image') imageUploader.value?.open()
+  else fileUploader.value?.open()
+}
+
 defineExpose({
-  clear: clearComposer
+  clear: clearComposer,
+  async insertPrompt(value: string) {
+    if (loading.value) return
+    input.value = input.value ? `${input.value}\n${value}` : value
+    await nextTick()
+    resize()
+    composer.textareaRef.value?.focus()
+  }
 })
 </script>
 
 <template>
-  <section class="composer-panel" :class="{ loading }" aria-label="消息输入">
-    <div v-if="showAttachmentTray" class="composer-attachments">
-      <section v-if="showImageUploader || images.length" class="attachment-block">
-        <span class="attachment-title">图片</span>
-        <ImageUploader :images="images" @add="handleImageAdd" @remove="removeImage" />
-      </section>
-      <section
-        v-if="showFileUploader || files.length || hasPendingUploads"
-        class="attachment-block"
-      >
-        <span class="attachment-title">文件</span>
-        <FileUploader
-          :files="files"
-          @add="addFile"
-          @remove="removeFile"
-          @upload-progress="handleUploadProgress"
-          @upload-error="handleUploadError"
-        />
-      </section>
+  <section
+    class="composer-panel"
+    :class="{ loading, dragging }"
+    aria-label="消息输入"
+    @dragenter="handleDragEnter"
+    @dragleave="handleDragLeave"
+    @dragover="handleDragOver"
+    @drop="handleDrop"
+  >
+    <div
+      v-show="images.length || files.length || pendingUploadList.length"
+      class="composer-attachments"
+      aria-label="待发送附件"
+    >
+      <ImageUploader
+        ref="imageUploader"
+        :images="images"
+        :max-images="MAX_IMAGES"
+        :disabled="loading"
+        compact
+        @add="handleImageAdd"
+        @remove="removeImage"
+        @error="handleUploadError"
+      />
+      <FileUploader
+        ref="fileUploader"
+        :files="files"
+        :disabled="loading"
+        compact
+        @add="addFile"
+        @remove="removeFile"
+        @upload-progress="handleUploadProgress"
+        @upload-error="handleUploadError"
+        @busy="fileUploading = $event"
+      />
     </div>
     <div class="composer-body">
       <textarea
@@ -103,8 +193,8 @@ defineExpose({
         v-model="input"
         class="message-input"
         :disabled="loading"
-        rows="2"
-        placeholder="输入问题…"
+        rows="1"
+        placeholder="有什么我可以帮你的？"
         aria-label="输入问题"
         @keydown="handleKeydown"
         @input="resize"
@@ -113,30 +203,38 @@ defineExpose({
     </div>
     <div class="composer-toolbar">
       <div class="tool-group">
-        <button
-          class="tool-pill"
-          :class="{ active: showImageUploader || images.length }"
-          type="button"
-          title="图片托盘"
-          :aria-pressed="showImageUploader"
-          @click="showImageUploader = !showImageUploader"
-        >
-          <Image /><span>图片</span
-          ><span v-if="images.length" class="tool-count">{{ images.length }}</span>
-        </button>
-        <button
-          class="tool-pill"
-          :class="{ active: showFileUploader || files.length || hasPendingUploads }"
-          type="button"
-          title="文件托盘"
-          :aria-pressed="showFileUploader"
-          @click="showFileUploader = !showFileUploader"
-        >
-          <FileText /><span>文件</span
-          ><span v-if="files.length + pendingUploadList.length" class="tool-count">{{
-            files.length + pendingUploadList.length
-          }}</span>
-        </button>
+        <details ref="attachmentMenu" class="attachment-menu" @keydown="attachmentKeydown">
+          <summary
+            class="icon-button composer-tool"
+            aria-label="添加附件"
+            title="添加附件"
+            :aria-disabled="loading"
+            @click="loading && $event.preventDefault()"
+          >
+            <Plus />
+          </summary>
+          <div class="composer-menu">
+            <button
+              type="button"
+              aria-label="添加图片"
+              :disabled="loading || images.length >= MAX_IMAGES"
+              @click="openPicker('image')"
+            >
+              <ImagePlus /><span>添加图片</span>
+            </button>
+            <button
+              type="button"
+              aria-label="添加文件"
+              :disabled="loading || hasPendingUploads"
+              @click="openPicker('file')"
+            >
+              <Paperclip /><span>添加文件</span>
+            </button>
+          </div>
+        </details>
+        <span v-if="images.length + files.length" class="composer-count sr-only">
+          {{ images.length + files.length }} 个附件
+        </span>
       </div>
       <button
         v-if="!loading"
@@ -158,6 +256,10 @@ defineExpose({
         <Square />
       </button>
     </div>
+    <label v-if="files.length && !images.length" class="composer-research">
+      <input v-model="enableTools" type="checkbox" :disabled="loading" />
+      <span>资料研究</span>
+    </label>
     <p
       v-if="statusTone === 'is-error' || hasPendingUploads"
       class="status-banner"

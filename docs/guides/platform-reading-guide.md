@@ -1,198 +1,119 @@
-# 整个平台：代码阅读与面试指南
+# 平台代码阅读指南
 
-日期：2026-09-30。只描述当前本地代码，不代表线上已经更新。
+更新：2026-10-16。描述当前源码；本轮整理尚未部署。
 
-本文件记录上一轮业务拆分。后续 UI、动态高度列表、切块与词法检索已改造，
-实现与边界请继续阅读 `ui-and-retrieval-reading-guide.md`；下文测试数字是上一轮记录。
+先跟完一次请求，再深入支持模块。主站运行 Node/SQLite，
+`packages/worker` 是 Node 复用的业务代码，同时保留 Cloudflare 运行入口。
 
-## 先看结论
+## 先认清职责
 
-这次重写的是平台业务的组织方式：账户、会话、任务、上传、模型路由和文件问答。
-Vue、Pinia、Worker、DO、R2 没换；已有 Markdown、哈希、检索和代码解析算法继续复用。
-因此它不是“把每个文件删掉重新写”，也没有引入微服务或通用工作流引擎。
+| 目录 | 负责什么 |
+| --- | --- |
+| `frontend/src/components`、`views` | 页面布局和交互 |
+| `frontend/src/features/chat` | 会话、消息和本地持久化 |
+| `frontend/src/features/tasks` | 观察后台任务，把事件更新到正确的消息 |
+| `frontend/src/features/uploads` | 查状态、补传分片和完成上传 |
+| `server/src` | HTTP 适配、SQLite、私有文件和文档解析 |
+| `worker/src/handlers` | HTTP 输入、身份和业务入口 |
+| `worker/src/core` | 任务生命周期、执行、输出持久化与用量 |
+| `worker/src/platform` | 认证、账户额度、文件归属和租约 |
+| `worker/src/skills` | 文本、图片、文件问答和受限资料研究 |
+| `worker/src/providers` | 上游模型请求、SSE 解析和 token 用量 |
+| `worker/src/retrieval` | 从原文选择依据，构造有预算的模型输入 |
+| `worker/src/upload` | 分片状态、合并、版本校验和正文读取 |
 
-技术含量主要在失败、并发和数据边界，而不是 Task、Step、Skill 三个名字。
-你能解释“为什么刷新不重复收费”“为什么旧响应不会写错会话”，比背术语更有价值。
+## 第一条链：发送、生成、恢复
 
-## 四个基础概念
-
-| 名称 | 可以怎样理解 | 在这里负责什么 |
-| --- | --- | --- |
-| Pinia | 页面共享的状态容器 | 当前会话、消息、任务显示状态 |
-| Durable Object（DO） | 有固定身份、带持久存储的协调对象 | 账户额度、任务生命周期、上传状态 |
-| R2 | 文件对象存储 | 文件正文、分片与检索索引 |
-| 游标 | “我已经读到了第几条事件” | 按序读取、避免重复拼接 |
-
-浏览器使用 HTTP 轮询读取持久事件；模型 provider 使用 SSE 接收上游文本。
-二者都能呈现逐步出现的回答，但不是同一条传输连接。
-
-## 从这里开始读
-
-路径均相对于仓库根目录。每次只读表格中的入口，不用一次看完所有目录。
+下面路径相对于仓库根目录。按顺序打开，每个文件先看表中函数。
 
 | 顺序 | 文件 | 先看什么 |
 | --- | --- | --- |
-| 1 | `packages/frontend/src/stores/chat.ts` | Store 的薄入口，哪些函数交给了其他模块 |
-| 2 | `packages/frontend/src/features/chat/sessionRepository.ts` | 会话创建、选中、保存；不发模型请求 |
+| 1 | `packages/frontend/src/composables/useChatComposer.ts` | `sendMessage`：解析草稿图片，提交输入 |
+| 2 | `packages/frontend/src/stores/chat.ts` | 薄入口，连接会话与任务观察 |
 | 3 | `packages/frontend/src/features/tasks/sessionTasks.ts` | `sendTaskMessage`、`observe`、`callbacksFor` |
-| 4 | `packages/frontend/src/api/requestManager.ts` | `send` 创建任务，`resume` 只读取同一任务 |
-| 5 | `packages/worker/src/handlers/taskHandlers.ts` | 校验输入、幂等键、账户与文件归属 |
-| 6 | `packages/worker/src/core/durableTask.ts` | 创建、alarm 执行、查询和取消 |
-| 7 | `packages/worker/src/core/taskStepRunner.ts` | `route → skill`，转发真实进度和结果 |
-| 8 | `packages/worker/src/skills/fileAnswer.ts` | 先构建证据上下文，再调用模型 |
+| 4 | `packages/frontend/src/api/requestManager.ts` | `send` 创建任务，`resume` 只读同一任务 |
+| 5 | `packages/server/src/server.mjs`、`http.mjs` | 服务配置、`/api` 转发和请求 ID |
+| 6 | `packages/server/src/runtime.mjs` | 组装存储适配，分发请求，调度任务 alarm |
+| 7 | `packages/worker/src/index.ts` | 路由、中间件、身份校验 |
+| 8 | `packages/worker/src/handlers/taskHandlers.ts` | 输入、幂等键和文件归属校验 |
+| 9 | `packages/worker/src/core/durableTask.ts` | 创建、认领、执行、取消与结算 |
+| 10 | `packages/worker/src/core/taskStepRunner.ts` | `run`：选择能力、执行能力、保存结果 |
+| 11 | `packages/worker/src/skills/index.ts` | 按图片、文件、文本选择能力和模型 |
+| 12 | `packages/worker/src/providers/chatCompletionStream.ts` | 读取上游 SSE，处理完成、取消和用量 |
 
-先把一次发送讲通，再读下面的支持模块。
-
-## 每个模块只回答一个问题
-
-### 前端
-
-| 模块 | 回答的问题 |
-| --- | --- |
-| `features/chat/sessionRepository.ts` | 会话和消息存在哪里？当前选中了哪个会话？ |
-| `features/chat/messageUpdates.ts` | 一条已存在的消息怎样接受内容、来源和快照？ |
-| `features/tasks/sessionTasks.ts` | 哪个会话正在观察哪个任务？旧回调是否还有效？ |
-| `features/tasks/taskProtocol.ts` | 服务端的事件页是否完整、有序且格式合法？ |
-| `features/uploads/controller.ts` | 查状态、补分片、完成上传的顺序是什么？ |
-| `features/uploads/http.ts` | 上传响应是否合法？凭据是否只发给配置的 API？ |
-| `features/accounts/useAccountSession.ts` | 谁登录了？旧账户响应是否已经失效？ |
-| `features/workspace/useWorkspace.ts` | 如何加载任务记录、取消和管理文件？ |
-
-`stores/chat.ts`、`utils/chunk.ts` 保留旧导入入口，避免为了迁移路径改动全部组件。
-业务逻辑已经搬到对应功能目录，兼容入口本身不再承载整条流程。
-
-### 后端
-
-| 模块 | 回答的问题 |
-| --- | --- |
-| `core/durableTask.ts` | 任务现在处于什么状态？是否允许执行或取消？ |
-| `core/tasks/taskRecord.ts` | 持久记录的格式、默认预算是什么？ |
-| `core/tasks/taskRepository.ts` | 快照、内容、来源和有序事件怎样落盘？ |
-| `core/tasks/taskExecution.ts` | 运行时事件怎样缓冲、合并并保存？ |
-| `core/tasks/taskUsage.ts` | 模型调用前后怎样预留和记录用量？ |
-| `platform/accountAuthentication.ts` | 如何注册、验证密码和创建登录会话？ |
-| `platform/accountLedger.ts` | 如何限制单任务、当日与并发额度？ |
-| `platform/accountFileQuota.ts` | 哪个账户拥有文件？上传配额如何预留与释放？ |
-| `upload/uploadService.ts` | 上传 HTTP 操作怎样协调账户和上传 DO？ |
-| `retrieval/fileContext.ts` | 哪些原文可以进入模型？来源怎样保存？ |
-| `providers/chatCompletionStream.ts` | 怎样读取 SSE、识别完成、取消与用量？ |
-
-账户仍通过一个目录 DO 协调写入，没有拆成互相独立且难以一致的账本服务。
-模块分离不等于存储一致性边界被拆开。
-
-## 一次发送怎样走完
+普通任务的顶层阶段是 `route → skill`。资料研究的只读工具也会产生步骤，
+沿用协议中的 `mcp` 类型名；这不表示接入了外部 MCP 服务。
 
 ```text
-输入问题
-  → Store 入口
-  → 创建用户消息和带稳定 ID 的回答占位
-  → TaskRequestManager.send：携带固定 Idempotency-Key
-  → Worker 校验登录、输入、额度和文件归属
-  → DurableTask 创建持久记录并安排执行
-  → route：根据输入选 Skill 和模型
-  → skill：真正读取资料或调用模型
-  → 保存带序号的 content / step / sources / usage 等事件
-  → 浏览器按 after 游标读取
-  → callbacksFor 更新正确的消息
-  → 读取终态快照，保存完整结果
+sendTaskMessage
+  → TaskRequestManager.send：固定 Idempotency-Key
+  → handleTaskRequest：按用户与 key 确定任务身份
+  → DurableTask.create：预留额度，写入请求，安排执行
+  → DurableTask.alarm：认领任务
+  → executeAndPersistTask → TaskManager → TaskStepRunner → Skill → Provider
+  → TaskRepository：先持久化事件，再通知观察者
+  → taskEventStream：按 after 游标推送
+  → callbacksFor：找到稳定消息 ID，更新内容和步骤
 ```
 
-`usage` 也是持久协议的一部分。前端验证并消费它来推进游标，
-但额度结算由后端负责，页面汇总以最终快照为准。
+读懂这条链后，再看：
 
-## 四条容易混淆的流程
+| 问题 | 代码 |
+| --- | --- |
+| 事件、快照和原文来源怎样保存？ | `core/tasks/taskRepository.ts` |
+| 创建、执行、终态分别保存哪些字段？ | `core/tasks/taskRecord.ts` |
+| token 预算和实际用量怎样衔接？ | `core/tasks/taskUsage.ts` |
+| 浏览器怎样验证事件和游标？ | `frontend/src/features/tasks/taskProtocol.ts` |
+| SSE 怎样读取，文字怎样合并到一帧？ | `frontend/src/api/taskEventStream.ts`、`requestManager.ts` |
+| SQLite 存在哪里？ | `server/src/sqlite-store.mjs`，按 namespace、对象 ID 和 key 存序列化值 |
 
-### 上传不是提问
+这里不是每个业务对象一张关系表。Node 的 SQLite 适配沿用共享业务的键值存储和事务接口；
+账户、任务与上传分别由其对象身份隔离。读数据库前先读写入它的业务模块。
 
-1. 对本地文件分片并计算哈希。
-2. 查询同一文件和分片布局的上传状态。
-3. 只发送尚未收到的分片。
-4. 服务端合并、验证正文并返回文件引用。
-5. 发送问题时带引用，后端确认账户归属后读取正文。
+## 第二条链：上传、解析、检索、引用
 
-上传失败不会按异常字符串自动删除文件。重新选择相同文件可以查询状态并补传。
-这属于上传恢复，不等于中断的模型回答会自动续算。
+| 顺序 | 文件 | 先看什么 |
+| --- | --- | --- |
+| 1 | `packages/frontend/src/components/FileUploader.vue` | 选择文件、展示进度和上传结果 |
+| 2 | `packages/frontend/src/features/uploads/controller.ts` | 查询已有分片，只补传缺片 |
+| 3 | `packages/worker/src/handlers/uploadHandlers.ts` | 读取并校验 HTTP 输入 |
+| 4 | `packages/worker/src/upload/uploadService.ts` | 账户配额、文件租约和上传存储协调 |
+| 5 | `packages/worker/src/upload/chunkStorageService.ts` | 存片、合并、版本与元数据 |
+| 6 | `packages/worker/src/upload/ownedFiles.ts` | 提问时验证文件属于当前账户 |
+| 7 | `packages/worker/src/upload/uploadedFileStorage.ts` | 读取正文；文档交给运行环境解析 |
+| 8 | `packages/server/src/document-extractor.mjs` | 限制解析任务与工作线程生命周期 |
+| 9 | `packages/server/src/document-worker.mjs` | PDF、Word、Excel 的实际文本提取 |
+| 10 | `packages/worker/src/skills/fileSkill.ts` | 读取附件后直接进入 `answerFromFiles` |
+| 11 | `packages/worker/src/skills/fileAnswer.ts` | 选择问答模式，先发来源，再生成答案 |
+| 12 | `packages/worker/src/retrieval/fileContext.ts` | 选择原文，限制预算，保留行号与偏移 |
+| 13 | `packages/frontend/src/components/EvidenceSources.vue` | 展开并核对引用原文 |
 
-### 文件分析不是全文总结
+小文件可直接使用有预算的原文；大文件按问题检索；概览使用代表性片段；
+代码检索也只引用实际原文。旧的有损代码压缩和全文摘要包装已移除。
+没有足够依据时结束，不额外调用模型编造答案。
 
-文件 Skill 读取正文，`fileContext` 根据问题选择有预算的原文。
-小文件可直接采用原文，代码文件走已有代码检索；概览问题使用代表性原文，
-并明确不是全文总结。依据不足时直接说明，不额外调用模型“补一个猜测”。
+显式勾选“资料研究”时改走 `skills/fileAgentSkill.ts`：
+解析附件 → 最多两轮只读搜索/读取 → 基于来源回答 → 检查来源标记。
+工具实现集中在 `fileAgentTools.ts`，只能访问本次已校验的附件。
+来源标记检查不能证明答案的语义一定正确。
 
-来源包含文件版本哈希、文本行号、偏移和原文片段；模型生成的摘要不被当成原文。
-没有依据时是零次生成调用，有依据的当前流程至多一次。
-能点开来源只证明引用可核对，不能证明回答结论自动正确。
+## 必须保留的边界
 
-### 恢复是继续看，不是重新做
+- **恢复查看与重新执行：** 重连读取原任务；已认领的执行中断后明确失败，避免重复计费。
+- **停止查看与取消：** 关闭 SSE 不取消后台；取消需要服务端确认，部分内容仍保存。
+- **账户切换：** 账户代次、观察者身份和稳定消息 ID 阻止旧响应写入新账户或其他消息。
+- **文件操作：** 归属、版本与租约校验分别防止越权、旧文件引用和删除/写入竞态。
+- **额度与费用：** token 额度和估算费用不等于实际账单；未知用量不能按零处理。
+- **旧记录：** `plan`、`respond` 等步骤类型和既有存储字段仍可读取，不做数据迁移。
 
-恢复使用已有 `taskId`，读取快照和事件，不再 POST 一个新任务。
-创建时网络失败的重试保留同一幂等键和请求体；改变请求体不能复用原键。
+## 怎样验证自己读懂了
 
-如果执行实例真正丢失，已经认领的任务明确失败并保留已保存内容。
-不自动重发结果未知的收费请求，也不承诺从上一个 token 接着生成。
+1. 发送问题后刷新：解释为什么 POST 不会再次执行模型。
+2. 生成中停止查看，再从任务中心打开：解释观察与执行的区别。
+3. 取消任务或中断服务：找到部分内容、终态和用量写入位置。
+4. 上传文档并提问：从引用片段追到提取正文，解释行号代表什么。
+5. 切换账户：指出旧响应在哪一层被拒绝。
 
-### 取消和停止查看不同
-
-停止查看：中止浏览器的轮询，后台可以继续执行。
-取消任务：向服务端提交取消，终止执行信号并保留已提交的部分回答。
-断开浏览器连接不等于供应商一定没产生消耗。
-
-## 为什么要这样写
-
-**稳定消息 ID：** 数组下标会随删除而变化。异步回调通过 ID 找到消息，
-并检查观察者是否仍有效，避免把答案写进下一条消息。
-
-**账户代次：** 仅比较账户 ID 不够，`null → 失效 → null` 也发生了变化。
-失效时递增代次，HTTP 响应头和 JSON 读取后都检查，拒绝旧数据挂载历史。
-
-**刷新排队：** 取消或删除完成时，如果已有刷新，丢弃旧快照并补读一次。
-不能因为“正在刷新”而吞掉操作后的更新。
-
-**保守额度：** token 预算不是实际发票。供应商没有明确返回用量时，
-包括本地模拟和估算用量，保留任务预留额度，不用文本估算冒充账单并退款。
-这会降低额度利用率，但避免不确定的外部消耗被低估。
-
-**能力优先：** 文件、图片输入先决定 Skill。图片模型只接受已接入的视觉系列
-或部署明确配置的图片模型，其他请求回退至图片默认模型。
-它不是一份能自动识别所有供应商模型能力的目录。
-
-## 面试讲法
-
-> 我按功能重组了会话、任务、账户和上传业务。Task 保存一次请求的生命周期，
-> Step 展示实际处理阶段，Skill 处理一种输入；没有把普通聊天包装成通用 Agent。
-> 上传用 DO 管状态、R2 存正文，恢复时只补缺片。任务创建保留幂等键，
-> 刷新读取同一任务的有序事件，不重发模型请求。文件问答先检索原文，
-> 再生成答案，并能展开核对来源。
-
-不要写“全面从零重写”“自主规划”“精准计费”或没有证据的成本、延迟下降百分比。
-目前应强调可恢复查看、账户隔离、取消、来源追溯和回归验证。
-
-### 先练习回答这六题
-
-1. 一个用户消息对应几次模型调用？为什么路由不调用模型？
-2. 创建任务 POST 的响应丢失，为什么重试不会执行两次？
-3. 图片和文本模型不匹配时，系统怎样选择？
-4. 删除会话后旧回调返回，为什么不会更新另一条消息？
-5. 重启执行对象与刷新页面，为什么有不同的恢复行为？
-6. 原文有引用，是不是答案就可信？如何设计真实回答质量评测？
-
-回答时打开对应函数和测试说明，不只复述上面的文案。
-
-## 已验证与未验证
-
-2026-09-30 最终 `pnpm check`：前端 148 项、后端 326 项测试通过，
-2 个可选基准在普通测试命令中跳过；lint、类型检查、构建和 Worker dry-run 通过。
-两项独立基准已经另行运行，但没有证据说明本轮加速。
-
-本地浏览器验证新建文本、图片、文件任务、丢失分片确认后的补传、
-取消、会话切换、刷新不创建任务、引用原文以及第二账户不可读取第一账户资源。
-检查了 1280×960 和 390×844 截图，无未捕获页面错误和页面横向溢出。
-
-没有验证真实模型回答质量、生产高并发、供应商实际账单、生产崩溃恢复、
-PDF/OCR 或所有历史数据组合。本地模拟输出不能当作模型能力演示。
-
-## 推荐你现在做的事
-
-先亲自从 `sendTaskMessage()` 走到 `callbacksFor()`，画出一次发送的调用顺序。
-然后跑 `requestManager.test.ts`，分别解释重试、用量事件和恢复为什么这样处理。
-读懂这条链后再看文件和额度，不需要一口气背完所有模块。
+本地检查用 `pnpm check`。按模块学习时，可单独运行对应的 `.test.ts`
+或 Node 的 `test/*.test.mjs`。已有测试使用离线模型验证链路，不代表真实模型质量。
+本轮具体改动和验证见 [精简记录](../reference/2026-10-16-code-cleanup.md)。

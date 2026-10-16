@@ -2,7 +2,8 @@ import { computed, onScopeDispose, ref, type Ref, watch } from 'vue'
 import { MAX_IMAGES } from '../config'
 import type { DraftImage, ImageData, UploadedFileRef, UploadProgress } from '../types/task'
 import { useAutoResize } from './useAutoResize'
-import { isSupportedTextFile } from '../utils/file'
+import { designPixels } from '../utils/designTokens'
+import { isSupportedUploadFile } from '../utils/file'
 import { uploadChunkedFile } from '../utils/chunk'
 import {
   clearDraftImages,
@@ -19,6 +20,7 @@ interface UseChatComposerOptions {
   loading: Readonly<Ref<boolean | undefined>>
   /** 当前会话 ID */
   sessionId: Readonly<Ref<string>>
+  uploadBusy?: Readonly<Ref<boolean>>
   /** 发送消息回调 */
   onSend: (content: string, images: ImageData[], files: UploadedFileRef[]) => void
 }
@@ -36,10 +38,15 @@ export function useChatComposer(options: UseChatComposerOptions) {
   const uploadError = ref('')
   const pendingUploads = ref<Record<string, UploadProgress>>({})
   const pendingImages = ref(0)
+  const pastingFiles = ref(false)
   const sending = ref(false)
   let revision = 0
+  let disposed = false
 
-  const { textareaRef, resize, reset } = useAutoResize()
+  const maxHeight = designPixels('--composer-max-height')
+  const { textareaRef, resize, reset } = useAutoResize(
+    maxHeight ? { maxHeight, minHeight: designPixels('--composer-min-height') } : {}
+  )
 
   function persistDraftImages() {
     if (!options.sessionId.value) return
@@ -47,7 +54,11 @@ export function useChatComposer(options: UseChatComposerOptions) {
   }
 
   const hasPendingUploads = computed(
-    () => Object.keys(pendingUploads.value).length > 0 || pendingImages.value > 0
+    () =>
+      options.uploadBusy?.value ||
+      pastingFiles.value ||
+      Object.keys(pendingUploads.value).length > 0 ||
+      pendingImages.value > 0
   )
   const pendingUploadList = computed(() => Object.values(pendingUploads.value))
   const hasAttachments = computed(() => images.value.length > 0 || files.value.length > 0)
@@ -109,6 +120,7 @@ export function useChatComposer(options: UseChatComposerOptions) {
     uploadError.value = ''
     pendingUploads.value = {}
     pendingImages.value = 0
+    pastingFiles.value = false
     reset()
     if (options.sessionId.value) {
       syncDraftImageRefs(options.sessionId.value, [])
@@ -136,20 +148,39 @@ export function useChatComposer(options: UseChatComposerOptions) {
   }
 
   async function handlePasteFile(event: ClipboardEvent) {
+    if (disposed || options.loading.value || sending.value || hasPendingUploads.value) return
     const items = event.clipboardData?.items
     if (!items) return
 
-    for (const item of items) {
-      const file = item.getAsFile()
-      if (!file || !isSupportedTextFile(file)) continue
+    const startedAt = revision
+    pastingFiles.value = true
+    let batchError = ''
+    try {
+      for (const item of items) {
+        if (disposed || startedAt !== revision || options.loading.value || sending.value) break
+        const file = item.getAsFile()
+        if (!file || file.type.startsWith('image/')) continue
+        if (!isSupportedUploadFile(file)) {
+          batchError = `不支持的文件类型：${file.name}`
+          handleUploadError(batchError)
+          continue
+        }
 
-      try {
-        showFileUploader.value = true
-        const uploadedFile = await uploadTextFile(file)
-        addFile(uploadedFile)
-      } catch (error) {
-        console.error('Failed to paste file:', error)
-        uploadError.value = error instanceof Error ? error.message : '粘贴文件失败'
+        try {
+          showFileUploader.value = true
+          const uploadedFile = await uploadFile(file, startedAt)
+          if (disposed || startedAt !== revision) break
+          addFile(uploadedFile)
+        } catch (error) {
+          if (disposed || startedAt !== revision) break
+          batchError = error instanceof Error ? error.message : '粘贴文件失败'
+          handleUploadError(batchError)
+        }
+      }
+    } finally {
+      if (startedAt === revision) {
+        pastingFiles.value = false
+        if (batchError) uploadError.value = batchError
       }
     }
   }
@@ -157,6 +188,7 @@ export function useChatComposer(options: UseChatComposerOptions) {
   async function addImage(file: File) {
     if (images.value.length + pendingImages.value >= MAX_IMAGES)
       throw new Error(`最多选择 ${MAX_IMAGES} 张图片`)
+    uploadError.value = ''
     const startedAt = revision
     pendingImages.value++
     try {
@@ -205,11 +237,13 @@ export function useChatComposer(options: UseChatComposerOptions) {
     pendingUploads.value = {}
   }
 
-  async function uploadTextFile(file: File): Promise<UploadedFileRef> {
+  async function uploadFile(file: File, startedAt: number): Promise<UploadedFileRef> {
     uploadError.value = ''
 
     return uploadChunkedFile(file, {
-      onProgress: handleUploadProgress
+      onProgress: (progress) => {
+        if (!disposed && startedAt === revision) handleUploadProgress(progress)
+      }
     })
   }
 
@@ -239,13 +273,18 @@ export function useChatComposer(options: UseChatComposerOptions) {
   }
 
   async function handlePaste(event: ClipboardEvent) {
+    if (disposed || options.loading.value || sending.value || hasPendingUploads.value) return
+    const startedAt = revision
     await handlePasteImage(event)
+    if (disposed || startedAt !== revision) return
     await handlePasteFile(event)
   }
 
   async function restoreDraftImages(sessionId: string) {
     const startedAt = ++revision
     pendingImages.value = 0
+    pastingFiles.value = false
+    pendingUploads.value = {}
     revokeDraftPreviews(images.value)
     images.value = []
     const restored = sessionId ? await loadDraftImages(sessionId) : []
@@ -265,6 +304,7 @@ export function useChatComposer(options: UseChatComposerOptions) {
   )
 
   onScopeDispose(() => {
+    disposed = true
     revision++
     revokeDraftPreviews(images.value)
   })

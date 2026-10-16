@@ -22,9 +22,7 @@ export function escapeHtml(text: string): string {
  * 这里额外处理换行，避免写回 data-* 属性时破坏结构。
  */
 export function escapeHtmlAttr(text: string): string {
-  return escapeHtml(text)
-    .replace(/\n/g, '&#10;')
-    .replace(/\r/g, '&#13;')
+  return escapeHtml(text).replace(/\n/g, '&#10;').replace(/\r/g, '&#13;')
 }
 
 /**
@@ -70,14 +68,14 @@ export function sanitizeLink(url: string): string {
  * - 链接只保留安全协议
  */
 export function createSafeMarkdownRenderer(
-  highlight: (code: string, lang: string) => string,
+  highlight: (code: string, lang: string) => string
 ): MarkdownIt {
   const renderer = new MarkdownIt({
     html: false,
     linkify: true,
     typographer: true,
     breaks: true,
-    highlight: (str, lang) => highlight(str, lang || ''),
+    highlight: (str, lang) => highlight(str, lang || '')
   })
 
   renderer.validateLink = () => true

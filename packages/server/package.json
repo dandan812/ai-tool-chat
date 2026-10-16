@@ -2,13 +2,25 @@
   "name": "@ai-tool-chat/server",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.13.0" },
+  "engines": {
+    "node": ">=24.13.0"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node dist/server.mjs",
     "preview": "node scripts/preview.mjs",
     "package": "node scripts/package.mjs",
+    "lint": "node ../worker/node_modules/eslint/bin/eslint.js .",
     "test": "node scripts/build.mjs && node --test test/*.test.mjs"
   },
-  "devDependencies": { "esbuild": "0.27.2" }
+  "dependencies": {
+    "unpdf": "1.8.1",
+    "word-extractor": "1.0.4",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "yauzl": "3.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.2",
+    "pdfjs-dist": "6.1.200"
+  }
 }

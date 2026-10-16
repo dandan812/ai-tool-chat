@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import type { Step, Task } from '../types/task';
+import { describe, expect, it } from 'vitest'
+import type { Step, Task } from '../types/task'
 import {
   formatTaskDuration,
   getActiveStep,
@@ -8,7 +8,8 @@ import {
   getStepTypeLabel,
   getTaskModelLabel,
   getTaskStatusText,
-} from './taskPresentation';
+  getTaskDurationSeconds
+} from './taskPresentation'
 
 const baseTask: Task = {
   id: 'task-1',
@@ -18,8 +19,8 @@ const baseTask: Task = {
   steps: [],
   createdAt: 1000,
   updatedAt: 1000,
-  metadata: {},
-};
+  metadata: {}
+}
 
 const steps: Step[] = [
   {
@@ -29,7 +30,7 @@ const steps: Step[] = [
     status: 'completed',
     name: '分析请求',
     startedAt: 1000,
-    completedAt: 1500,
+    completedAt: 1500
   },
   {
     id: 'step-2',
@@ -38,47 +39,63 @@ const steps: Step[] = [
     status: 'running',
     name: '调用模型',
     description: '正在生成回答',
-    startedAt: 1500,
-  },
-];
+    startedAt: 1500
+  }
+]
 
 describe('taskPresentation', () => {
+  it('shows the active nested tool and includes final generation in total duration', () => {
+    const tool: Step = { ...steps[1]!, id: 'tool', type: 'mcp', name: '搜索资料', startedAt: 2000 }
+    expect(getActiveStep([...steps, tool])?.id).toBe('tool')
+    expect(getStepTypeLabel('mcp', tool.name)).toBe('搜索资料')
+    expect(
+      getTaskDurationSeconds([
+        steps[0]!,
+        { ...steps[1]!, status: 'completed', completedAt: 9000 },
+        { ...tool, status: 'completed', completedAt: 3000 }
+      ])
+    ).toBe(8)
+  })
   it('终态摘要不会继续显示正在检索或生成', () => {
-    const completedSteps: Step[] = [{ ...steps[1]!, status: 'completed', description: '正在检索原文...' }];
-    expect(getActiveStepText(completedSteps, { ...baseTask, status: 'completed' })).toBe('处理完成');
-    expect(getActiveStepText(completedSteps, { ...baseTask, status: 'failed' })).toBe('处理失败');
-    expect(getActiveStepText(completedSteps, { ...baseTask, status: 'cancelled' })).toBe('任务已取消');
-  });
+    const completedSteps: Step[] = [
+      { ...steps[1]!, status: 'completed', description: '正在检索原文...' }
+    ]
+    expect(getActiveStepText(completedSteps, { ...baseTask, status: 'completed' })).toBe('处理完成')
+    expect(getActiveStepText(completedSteps, { ...baseTask, status: 'failed' })).toBe('处理失败')
+    expect(getActiveStepText(completedSteps, { ...baseTask, status: 'cancelled' })).toBe(
+      '任务已取消'
+    )
+  })
   it('显示实际能力名称，同时兼容旧任务类型', () => {
-    expect(getStepTypeLabel('route', 'route')).toBe('选择处理方式');
-    expect(getStepTypeLabel('skill', '文件分析')).toBe('文件分析');
-    expect(getStepTypeLabel('plan', 'legacy')).toBe('分析请求');
-    expect(getStepTypeLabel('respond', 'legacy')).toBe('生成内容');
-  });
+    expect(getStepTypeLabel('route', 'route')).toBe('选择处理方式')
+    expect(getStepTypeLabel('skill', '文件分析')).toBe('文件分析')
+    expect(getStepTypeLabel('plan', 'legacy')).toBe('分析请求')
+    expect(getStepTypeLabel('respond', 'legacy')).toBe('生成内容')
+  })
   it('应该返回当前活动步骤', () => {
-    expect(getActiveStep(steps)?.id).toBe('step-2');
-  });
+    expect(getActiveStep(steps)?.id).toBe('step-2')
+  })
 
   it('应该优先使用 task.metadata.model 生成模型标签', () => {
     const task = {
       ...baseTask,
-      metadata: { model: 'qwen3.5-flash-2026-02-23' },
-    };
+      metadata: { model: 'qwen3.5-flash-2026-02-23' }
+    }
 
-    expect(getTaskModelLabel(task, steps)).toBe('Qwen 3.5 Flash');
-  });
+    expect(getTaskModelLabel(task, steps)).toBe('Qwen 3.5 Flash')
+  })
 
   it('应该在任务运行中返回活动步骤描述', () => {
-    expect(getTaskStatusText(baseTask, steps)).toBe('执行中');
-    expect(getActiveStepText(steps)).toBe('正在生成回答');
-  });
+    expect(getTaskStatusText(baseTask, steps)).toBe('执行中')
+    expect(getActiveStepText(steps)).toBe('正在生成回答')
+  })
 
   it('应该统计已完成步骤数', () => {
-    expect(getCompletedStepCount(steps)).toBe(1);
-  });
+    expect(getCompletedStepCount(steps)).toBe(1)
+  })
 
   it('应该格式化任务耗时', () => {
-    expect(formatTaskDuration(12)).toBe('12 秒');
-    expect(formatTaskDuration(61)).toBe('1 分 1 秒');
-  });
-});
+    expect(formatTaskDuration(12)).toBe('12 秒')
+    expect(formatTaskDuration(61)).toBe('1 分 1 秒')
+  })
+})

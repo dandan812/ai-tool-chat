@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "lint": "pnpm -r run lint",
-    "format": "pnpm -r run format",
+    "format": "pnpm --filter @ai-tool-chat/frontend exec prettier --ignore-path ../../.prettierignore --write ../..",
+    "format:check": "pnpm --filter @ai-tool-chat/frontend exec prettier --ignore-path ../../.prettierignore --check ../..",
     "prepare": "husky",
     "build": "pnpm run build:frontend",
     "build:frontend": "pnpm --filter @ai-tool-chat/frontend build",
@@ -17,11 +18,17 @@
     "check:repo": "node ./scripts/check-repo.mjs",
     "check:frontend": "pnpm --filter @ai-tool-chat/frontend lint && pnpm --filter @ai-tool-chat/frontend build && pnpm --filter @ai-tool-chat/frontend test",
     "check:worker": "pnpm --filter @ai-tool-chat/worker lint && pnpm --filter @ai-tool-chat/worker typecheck && pnpm --filter @ai-tool-chat/worker test && pnpm --filter @ai-tool-chat/worker exec wrangler deploy --dry-run",
-    "check": "pnpm run check:repo && pnpm run check:frontend && pnpm run check:worker"
+    "check:server": "pnpm --filter @ai-tool-chat/server lint && pnpm run test:server",
+    "check": "pnpm run check:repo && pnpm run format:check && pnpm run check:frontend && pnpm run check:worker && pnpm run check:server"
   },
   "devDependencies": {
     "husky": "^9.0.11",
     "@commitlint/cli": "^19.3.0",
     "@commitlint/config-conventional": "^19.2.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "word-extractor>yauzl": "3.4.0"
+    }
   }
 }

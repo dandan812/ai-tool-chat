@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
@@ -6,6 +6,6 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     clearMocks: true,
-    restoreMocks: true,
-  },
-});
+    restoreMocks: true
+  }
+})

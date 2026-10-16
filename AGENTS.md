@@ -1,120 +1,60 @@
-# AGENTS.md
+# 仓库开发说明
 
-此文件为 Codex (Codex.ai/code) 在此代码仓库中工作时提供指导。
+## 项目与目录
 
-## 项目概述
+pnpm monorepo：
 
-这是一个基于 **pnpm monorepo** 的 AI 对话平台 - 一个使用 Cloudflare Worker 后端的 Vue 3 对话式 AI 应用。该平台支持与 AI 助手进行文本和多模态（图片）交互，使用服务器发送事件（SSE）进行实时流式响应。
+- `packages/frontend`：Vue 3、TypeScript、Pinia；页面、会话持久化和任务观察。
+- `packages/worker`：共享业务与 Cloudflare 入口；认证、任务、上传、检索和模型调用。
+- `packages/server`：主站的 Node.js HTTP 服务；复用共享业务，以 SQLite 和私有文件适配存储。
 
-## Monorepo 结构
-
-```
-ai-tool-chat/
-├── packages/
-│   ├── frontend/     # Vue 3 + TypeScript 单页应用
-│   └── worker/       # Cloudflare Worker 后端
-```
+先读 `docs/guides/platform-reading-guide.md`，运行与部署配置见 `packages/server/README.md`。
+历史 ADR 和验收记录仅描述其日期对应的实现，不应覆盖当前代码。
 
 ## 开发命令
 
-### 根目录
-```bash
-pnpm install              # 安装所有依赖
-pnpm lint                 # 检查所有包
-pnpm format               # 格式化所有代码
-pnpm build                # 构建前端（build:frontend 的别名）
-pnpm build:frontend       # 构建前端
-pnpm deploy:worker        # 部署 worker 到 Cloudflare
+使用 Node.js 24.21.0 与 pnpm 9：
+
+```powershell
+pnpm install
+pnpm format          # 全仓库源码、测试和配置格式化
+pnpm format:check    # 只检查格式
+pnpm lint            # 三个包的静态检查
+$env:VITE_API_URL='/api' # 本地同源预览；线上 API 配置见 Node 服务指南
+pnpm build:frontend
+pnpm build:server
+pnpm preview:server  # http://127.0.0.1:3201，临时数据和模拟模型
+pnpm check           # 格式、静态检查、类型、构建、测试和 Worker dry-run
 ```
 
-### 前端包
-```bash
-pnpm --filter @ai-tool-chat/frontend dev      # 开发服务器 (localhost:5173)
-pnpm --filter @ai-tool-chat/frontend build   # 生产构建
-pnpm --filter @ai-tool-chat/frontend preview # 预览生产构建
-pnpm --filter @ai-tool-chat/frontend lint    # 检查并修复
-pnpm --filter @ai-tool-chat/frontend format  # 格式化代码
-```
-
-### Worker 包
-```bash
-pnpm --filter @ai-tool-chat/worker dev     # 本地开发服务器
-pnpm --filter @ai-tool-chat/worker deploy  # 部署到 Cloudflare Workers
-```
-
-## 架构
-
-### 前端 (Vue 3)
-
-- **状态管理**: Pinia store (`packages/frontend/src/stores/chat.ts`) 管理会话、消息和本地存储持久化
-- **API 层**: `packages/frontend/src/api/ai.ts` 处理来自 worker 的 SSE 流式响应
-- **组件**: 位于 `packages/frontend/src/components/`：
-  - `ChatMessages.vue` - 消息列表，带 Markdown 渲染
-  - `ChatInput.vue` - 输入区域，支持文本和图片上传
-  - `Sidebar.vue` - 会话管理
-  - `StepIndicator.vue` - 显示 AI 处理步骤
-  - `ImageUploader.vue` - 多模态支持
-
-前端使用 localStorage 进行持久化（键名：`chat_session_list`、`chat_messages_map`、`chat_current_session_id`）。
-
-### 后端 (Cloudflare Worker)
-
-Worker 遵循 **Task → Step → Skill** 架构模式：
-
-1. **Task** (`packages/worker/src/core/taskManager.ts`): 表示单个聊天请求，管理生命周期
-2. **Steps** (`plan`, `skill`, `respond`): 任务执行的顺序阶段
-3. **Skills** (`packages/worker/src/skills/`): 可插拔的处理模块
-   - `textSkill.ts` - 纯文本 AI 对话（百炼兼容接口）
-   - `multimodalSkill.ts` - 图片+文本处理（百炼多模态模型）
-   - 通过 `selectSkill()` 根据输入类型自动选择
-
-**MCP 集成** (`packages/worker/src/mcp/`): 模型上下文协议，用于工具执行。
-
-**流式响应**: 通过服务器发送事件（SSE）流式传输响应，事件类型：`task`、`step`、`content`、`error`、`complete`。
-
-## API 端点
-
-- **Worker URL**: `https://api.i-tool-chat.store` (定义于 `packages/frontend/src/api/ai.ts:28`)
-- **方法**: POST
-- **请求体**: `{ messages: ChatMessage[], images?: string[], files?: File[], enableTools?: boolean, temperature?: number, stream?: boolean }`
-- **响应**: SSE 流，包含 JSON 事件
-
-## 环境变量
-
-### Worker (必需)
-- `QWEN_API_KEY` - 百炼兼容接口所需的主要模型密钥
-- `DEFAULT_MODEL` - 默认文本模型（可选，未配置时回退到项目内置默认值）
-- `DEFAULT_MULTIMODAL_MODEL` - 默认图片模型（可选）
-
-### 前端 (可选)
-- `VITE_API_URL` - API 服务器地址（默认为 worker URL）
+单包检查：`pnpm check:frontend`、`pnpm check:worker`、`pnpm check:server`。
+Cloudflare 本地入口：`pnpm --filter @ai-tool-chat/worker dev`。
+生产发布需要任务明确授权；`pnpm check` 不部署，不产生付费模型请求。
 
 ## 代码规范
 
-- **TypeScript**: 全局启用严格模式
-- **提交信息**: 约定式提交 (`feat:`、`fix:`、`docs:` 等)
-- **组件命名**: Vue 组件使用 PascalCase
-- **文件组织**: 按功能领域分组
+- 根目录 `.editorconfig`、`.prettierrc.json` 是格式规则的唯一来源，`.gitattributes` 固定 Git 换行：
+  UTF-8、LF、两空格、单引号、无分号、100 列。
+- TypeScript 使用严格模式；Vue 组件使用 PascalCase；按现有功能领域组织文件。
+- 先搜索调用方，复用已有实现。只保留实际使用的配置、导出和抽象。
+- 注释解释非显然的业务约束、权限、并发和生命周期，不复述语法。
+- 对变更运行相关检查；测试只随真实契约变化调整，不为删除有效保护而删测试。
+
+## 业务契约
+
+- 一次请求是 Task，顶层步骤是 `route → skill`；文件研究的工具步骤沿用 `mcp` 类型。
+  仅暴露附件内的只读搜索/读取，没有外部 MCP、任意执行或联网搜索。
+- 浏览器通过 SSE 按游标读取持久事件；JSON 事件页仍供旧客户端使用。
+  创建重试使用同一幂等键。恢复查看不得重新发起模型调用。
+- 保留账户隔离、认证代次、文件归属与版本校验、文件租约、额度和用量结算。
+- 任务认领后中断应保存部分结果并明确失败，不自动重试可能收费的请求。
+- 兼容既有任务步骤和存储格式；没有显式迁移目标时不修改存储结构。
+- 不将密钥写入前端、源码或日志。真实模型验收与线上部署需按具体任务授权。
 
 ## Git 提交信息规则
 
-- 生成 Git commit message 时，默认使用中文。
-- 必须保留 Conventional Commits 前缀，例如：`feat`、`fix`、`refactor`、`docs`、`chore`、`test`、`build`、`ci`。
-- 格式固定为：`type: 中文描述`
-- 冒号后必须使用简洁明确的中文，不要输出英文描述。
-- 默认只输出一行提交信息，不要额外附加解释。
-- 只有在用户明确要求英文提交信息时，才允许输出英文 commit message。
-
-## 部署
-
-前端和 worker 在推送到 `main` 分支时通过 GitHub Actions 自动部署到 Cloudflare。
-
-- **前端**: Cloudflare Pages（构建命令：`pnpm install && pnpm build`，输出：`packages/frontend/dist`）
-- **Worker**: Cloudflare Workers（通过 `wrangler deploy`）
-
-## 常见问题
-
-- **网络错误**: 通常表示 worker 未部署或缺少 `QWEN_API_KEY` 环境变量
-- **浏览器缓存**: 部署后需要强制刷新（Ctrl+Shift+R），必要时清除 Cloudflare 缓存
-
-详细故障排查请参阅 `docs/reference/ERROR_LOG.md`。
+- 默认使用中文，并保留 Conventional Commits 前缀：
+  `feat`、`fix`、`refactor`、`docs`、`chore`、`test`、`build`、`ci`。
+- 格式：`type: 中文描述`。默认只输出一行，不加额外解释。
+- 只有用户明确要求英文提交信息时才用英文。
+- 保留已有未提交改动，不擅自提交、推送或回退他人的修改。

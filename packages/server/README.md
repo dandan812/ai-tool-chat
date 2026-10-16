@@ -6,6 +6,128 @@ SQLite replaces namespaced state and alarms; private files replace R2.
 The TypeScript classes in `packages/worker` are shared business code, bundled
 locally with esbuild. No dependency installation is needed on the server.
 
+## Task Recovery And Diagnostics (2026-10-16)
+
+Release `node-20261016T021014718Z` is deployed. On graceful shutdown the runtime
+aborts active model calls, persists received text with `TASK_INTERRUPTED`, settles
+usage conservatively, closes SSE observers and drains work before closing SQLite.
+Restarting or replaying the same idempotency key does not repeat a claimed call.
+This stops the local request; it cannot guarantee that a provider cancels billing.
+
+Every Node HTTP response includes a server-generated `X-Request-ID`. Access logs
+join that ID with status, duration and a normalized task route; query strings,
+cookies and bodies are excluded. Frontend API errors display validated request IDs.
+This describes HTTP boundary logging, not all provider or application logs.
+
+Validation: frontend 307, Worker 434 and Node 81 tests passed (3 Worker and
+2 platform-dependent Node tests skipped). Browser checks used the release frontend,
+real local Node/SQLite and a mock model. Public smoke verified login, upload/delete,
+private storage and matching assets; no paid production model call was made.
+Public terminal SSE replay was skipped because the smoke owner has no terminal task.
+Backup: `/opt/ai-tool-chat/backups/engineering-20261016`; previous release:
+`node-20261013T095242627Z`. Deployment configuration and other services are unchanged.
+
+## Agent Deployment (2026-10-13, Asia/Shanghai)
+
+Release `node-20261013T095242627Z` went live at 17:55:48 +08:00; the coordinated
+service stop began at 17:55:46. Public real-model acceptance finished at 17:56:59.
+Text, file RAG, two-file research Agent and joint image/file answers passed with
+the configured `deepseek-flash`. Each check verified SSE disconnect/reconnect,
+exact streamed/persisted answer agreement, idempotent submission and terminal
+cursor replay. The Agent used three model calls and cited both original files.
+
+Real acceptance exposed reasoning deltas being displayed as answer content;
+the parser now keeps them separate while retaining usage accounting.
+`AGENT_DISABLE_THINKING=true` is the only production configuration change,
+after verifying this provider supports it. Ordinary text and vision settings
+are unchanged. The new frontend exposes research after a file attachment.
+
+Backup: `/opt/ai-tool-chat/backups/agent-node-20261013T095242627Z`.
+The backup passed SQLite integrity, serialized-value reads and private-file
+permission checks. Previous release: `node-20261013T063931669Z`.
+Rollback stops only this app, restores `server.env` from that backup, switches
+`current` to the previous release, starts and verifies the service. State is
+preserved. Caddy configuration/process and the existing relay container
+identities/restart counts were unchanged. Application automatic restarts: zero.
+
+Public HTML and nine referenced resources match the release bytes. Final local
+validation: frontend 306 passed, Worker 434 passed/3 skipped, Node 78 passed/
+2 skipped; lint, types, builds and Worker dry-run passed.
+Evidence: `generated/agent-deployment/` and
+`docs/reference/2026-10-13-agent-production.md`. Earlier sections below are
+historical records, not the current release or model availability.
+
+## SSE Deployment (2026-10-13, Asia/Shanghai)
+
+Release `node-20261013T063931669Z` went live at 14:42:47 +08:00.
+The browser now requests `text/event-stream` on the existing task events route,
+reconnects using its last validated event cursor, and batches content callbacks
+with `requestAnimationFrame`. Each nonempty provider delta is committed and
+notified immediately; the former 200ms backend content buffer is removed.
+JSON event pages remain available for older clients. Stopping observation
+flushes pending content before invalidating the session observer; cancellation
+snapshots stay authoritative.
+
+Streams send 15-second heartbeat comments and clean up on disconnect. The
+shared task boundary allows eight observers per task, and Node allows 32 SSE
+connections separately from the 16 regular in-flight requests. Idle namespace
+eviction excludes tasks with active subscribers. The event-count budget now
+allows one content event per bounded output character plus 512 control events;
+the existing 24,000-character output limit is unchanged.
+
+Public HTML and nine referenced assets matched the release bytes; loopback
+and public HTTPS smoke passed. Backup integrity and permissions passed at
+`/opt/ai-tool-chat/backups/sse-node-20261013T063931669Z`.
+The previous release is `node-20261013T053946414Z`. Rollback is a code-only
+service stop, current-link switch, start and health verification. Configuration,
+Caddy and existing container identities/restart counts were unchanged.
+
+Local verification: frontend suite 300 passed, followed by 84 focused tests
+including two new session-buffer regressions; worker suite 398 passed/3 skipped,
+followed by 25 task tests including the new observer-limit regression; Node
+suite 77 passed/2 Windows skips. Type checks, lint and release packaging passed.
+Isolated Chromium used the final release frontend and actual Node/SQLite/SSE
+with a synthetic local provider emitting 24 characters every 15ms. Desktop and
+390px runs each used one SSE request, preserved the result after reload, and
+had approximately 33.4ms P95 visible-update gaps. Desktop had one 50.1ms rAF
+interval; neither run reported long tasks. These are callback measurements,
+not physical display FPS or real-provider performance. A 320px run verified
+reload during generation, no duplicated sections, and cancellation with partial
+output. Screenshots were inspected. No paid production model request was made;
+public SSE replay could not run because the smoke owner had no terminal task.
+Evidence: `generated/sse-20261013/`.
+
+## Model Deployment Status (2026-10-13, Asia/Shanghai)
+
+Release `node-20261012T163818432Z` is live at `https://chat.i-tool-chat.store/`.
+Text, extracted documents and images use TokenRhythm `deepseek-flash`; vision
+is explicitly enabled with `MULTIMODAL_USE_TEXT_PROVIDER=true`.
+This supersedes the missing-model notes in the historical October 2 record.
+
+Public HTTPS guest workflows passed for text, a synthetic PNG whose code was
+not supplied in the prompt, and a two-chunk DOCX upload with source citation.
+All three completed with the configured model and matching persisted stream
+content. Synthetic uploaded files were deleted after verification.
+Evidence: `generated/node-server-deployment/feature-check-public-20261013.json`.
+The checks ran from the target server through the public HTTPS origin because
+local outbound TLS connections reset. Browser click-through was not repeated.
+
+Validation: 248 frontend tests, 50 provider/routing tests, 74 server tests,
+2 server skips, and frontend/worker type checks passed. Release contents were
+scanned for the actual model key with no match. Protected configuration is
+root-owned 0600; coordinated pre-switch config/data backup is root-only at
+`/opt/ai-tool-chat/backups/model-node-20261012T163818432Z`.
+The prior release remains `node-20261002T122858639Z`. Rollback requires stopping
+only this application, restoring the backed-up environment file, switching
+`current` to that prior release, then starting and verifying the service.
+Caddy configuration/process and Sub2API container identities/restart counts
+were unchanged. The new application has zero automatic restarts.
+
+These checks cover the tested workflows, not every possible document or image.
+Scan-only PDFs still require OCR; model interpretation is not guaranteed.
+Existing per-account quotas and the guest-creation cap remain in place; there
+is no shared monetary spending cap.
+
 ## Deployment Status (2026-10-02)
 
 - US service is active/enabled on `154.37.208.170`, loopback `127.0.0.1:3200`.
@@ -78,6 +200,91 @@ locally with esbuild. No dependency installation is needed on the server.
 
 ## Build And Verify
 
+### PDF, Word And Excel Analysis
+
+The Node runtime extracts text from `.pdf`, `.doc`, `.docx`, `.xls` and `.xlsx`
+after the existing chunk upload and ownership/version checks. Plain text, code
+and CSV keep their original reading path. Upload and task API shapes are unchanged.
+PDF pages and worksheet names are included in extracted text; evidence offsets
+and line numbers refer to that text. Spreadsheet formulas use saved results;
+formulas without results are shown as text, never evaluated.
+
+Parsing uses one isolated worker thread at a time, with a 15-second parsing
+timeout, a bounded queue, task cancellation and a bounded V8 heap. Limits are
+200 PDF pages, 32 worksheets, 30,000 rows/256 columns per sheet, 200,000 table
+cells in total, 1,000,000 extracted characters, and 64 MiB of expanded Office
+archive data. Oversized input fails explicitly instead of silently truncating.
+The existing `MAX_FILE_BYTES` upload limit still applies (8 MiB by default in
+the Node runtime).
+
+Image-only/scanned documents need OCR before analysis; OCR is not included.
+Encrypted, corrupt, empty and mismatched documents fail with actionable task
+errors before any model call. Font/CMap assets are read only from the bundled
+local asset directory; the parsing worker has no network fetch capability or
+inherited environment variables. This is resource isolation, not an OS sandbox.
+
+The build and release package include `document-worker.mjs`,
+`document-extractor.mjs` and `document-assets/` alongside the existing backend
+files. A frontend-only publication cannot enable document analysis. No runtime
+dependency installation or remote parsing service is required. This adapter is
+for the Node server; Worker-only deployments must provide an equivalent
+`EXTRACT_DOCUMENT_TEXT` adapter or return `DOCUMENT_PARSER_UNAVAILABLE`.
+
+### Compatible Text And File Models
+
+File research (`enableTools: true`) requires streaming function calling.
+For a provider verified to support `thinking: { type: "disabled" }`, set
+`AGENT_DISABLE_THINKING=true` to keep research decisions within their bounded
+output budget. This opt-in applies only to file-agent decisions and its final
+answer, not ordinary text or vision requests. The stream parser never displays
+`reasoning_content` as answer content, but still accounts for its usage.
+
+Set `TEXT_API_BASE_URL`, `TEXT_API_KEY`, `DEFAULT_MODEL` and
+`DEFAULT_FILE_MODEL` in a protected backend environment file to use an
+independent OpenAI-compatible endpoint. For TokenRhythm, the base URL is
+`https://tokenrhythm.studio/v1` and the configured model is `deepseek-flash`.
+The server appends `/chat/completions`. Explicit compatible configuration
+takes precedence over Bailian and does not silently fall back to another
+provider. It applies to text and extracted document text. To explicitly reuse
+this endpoint for images, set `MULTIMODAL_USE_TEXT_PROVIDER=true` and
+`DEFAULT_MULTIMODAL_MODEL` to a verified vision-capable model. TokenRhythm's
+model listing reports vision support for `deepseek-flash`. Without this opt-in,
+images continue to use the separate Bailian configuration.
+
+Credentials are never bundled into the frontend. The legacy health field
+`features.bailianText` now reports whether the active text provider has
+credentials; its existing response shape remains unchanged.
+
+The ordinary local preview still defaults to mocks. A protected local
+environment file can opt into real requests with `PREVIEW_USE_REAL_MODEL=true`;
+launch it with `node --env-file=.env.local-model scripts/preview.mjs`.
+`PREVIEW_DATA_DIRECTORY` can retain an existing local preview's data.
+Real requests consume the configured provider's quota.
+
+### Cost Estimates
+
+`MODEL_PRICES_JSON` supplies per-million token rates, keyed by the configured
+model ID. The user supplied these CNY rates for `deepseek-flash` on 2026-10-13:
+
+```dotenv
+MODEL_PRICES_JSON='{"deepseek-flash":{"inputPerMillion":1,"outputPerMillion":4,"cachedInputPerMillion":0.02,"currency":"CNY"}}'
+```
+
+Cache hits are a subset of input tokens, not additional tokens. The compatible
+stream reader accepts `prompt_tokens_details.cached_tokens` and
+`prompt_cache_hit_tokens`. Contradictory or invalid cache counts make the cost
+unknown. Without reported cache counts, the estimate applies the regular input
+price and does not claim a cache discount. Without a configured cache rate, the
+existing input price applies.
+
+The UI continues to label costs as estimates, not invoices. Provider usage is
+preferred; the existing explicitly labeled token estimate remains available for
+completed streams without usage. Unknown/interrupted usage is never priced as
+zero. Historical task costs are snapshots and are not retroactively repriced.
+Changing production prices requires updating the protected server environment
+and restarting the application. These rates do not alter account token quotas
+or context/output limits.
+
 ### Login-Free Guest Access
 
 Set `ALLOW_GUEST_ACCESS=true` in the protected Node environment file to open the
@@ -113,9 +320,10 @@ pnpm run build:frontend
 pnpm run preview:server
 ```
 
-Preview is bound to `http://127.0.0.1:3201` with a fresh temporary data directory.
-Registration and synthetic model replies are enabled ONLY in this local
-development preview. Nothing is sent to a paid model. Do not expose this port.
+By default, preview is bound to `http://127.0.0.1:3201` with a fresh temporary
+data directory, registration and synthetic model replies. This default mode
+does not send requests to a paid model. Explicit real-model preview requires
+the protected configuration described above. Do not expose the preview port.
 The ordinary production entry point is `dist/server.mjs`, not `preview.mjs`.
 
 For a custom local production installation, configure the protected environment

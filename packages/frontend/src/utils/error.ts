@@ -27,26 +27,26 @@ export type ErrorType = (typeof ErrorType)[keyof typeof ErrorType]
 const ERROR_MESSAGES: Record<string, string> = {
   // 网络错误
   'Failed to fetch': '网络连接失败，请检查网络设置',
-  'NetworkError': '网络连接失败，请检查网络设置',
-  'ERR_NETWORK': '网络连接失败，请检查网络设置',
+  NetworkError: '网络连接失败，请检查网络设置',
+  ERR_NETWORK: '网络连接失败，请检查网络设置',
 
   // 超时错误
-  'TimeoutError': '请求超时，请稍后重试',
-  'ERR_TIMEOUT': '请求超时，请稍后重试',
+  TimeoutError: '请求超时，请稍后重试',
+  ERR_TIMEOUT: '请求超时，请稍后重试',
 
   // 存储错误
-  'QuotaExceededError': '存储空间已满，已清理部分旧数据',
-  'NS_ERROR_DOM_QUOTA_REACHED': '存储空间已满，已清理部分旧数据',
+  QuotaExceededError: '存储空间已满，已清理部分旧数据',
+  NS_ERROR_DOM_QUOTA_REACHED: '存储空间已满，已清理部分旧数据',
 
   // 中止错误
-  'AbortError': '已停止生成',
-  'ERR_CANCELED': '已停止生成',
+  AbortError: '已停止生成',
+  ERR_CANCELED: '已停止生成',
 
   // API 错误
-  'ECONNREFUSED': '服务器连接失败',
-  'ECONNRESET': '连接已重置，请重试',
-  'ENOTFOUND': '服务器地址无效',
-  'ETIMEDOUT': '请求超时，请稍后重试',
+  ECONNREFUSED: '服务器连接失败',
+  ECONNRESET: '连接已重置，请重试',
+  ENOTFOUND: '服务器地址无效',
+  ETIMEDOUT: '请求超时，请稍后重试',
 
   // HTTP 错误码
   'HTTP 400': '请求参数错误',
@@ -56,7 +56,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   'HTTP 429': '请求过于频繁，请稍后重试',
   'HTTP 500': '服务器错误，请稍后重试',
   'HTTP 502': '网关错误，请稍后重试',
-  'HTTP 503': '服务暂时不可用',
+  'HTTP 503': '服务暂时不可用'
 }
 
 /**
@@ -66,7 +66,10 @@ const ERROR_MESSAGES: Record<string, string> = {
  * @param fallback - 默认错误消息
  * @returns 用户友好的错误消息
  */
-export function getUserFriendlyError(error: Error | string, fallback: string = '出错了，请重试'): string {
+export function getUserFriendlyError(
+  error: Error | string,
+  fallback: string = '出错了，请重试'
+): string {
   const errorMessage = typeof error === 'string' ? error : error.message
 
   // 直接匹配
@@ -102,10 +105,12 @@ export function getUserFriendlyError(error: Error | string, fallback: string = '
 export function getErrorType(error: Error | string): ErrorType {
   const errorMessage = typeof error === 'string' ? error : error.message
 
-  if (errorMessage.includes('fetch') ||
-      errorMessage.includes('network') ||
-      errorMessage.includes('ECONN') ||
-      errorMessage.includes('ENOTFOUND')) {
+  if (
+    errorMessage.includes('fetch') ||
+    errorMessage.includes('network') ||
+    errorMessage.includes('ECONN') ||
+    errorMessage.includes('ENOTFOUND')
+  ) {
     return ErrorType.NETWORK
   }
 
@@ -136,9 +141,11 @@ export function getErrorType(error: Error | string): ErrorType {
  */
 export function isRetryableError(error: Error | string): boolean {
   const errorType = getErrorType(error)
-  return errorType === ErrorType.NETWORK ||
+  return (
+    errorType === ErrorType.NETWORK ||
     errorType === ErrorType.TIMEOUT ||
     errorType === ErrorType.API
+  )
 }
 
 /**
@@ -169,7 +176,7 @@ export function formatError(error: Error | string, context?: Record<string, unkn
 export function reportAppError(
   error: Error | string,
   source: string,
-  context?: Record<string, unknown>,
+  context?: Record<string, unknown>
 ): void {
   console.error('[AppError]', formatError(error, { source, ...(context || {}) }))
 }

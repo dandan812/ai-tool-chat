@@ -7,7 +7,8 @@ import {
   type TaskRequest
 } from '../../api/task'
 import type { ChatMessage, ImageData, Step, Task, UploadedFileRef } from '../../types/task'
-import { buildRequestMessages } from '../../stores/chatRequest'
+import { buildRequestImages, buildRequestMessages } from '../../stores/chatRequest'
+import { buildMessageAttachments } from '../../utils/messageAttachments'
 import {
   buildUserMessageContent,
   generateFallbackTitle,
@@ -32,6 +33,7 @@ interface Observation {
   controller: AbortController
   messageId: string
   taskId?: string
+  flushContent?: () => void
 }
 
 export function createSessionTasks(sessions: SessionRepository) {
@@ -84,6 +86,7 @@ export function createSessionTasks(sessions: SessionRepository) {
 
   function stopObservation(sessionId: string) {
     const observation = observations.get(sessionId)
+    observation?.flushContent?.()
     observations.delete(sessionId)
     observation?.controller.abort()
     if (state.value[sessionId]) state.value[sessionId].loading = false
@@ -156,6 +159,9 @@ export function createSessionTasks(sessions: SessionRepository) {
       if (current.task) current.task.steps = current.steps
     }
     return {
+      onObservationReady: (flushContent) => {
+        observation.flushContent = flushContent
+      },
       onTaskStart: taskUpdate,
       onTaskUpdate: taskUpdate,
       onStepStart: stepUpdate,
@@ -229,7 +235,8 @@ export function createSessionTasks(sessions: SessionRepository) {
   async function sendTaskMessage(
     content: string,
     images: ImageData[] = [],
-    files: UploadedFileRef[] = []
+    files: UploadedFileRef[] = [],
+    enableTools = false
   ) {
     const sessionId = sessions.currentSessionId.value
     if (!sessions.isActive() || !sessionId || isSessionLoading(sessionId)) return
@@ -237,7 +244,12 @@ export function createSessionTasks(sessions: SessionRepository) {
     if (!userContent) return
     stopPendingRestore()
     error.value = null
-    const userMessage: ChatMessage = { role: 'user', content: userContent }
+    const attachments = buildMessageAttachments(images, files)
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: userContent,
+      ...(attachments.length ? { attachments, attachmentOnly: !content.trim() } : {})
+    }
     const messages = buildRequestMessages(sessions.messagesMap.value[sessionId] ?? [], userMessage)
     sessions.addMessage(sessionId, userMessage)
     const requestKey = crypto.randomUUID()
@@ -252,8 +264,9 @@ export function createSessionTasks(sessions: SessionRepository) {
         messages,
         requestKey,
         temperature: 0.7,
-        images: images.length ? images : undefined,
-        files: files.length ? files : undefined
+        images: images.length ? buildRequestImages(images) : undefined,
+        files: files.length ? files : undefined,
+        ...(enableTools ? { enableTools: true } : {})
       },
       () => {
         if (messages.length === 1)
@@ -305,6 +318,8 @@ export function createSessionTasks(sessions: SessionRepository) {
       const cancelled = readTaskSnapshot(response, task.id)
       if (cancelled.status === 'pending' || cancelled.status === 'running')
         throw new TaskProtocolError()
+      // Flush received deltas before the authoritative snapshot replaces the local result.
+      observation?.flushContent?.()
       const messageId =
         observation?.messageId ??
         sessions.messagesMap.value[sessionId]?.find((message) => message.taskId === task.id)?.id

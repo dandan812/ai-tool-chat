@@ -1,10 +1,14 @@
-import type { CodeSnippet } from './ragTypes';
+import type { CodeSnippet } from './ragTypes'
 
-export function scoreSnippets(snippets: CodeSnippet[], keywords: string[], query: string): CodeSnippet[] {
+export function scoreSnippets(
+  snippets: CodeSnippet[],
+  keywords: string[],
+  query: string
+): CodeSnippet[] {
   return snippets.map((snippet) => ({
     ...snippet,
-    relevanceScore: calculateRelevance(snippet, keywords, query),
-  }));
+    relevanceScore: calculateRelevance(snippet, keywords, query)
+  }))
 }
 
 /**
@@ -12,36 +16,36 @@ export function scoreSnippets(snippets: CodeSnippet[], keywords: string[], query
  * 把评分、补上下文和去重放在一起，主入口就只需要表达选择流程。
  */
 export function addContext(snippet: CodeSnippet, code: string, contextLines: number): CodeSnippet {
-  const lines = code.split('\n');
-  const [startLine, endLine] = snippet.lineRange;
-  const contextStart = Math.max(1, startLine - contextLines);
-  const contextEnd = Math.min(lines.length, endLine + contextLines);
+  const lines = code.split('\n')
+  const [startLine, endLine] = snippet.lineRange
+  const contextStart = Math.max(1, startLine - contextLines)
+  const contextEnd = Math.min(lines.length, endLine + contextLines)
 
   return {
     ...snippet,
     content: lines.slice(contextStart - 1, contextEnd).join('\n'),
-    lineRange: [contextStart, contextEnd],
-  };
+    lineRange: [contextStart, contextEnd]
+  }
 }
 
 export function deduplicateSnippets(snippets: CodeSnippet[]): CodeSnippet[] {
   if (snippets.length <= 1) {
-    return snippets;
+    return snippets
   }
 
-  const result: CodeSnippet[] = [];
+  const result: CodeSnippet[] = []
   for (const snippet of snippets) {
-    const isDuplicate = result.some((existing) => isOverlapping(snippet, existing));
+    const isDuplicate = result.some((existing) => isOverlapping(snippet, existing))
     if (!isDuplicate) {
-      result.push(snippet);
+      result.push(snippet)
     }
   }
 
-  return result;
+  return result
 }
 
 export function createFallbackSnippet(code: string): CodeSnippet {
-  const lines = code.split('\n');
+  const lines = code.split('\n')
   return {
     id: 'fallback',
     type: 'other',
@@ -50,55 +54,55 @@ export function createFallbackSnippet(code: string): CodeSnippet {
       lines.slice(0, 30).join('\n'),
       '',
       '// === 文件尾部 ===',
-      lines.slice(-30).join('\n'),
+      lines.slice(-30).join('\n')
     ].join('\n'),
     lineRange: [1, lines.length],
     relevanceScore: 0,
-    keywords: [],
-  };
+    keywords: []
+  }
 }
 
 function calculateRelevance(snippet: CodeSnippet, keywords: string[], query: string): number {
-  let score = 0;
-  const content = snippet.content.toLowerCase();
-  const queryLower = query.toLowerCase();
+  let score = 0
+  const content = snippet.content.toLowerCase()
+  const queryLower = query.toLowerCase()
 
   if (snippet.name) {
     for (const keyword of keywords) {
       if (keyword.toLowerCase() === snippet.name.toLowerCase()) {
-        score += 0.5;
+        score += 0.5
       } else if (snippet.name.toLowerCase().includes(keyword.toLowerCase())) {
-        score += 0.3;
+        score += 0.3
       }
     }
   }
 
   for (const keyword of keywords) {
-    const keywordLower = keyword.toLowerCase();
+    const keywordLower = keyword.toLowerCase()
     if (content.includes(keywordLower)) {
-      score += 0.2;
-      const matches = (content.match(new RegExp(keywordLower, 'g')) || []).length;
-      score += Math.min(matches * 0.05, 0.3);
+      score += 0.2
+      const matches = (content.match(new RegExp(keywordLower, 'g')) || []).length
+      score += Math.min(matches * 0.05, 0.3)
     }
   }
 
   if (content.includes(queryLower)) {
-    score += 0.3;
+    score += 0.3
   }
 
-  const length = snippet.lineRange[1] - snippet.lineRange[0];
-  if (length < 5) score -= 0.1;
-  if (length > 100) score -= 0.2;
+  const length = snippet.lineRange[1] - snippet.lineRange[0]
+  if (length < 5) score -= 0.1
+  if (length > 100) score -= 0.2
 
-  return Math.max(0, Math.min(1, score));
+  return Math.max(0, Math.min(1, score))
 }
 
 function isOverlapping(a: CodeSnippet, b: CodeSnippet): boolean {
   if (a.type === b.type && a.name === b.name && a.name) {
-    return true;
+    return true
   }
 
-  const [aStart, aEnd] = a.lineRange;
-  const [bStart, bEnd] = b.lineRange;
-  return !(aEnd < bStart || bEnd < aStart);
+  const [aStart, aEnd] = a.lineRange
+  const [bStart, bEnd] = b.lineRange
+  return !(aEnd < bStart || bEnd < aStart)
 }

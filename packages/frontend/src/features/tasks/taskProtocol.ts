@@ -20,15 +20,18 @@ function oneOf(value: unknown, choices: string[]) {
 }
 
 function isUsage(value: unknown) {
-  return record(value) &&
+  return (
+    record(value) &&
     nonempty(value.callId) &&
     nonempty(value.model) &&
     oneOf(value.tokenSource, ['provider', 'estimated', 'unknown']) &&
     oneOf(value.outcome, ['completed', 'failed', 'cancelled', 'unknown']) &&
-    ['inputTokens', 'outputTokens'].every((key) =>
-      value[key] === undefined ||
-      (Number.isSafeInteger(value[key]) && (value[key] as number) >= 0)
+    ['inputTokens', 'outputTokens'].every(
+      (key) =>
+        value[key] === undefined ||
+        (Number.isSafeInteger(value[key]) && (value[key] as number) >= 0)
     )
+  )
 }
 
 export function isSource(value: unknown): value is EvidenceSource {

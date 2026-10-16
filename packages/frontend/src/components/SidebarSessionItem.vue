@@ -28,11 +28,11 @@ const formattedTime = computed(() => formatSessionTime(props.updatedAt))
   <div class="session-item" :class="{ active }">
     <button
       class="session-select"
+      :title="title + ' · ' + formattedTime"
       :aria-current="active ? 'true' : undefined"
       @click="emit('select')"
     >
-      <span class="session-title">{{ title }}</span
-      ><span class="session-time">{{ formattedTime }}</span>
+      <span class="session-title">{{ title }}</span>
     </button>
     <button
       class="icon-button danger delete-btn"

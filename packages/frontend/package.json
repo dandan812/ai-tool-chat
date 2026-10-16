@@ -9,13 +9,14 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write src/",
+    "format": "prettier --ignore-path ../../.prettierignore --write .",
     "test": "vitest run"
   },
   "dependencies": {
     "@lucide/vue": "1.49.0",
     "@tanstack/vue-virtual": "3.13.39",
     "@types/spark-md5": "^3.0.5",
+    "element-plus": "2.13.6",
     "markdown-it": "^14.1.0",
     "pinia": "^3.0.4",
     "spark-md5": "^3.0.2",

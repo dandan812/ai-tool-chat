@@ -1,10 +1,10 @@
-import type { Env } from '../types';
-import { TaskManager } from '../core/taskManager';
-import { createJSONResponse } from '../infrastructure/middleware';
+import type { Env } from '../types'
+import { createJSONResponse } from '../infrastructure/middleware'
+import { hasTextProviderCredentials } from '../providers/textProvider'
+import { hasMultimodalProviderCredentials } from '../providers/multimodalProvider'
 
 /**
- * 健康检查只暴露当前运行时能否调用百炼能力，
- * 避免把无关的历史供应商状态继续暴露给排障入口。
+ * 保留历史字段名，文本能力同时涵盖部署配置的兼容接口。
  */
 export function handleHealthCheck(env: Env): Response {
   return createJSONResponse({
@@ -12,20 +12,8 @@ export function handleHealthCheck(env: Env): Response {
     timestamp: new Date().toISOString(),
     version: '2.0.0',
     features: {
-      bailianText: !!env.QWEN_API_KEY,
-      bailianMultimodal: !!env.QWEN_API_KEY,
-    },
-  });
-}
-
-/**
- * 统计接口只读取 TaskManager 当前实例能看到的任务计数，
- * 它适合本地开发和轻量排障，不等同于全局持久化监控。
- */
-export function handleStatsRequest(env: Env): Response {
-  const taskManager = new TaskManager(env);
-  return createJSONResponse({
-    tasks: taskManager.getStats(),
-    timestamp: new Date().toISOString(),
-  });
+      bailianText: hasTextProviderCredentials(env),
+      bailianMultimodal: hasMultimodalProviderCredentials(env)
+    }
+  })
 }

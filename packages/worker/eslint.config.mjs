@@ -1,13 +1,17 @@
-import js from '@eslint/js';
-import tsPlugin from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
-import globals from 'globals';
+import js from '@eslint/js'
+import tsPlugin from '@typescript-eslint/eslint-plugin'
+import tsParser from '@typescript-eslint/parser'
+import globals from 'globals'
 
 export default [
   {
-    ignores: ['.wrangler/**', 'coverage/**', 'node_modules/**', 'run-tests.mjs'],
+    ignores: ['**/.wrangler/**', '**/coverage/**', '**/node_modules/**', '**/dist/**']
   },
   js.configs.recommended,
+  {
+    files: ['**/*.mjs'],
+    languageOptions: { globals: globals.node }
+  },
   {
     files: ['src/**/*.ts', 'vitest.config.ts'],
     languageOptions: {
@@ -17,11 +21,11 @@ export default [
       globals: {
         ...globals.node,
         ...globals.vitest,
-        ...globals.worker,
-      },
+        ...globals.worker
+      }
     },
     plugins: {
-      '@typescript-eslint': tsPlugin,
+      '@typescript-eslint': tsPlugin
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
@@ -33,9 +37,9 @@ export default [
         'warn',
         {
           argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
-        },
-      ],
-    },
-  },
-];
+          varsIgnorePattern: '^_'
+        }
+      ]
+    }
+  }
+]

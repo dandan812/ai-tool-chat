@@ -9,7 +9,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   title: '当前区域加载失败',
-  message: '发生了意外错误，请重试当前区域。',
+  message: '发生了意外错误，请重试当前区域。'
 })
 
 const hasError = ref(false)
@@ -28,7 +28,7 @@ onErrorCaptured((error, instance, info) => {
   const component = (instance as { type?: { __name?: string; name?: string } } | null)?.type
   reportAppError(error as Error, 'component-boundary', {
     info,
-    component: component?.__name || component?.name || 'anonymous',
+    component: component?.__name || component?.name || 'anonymous'
   })
   return false
 })
@@ -41,7 +41,7 @@ onErrorCaptured((error, instance, info) => {
     <section v-else class="error-fallback" role="alert">
       <h3>{{ title }}</h3>
       <p>{{ displayError || message }}</p>
-      <button type="button" @click="resetBoundary">重试当前区域</button>
+      <button type="button" class="button outline" @click="resetBoundary">重试当前区域</button>
     </section>
   </div>
 </template>
@@ -56,7 +56,7 @@ onErrorCaptured((error, instance, info) => {
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-5);
-  border: 1px solid rgba(239, 68, 68, 0.18);
+  border: var(--border-width) solid var(--error);
   border-radius: var(--radius-xl);
   background: var(--danger-soft);
   color: var(--text-primary);
@@ -74,11 +74,5 @@ onErrorCaptured((error, instance, info) => {
 
 .error-fallback button {
   width: fit-content;
-  padding: 0.7rem 1rem;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--accent-primary);
-  color: white;
-  cursor: pointer;
 }
 </style>

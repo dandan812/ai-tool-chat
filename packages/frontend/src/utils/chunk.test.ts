@@ -250,9 +250,12 @@ describe('uploadChunkedFile', () => {
     await uploadChunkedFile(file, { apiUrl: API_BASE_URL + '/' })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     for (const [url, init] of fetchMock.mock.calls) {
-      expect(url).toMatch(
-        new RegExp('^' + API_BASE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/upload/')
-      )
+      const configured = new URL(API_BASE_URL, window.location.href)
+      const requested = new URL(url, window.location.href)
+      expect(requested.origin).toBe(configured.origin)
+      expect(
+        requested.pathname.startsWith(configured.pathname.replace(/\/$/, '') + '/upload/')
+      ).toBe(true)
       expect(init).toMatchObject({
         credentials: 'include',
         redirect: 'error',

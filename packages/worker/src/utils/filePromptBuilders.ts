@@ -1,53 +1,36 @@
-import type { Message } from '../types';
-import { EVIDENCE_INSTRUCTIONS } from '../retrieval/evidence';
+import type { Message } from '../types'
+import { EVIDENCE_INSTRUCTIONS } from '../retrieval/evidence'
 
 interface TokenSummary {
-  totalOriginalTokens: number;
-  totalProcessedTokens: number;
-  reductionRatio: number;
+  totalOriginalTokens: number
+  totalProcessedTokens: number
+  reductionRatio: number
 }
 
 interface TextRetrievalSummary extends TokenSummary {
-  selectedChunkCount: number;
-  budgetExceeded: boolean;
-}
-
-const CHUNK_SUMMARY_PROMPT = `请分析以下文件片段，提取其核心内容和结构。返回格式：
-1. 主要内容/功能概述
-2. 关键概念/术语
-3. 重要数据/配置项
-
-文件片段：`;
-
-function buildFinalAnswerPrompt(summaries: string, userQuestion: string): string {
-  return `我有一个大文件，已经分块分析。以下是各分块的摘要：
-
-${summaries}
-
-用户的问题是：${userQuestion}
-
-请基于以上摘要回答用户问题。`;
+  selectedChunkCount: number
+  budgetExceeded: boolean
 }
 
 export function createSmallFileMessages(fileContents: string, userQuestion: string): Message[] {
   return [
     {
       role: 'system',
-      content: `你是一个文件分析助手。用户会上传一些文本文件，请根据文件内容回答用户的问题。\n${EVIDENCE_INSTRUCTIONS}`,
+      content: `你是一个文件分析助手。用户会上传一些文本文件，请根据文件内容回答用户的问题。\n${EVIDENCE_INSTRUCTIONS}`
     },
     {
       role: 'user',
-      content: `以下是我上传的文件内容：\n\n${fileContents}\n\n我的问题是：${userQuestion}`,
-    },
-  ];
+      content: `以下是我上传的文件内容：\n\n${fileContents}\n\n我的问题是：${userQuestion}`
+    }
+  ]
 }
 
 export function createTextRetrievalMessages(
   retrievedContent: string,
   userQuestion: string,
-  summary: TextRetrievalSummary,
+  summary: TextRetrievalSummary
 ): Message[] {
-  const savedTokens = Math.max(summary.totalOriginalTokens - summary.totalProcessedTokens, 0);
+  const savedTokens = Math.max(summary.totalOriginalTokens - summary.totalProcessedTokens, 0)
 
   return [
     {
@@ -60,19 +43,19 @@ export function createTextRetrievalMessages(
 选中片段数: ${summary.selectedChunkCount}
 ${summary.budgetExceeded ? '由于预算限制，部分相关片段未注入。' : '仅提供本次检索片段，不代表覆盖全文。'}
 
-请只基于提供的片段回答问题。如果信息不足，请明确说明，并建议用户缩小范围、指定章节、关键词或段落。\n${EVIDENCE_INSTRUCTIONS}`,
+请只基于提供的片段回答问题。如果信息不足，请明确说明，并建议用户缩小范围、指定章节、关键词或段落。\n${EVIDENCE_INSTRUCTIONS}`
     },
     {
       role: 'user',
-      content: `以下是系统检索到的相关文件片段：\n\n${retrievedContent}\n\n我的问题是：${userQuestion}`,
-    },
-  ];
+      content: `以下是系统检索到的相关文件片段：\n\n${retrievedContent}\n\n我的问题是：${userQuestion}`
+    }
+  ]
 }
 
 export function createTextOverviewMessages(
   retrievedContent: string,
   userQuestion: string,
-  summary: TextRetrievalSummary,
+  summary: TextRetrievalSummary
 ): Message[] {
   return [
     {
@@ -84,60 +67,26 @@ export function createTextOverviewMessages(
 代表性片段数: ${summary.selectedChunkCount}
 ${summary.budgetExceeded ? '片段数量受预算限制，回答时请明确说明可能存在遗漏。' : '片段已覆盖文件的多个位置。'}
 
-请基于这些代表性片段给出整体层面的概览、主题、结构和重点。如果无法确定某个细节，请明确说明该结论只是基于抽样片段。\n${EVIDENCE_INSTRUCTIONS}`,
+请基于这些代表性片段给出整体层面的概览、主题、结构和重点。如果无法确定某个细节，请明确说明该结论只是基于抽样片段。\n${EVIDENCE_INSTRUCTIONS}`
     },
     {
       role: 'user',
-      content: `以下是从整份文件不同位置抽取的代表性片段：\n\n${retrievedContent}\n\n我的问题是：${userQuestion}`,
-    },
-  ];
+      content: `以下是从整份文件不同位置抽取的代表性片段：\n\n${retrievedContent}\n\n我的问题是：${userQuestion}`
+    }
+  ]
 }
 
 export function createTextRetrievalNarrowScopeMessage(
   fileCount: number,
-  totalTokens: number,
+  totalTokens: number
 ): string {
-  return `这次没有检索到足够相关的文件片段，当前文件总规模约 ${totalTokens} tokens，共 ${fileCount} 个文件。为了避免高成本地通读全文，请把问题缩小到更具体的章节、关键词、人物、时间点或段落。`;
-}
-
-export function createLargeFileAnswerMessages(
-  summaries: string[],
-  userQuestion: string,
-): Message[] {
-  return [
-    {
-      role: 'system',
-      content:
-        `你是一个文件分析助手。以下摘要是模型派生内容，不是原文证据，不能据此编造原文位置。\n${EVIDENCE_INSTRUCTIONS}`,
-    },
-    {
-      role: 'user',
-      content: buildFinalAnswerPrompt(
-        summaries.map((summary, index) => `### 分块 ${index + 1} 摘要:\n${summary}`).join('\n\n'),
-        userQuestion,
-      ),
-    },
-  ];
-}
-
-export function createChunkSummaryMessages(chunk: string): Message[] {
-  return [
-    {
-      role: 'system',
-      content:
-        `你是一个文件分析助手。用户上传了一个大文件，已经分块。请提取当前分块的核心内容和结构。\n${EVIDENCE_INSTRUCTIONS}`,
-    },
-    {
-      role: 'user',
-      content: `${CHUNK_SUMMARY_PROMPT}\n\n${chunk}`,
-    },
-  ];
+  return `这次没有检索到足够相关的文件片段，当前文件总规模约 ${totalTokens} tokens，共 ${fileCount} 个文件。为了避免高成本地通读全文，请把问题缩小到更具体的章节、关键词、人物、时间点或段落。`
 }
 
 export function createRagMessages(
   codeContent: string,
   userQuestion: string,
-  summary: TokenSummary,
+  summary: TokenSummary
 ): Message[] {
   return [
     {
@@ -148,35 +97,11 @@ export function createRagMessages(
 检索后大小: ${summary.totalProcessedTokens} tokens
 Token 节省率: ${(summary.reductionRatio * 100).toFixed(1)}%
 
-请基于以下检索到的代码片段回答用户问题。如果信息不足，请告知用户需要查看更多代码。\n${EVIDENCE_INSTRUCTIONS}`,
+请基于以下检索到的代码片段回答用户问题。如果信息不足，请告知用户需要查看更多代码。\n${EVIDENCE_INSTRUCTIONS}`
     },
     {
       role: 'user',
-      content: `${codeContent}\n\n我的问题是：${userQuestion}`,
-    },
-  ];
-}
-
-export function createMixedFileMessages(
-  fileContents: string,
-  userQuestion: string,
-  summary: TokenSummary,
-): Message[] {
-  return [
-    {
-      role: 'system',
-      content: `你是一个文件分析助手。用户上传了混合类型的文件（代码和文本）。
-
-代码文件已使用智能压缩技术，只保留关键结构（函数签名、类定义等）。
-原始代码总大小: ${summary.totalOriginalTokens} tokens
-处理后大小: ${summary.totalProcessedTokens} tokens
-Token 节省率: ${(summary.reductionRatio * 100).toFixed(1)}%
-
-请基于以下文件内容回答用户问题。压缩文本不是原文证据，不能为其编造原文位置。\n${EVIDENCE_INSTRUCTIONS}`,
-    },
-    {
-      role: 'user',
-      content: `以下是我上传的文件内容：\n\n${fileContents}\n\n我的问题是：${userQuestion}`,
-    },
-  ];
+      content: `${codeContent}\n\n我的问题是：${userQuestion}`
+    }
+  ]
 }

@@ -1,387 +1,124 @@
-/**
- * Task/Step 类型定义
- *
- * 这个文件定义了与 Worker 后端通信相关的所有类型。
- * 后端采用 Task → Step → Skill 架构模式。
- *
- * 架构说明：
- * - Task：表示单个聊天请求，管理整个任务的生命周期
- * - Steps：真实处理阶段（route → skill），Skill 内部进度更新同一个步骤
- * - Skills：可插拔的处理模块（textSkill、multimodalSkill 等）
- *
- * @package frontend/src/types
- */
-
-// ==================== Task 任务类型 ====================
-
-/**
- * 聊天消息接口
- * 前后端统一使用的最小消息结构
- */
 export interface ChatMessage {
-  /** Local identity; optional for older stored conversations and API callers. */
-  id?: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  taskId?: string;
-  requestKey?: string;
-  sources?: EvidenceSource[];
-  metrics?: TaskMetrics;
+  /** Optional for older stored conversations and API callers. */
+  id?: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  taskId?: string
+  requestKey?: string
+  sources?: EvidenceSource[]
+  metrics?: TaskMetrics
+  /** Local presentation only; excluded from API message history. */
+  attachments?: MessageAttachment[]
+  /** Distinguishes generated attachment markers from user-entered text. */
+  attachmentOnly?: boolean
 }
 
-/**
- * 任务状态枚举
- * 表示任务在执行过程中的不同阶段
- */
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export interface MessageAttachment {
+  kind: 'image' | 'file'
+  name: string
+  mimeType: string
+  size?: number
+}
 
-/**
- * Task 任务接口
- *
- * 代表一个完整的用户请求处理过程
- * 例如：用户发送一条消息 → AI 分析 → AI 调用工具 → AI 生成回复
- *
- * @property id - 任务唯一标识符
- * @property type - 任务类型（chat/code/image/file）
- * @property status - 任务当前状态
- * @property userMessage - 用户的原始输入内容
- * @property steps - 任务包含的所有步骤
- * @property result - 任务执行结果（成功时）
- * @property error - 错误信息（失败时）
- * @property createdAt - 任务创建时间戳
- * @property updatedAt - 任务最后更新时间戳
- */
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type StepStatus = 'pending' | 'running' | 'completed' | 'failed'
+/** mcp also labels file research tools; legacy step types remain readable. */
+export type StepType = 'route' | 'skill' | 'plan' | 'mcp' | 'think' | 'respond'
+
 export interface Task {
-  /** 任务唯一 ID */
-  id: string;
-  /** 任务类型，决定使用哪种 Skill 处理 */
-  type: 'chat' | 'code' | 'image' | 'file';
-  /** 任务当前状态 */
-  status: TaskStatus;
-  /** 用户的原始输入内容 */
-  userMessage: string;
-  /** 任务包含的所有步骤列表 */
-  steps: Step[];
-  /** 任务执行结果（仅 status 为 completed 时有值） */
-  result?: string;
-  /** 错误信息（仅 status 为 failed 时有值） */
-  error?: string;
-  /** 任务创建时间戳（毫秒） */
-  createdAt: number;
-  /** 任务最后更新时间戳（毫秒） */
-  updatedAt: number;
-  /** 任务元数据（如模型、温度等） */
-  metadata?: Record<string, unknown>;
+  id: string
+  type: 'chat' | 'code' | 'image' | 'file'
+  status: TaskStatus
+  userMessage: string
+  steps: Step[]
+  /** Interrupted tasks may also retain partial results. */
+  result?: string
+  error?: string
+  createdAt: number
+  updatedAt: number
+  metadata?: Record<string, unknown>
 }
 
-// ==================== Step 步骤类型 ====================
-
-/**
- * 步骤状态枚举
- * 表示步骤在执行过程中的不同阶段
- */
-export type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
-
-/**
- * 步骤类型枚举
- * 定义了所有可能的步骤类型，对应任务执行的不同阶段
- *
- * - route：根据输入选择处理能力，不调用模型进行规划
- * - skill：调用具体的 AI 模型
- * - mcp：执行模型上下文协议（MCP）工具
- * - think：内部思考过程（可选）
- * - plan/respond/mcp/think：保留用于读取旧任务记录
- */
-export type StepType = 'route' | 'skill' | 'plan' | 'mcp' | 'think' | 'respond';
-
-/**
- * Step 步骤接口
- *
- * 表示任务执行过程中的一个具体步骤
- * 每个步骤都有自己的状态、输入输出和执行时间
- *
- * @property id - 步骤唯一标识符
- * @property taskId - 所属任务的 ID
- * @property type - 步骤类型
- * @property status - 步骤当前状态
- * @property name - 步骤显示名称
- * @property description - 步骤详细描述
- * @property input - 步骤输入数据（可以是任何类型）
- * @property output - 步骤输出数据（可以是任何类型）
- * @property error - 错误信息（仅 status 为 failed 时有值）
- * @property startedAt - 步骤开始时间戳
- * @property completedAt - 步骤完成时间戳
- */
 export interface Step {
-  /** 步骤唯一 ID */
-  id: string;
-  /** 所属任务的 ID */
-  taskId: string;
-  /** 步骤类型 */
-  type: StepType;
-  /** 步骤当前状态 */
-  status: StepStatus;
-  /** 步骤显示名称（用于 UI） */
-  name: string;
-  /** 步骤详细描述（可选） */
-  description?: string;
-  /** Skill 报告的实际处理进度，不代表模型 token 生成百分比。 */
-  progress?: { message: string; current: number; total: number };
-  /** 步骤输入数据（类型取决于 step type） */
-  input?: unknown;
-  /**
-   * 步骤输出数据
-   * 对于 skill 步骤，可能包含 { model: 'qwen3.5-flash-2026-02-23', ... }
-   */
-  output?: unknown;
-  /** 错误信息（仅 status 为 failed 时有值） */
-  error?: string;
-  /** 步骤开始时间戳（毫秒） */
-  startedAt?: number;
-  /** 步骤完成时间戳（毫秒） */
-  completedAt?: number;
-  /** 步骤元数据 */
-  metadata?: Record<string, unknown>;
+  id: string
+  taskId: string
+  type: StepType
+  status: StepStatus
+  name: string
+  description?: string
+  /** Operation progress, not a percentage of model output tokens. */
+  progress?: { message: string; current: number; total: number }
+  input?: unknown
+  output?: unknown
+  error?: string
+  startedAt?: number
+  completedAt?: number
+  metadata?: Record<string, unknown>
 }
 
-// ==================== SSE 事件类型 ====================
-
-/**
- * SSE（Server-Sent Events）事件类型枚举
- * 定义了后端可以通过 SSE 推送的所有事件类型
- */
-export type SSEEventType = 'task' | 'step' | 'content' | 'error' | 'complete';
-
-/**
- * SSE 事件基础接口
- *
- * 所有 SSE 事件的通用结构
- * @property type - 事件类型
- * @property data - 事件携带的数据（根据 type 不同而有不同结构）
- */
-export interface SSEEvent {
-  /** 事件类型 */
-  type: SSEEventType;
-  /** 事件数据（根据 type 不同而有不同结构） */
-  data: unknown;
-}
-
-/**
- * Task 事件数据
- * 当 SSE 事件 type 为 'task' 时，data 的结构
- *
- * @property task - 任务对象
- * @property event - 具体的任务事件类型
- */
-export interface TaskEvent {
-  /** 完整的任务对象 */
-  task: Task;
-  /** 任务事件类型 */
-  event: 'started' | 'updated' | 'completed' | 'failed';
-}
-
-/**
- * Step 事件数据
- * 当 SSE 事件 type 为 'step' 时，data 的结构
- *
- * @property step - 步骤对象
- * @property event - 具体的步骤事件类型
- */
-export interface StepEvent {
-  /** 完整的步骤对象 */
-  step: Step;
-  /** 步骤事件类型 */
-  event: 'start' | 'progress' | 'complete' | 'error';
-}
-
-/**
- * Content 事件数据
- * 当 SSE 事件 type 为 'content' 时，data 的结构
- *
- * 用于流式传输 AI 生成的内容
- * @property content - 内容片段
- */
-export interface ContentEvent {
-  /** 内容片段（字符串） */
-  content: string;
-}
-
-/**
- * Error 事件数据
- * 当 SSE 事件 type 为 'error' 时，data 的结构
- *
- * @property error - 错误信息
- * @property task - 相关的任务对象（可选）
- */
-export interface ErrorEvent {
-  /** 错误信息字符串 */
-  error: string;
-  /** 相关的任务对象（可选） */
-  task?: Task;
-}
-
-// ==================== 多模态数据类型 ====================
-
-/**
- * 图片数据接口
- *
- * 用于表示用户上传的图片信息
- * 图片转换为 base64 格式传输
- *
- * @property id - 图片唯一 ID
- * @property base64 - Base64 编码的图片数据（不含前缀）
- * @property mimeType - 图片 MIME 类型（如 image/jpeg）
- * @property description - 图片描述（可选）
- * @property file - 原始 File 对象（可选）
- */
 export interface ImageData {
-  /** 图片唯一 ID */
-  id: string;
-  /** Base64 编码的图片数据（不含 data:image/xxx;base64, 前缀） */
-  base64: string;
-  /** 图片 MIME 类型 */
-  mimeType: string;
-  /** 图片描述文本（可选） */
-  description?: string;
-  /** 原始 File 对象（可选） */
-  file?: File;
+  id: string
+  /** Raw base64, without a data URL prefix. */
+  base64: string
+  mimeType: string
+  description?: string
+  file?: File
+  /** Prepared from the draft blob for local message history only. */
+  localAttachment?: MessageAttachment
 }
 
-/**
- * 草稿图片引用
- *
- * 草稿阶段不再把完整 base64 常驻在组件状态里，
- * 只保留预览地址和 IndexedDB key。
- */
+/** Drafts retain IndexedDB references instead of base64 in component state. */
 export interface DraftImage {
-  /** 草稿图片唯一 ID */
-  id: string;
-  /** IndexedDB 中的存储键 */
-  draftKey: string;
-  /** 预览地址 */
-  previewUrl: string;
-  /** 图片 MIME 类型 */
-  mimeType: string;
-  /** 原始文件名或描述 */
-  description?: string;
+  id: string
+  draftKey: string
+  previewUrl: string
+  mimeType: string
+  description?: string
 }
 
-// ==================== 文件上传类型 ====================
-
-/**
- * 文件数据接口
- *
- * 用于表示用户上传的文本文件信息
- * 文件内容以纯文本形式传输
- *
- * @property id - 文件唯一 ID
- * @property name - 文件名
- * @property content - 文件内容（纯文本）
- * @property mimeType - 文件 MIME 类型
- * @property size - 文件大小（字节）
- * @property file - 原始 File 对象（可选）
- */
 export interface UploadedFileRef {
-  /** 服务端文件唯一 ID */
-  fileId: string;
-  /** 文件名 */
-  fileName: string;
-  /** 文件 MIME 类型 */
-  mimeType: string;
-  /** 文件大小（字节） */
-  size: number;
-  /** 文件哈希 */
-  fileHash: string;
-  /** 文件来源 */
-  source: 'uploaded';
+  fileId: string
+  fileName: string
+  mimeType: string
+  size: number
+  fileHash: string
+  source: 'uploaded'
 }
 
-/**
- * 上传完成响应
- */
-export interface UploadCompleteResponse {
-  success: boolean;
-  file?: UploadedFileRef;
-  error?: string;
-}
-
-// ==================== 上传进度类型 ====================
-
-/**
- * 上传进度信息
- */
 export interface UploadProgress {
-  /** 文件 ID */
-  fileId: string;
-  /** 文件名 */
-  fileName: string;
-  /** 已上传分片数 */
-  uploadedChunks: number;
-  /** 总分片数 */
-  totalChunks: number;
-  /** 上传进度（0-100） */
-  percentage: number;
-  /** 上传速度（KB/s） */
-  speed: number;
-  /** 预计剩余时间（秒） */
-  estimatedTime: number;
+  fileId: string
+  fileName: string
+  uploadedChunks: number
+  totalChunks: number
+  percentage: number
+  /** KB/s. */
+  speed: number
+  /** Seconds. */
+  estimatedTime: number
 }
 
-/**
- * 上传进度回调函数类型
- */
-export type UploadProgressCallback = (progress: UploadProgress) => void;
+export type UploadProgressCallback = (progress: UploadProgress) => void
 
-/**
- * 文件分片
- */
-export interface FileChunk {
-  /** 分片索引 */
-  index: number;
-  /** 分片数据 */
-  data: ArrayBuffer;
-  /** 分片大小 */
-  size: number;
+export interface EvidenceSource {
+  sourceId: string
+  fileId: string
+  fileName: string
+  fileHash: string
+  excerpt: string
+  startLine: number
+  endLine: number
+  startOffset: number
+  endOffset: number
 }
 
-// ==================== 工具调用类型 ====================
-
-/**
- * 工具调用接口
- *
- * 用于表示 AI 模型调用的工具
- * MCP（Model Context Protocol）工具调用
- *
- * @property id - 调用唯一 ID
- * @property name - 工具名称
- * @property arguments - 工具参数
- */
-export interface ToolCall {
-  /** 调用唯一 ID */
-  id: string;
-  /** 工具名称 */
-  name: string;
-  /** 工具参数（键值对） */
-  arguments: Record<string, unknown>;
+export interface TaskMetrics {
+  elapsedMs: number
+  firstContentMs: number | null
+  modelCalls: number
+  inputTokens: number | null
+  outputTokens: number | null
+  tokenSource: 'provider' | 'estimated' | 'unknown'
+  estimatedCost: number | null
+  currency: string | null
+  costSource: 'estimated' | 'unknown'
 }
-
-/**
- * 工具执行结果接口
- *
- * 用于表示工具调用的返回结果
- *
- * @property toolCallId - 对应的工具调用 ID
- * @property content - 执行结果内容
- * @property isError - 是否为错误结果
- */
-export interface ToolResult {
-  /** 对应的工具调用 ID */
-  toolCallId: string;
-  /** 执行结果内容 */
-  content: string;
-  /** 是否为错误结果 */
-  isError?: boolean;
-}
-
-export interface EvidenceSource { sourceId: string; fileId: string; fileName: string; fileHash: string; excerpt: string; startLine: number; endLine: number; startOffset: number; endOffset: number }
-export interface TaskMetrics { elapsedMs: number; firstContentMs: number | null; modelCalls: number; inputTokens: number | null; outputTokens: number | null; tokenSource: 'provider' | 'estimated' | 'unknown'; estimatedCost: number | null; currency: string | null; costSource: 'estimated' | 'unknown' }

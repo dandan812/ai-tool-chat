@@ -1,0 +1,4 @@
+Local UI acceptance fixture.
+Scope: chat, file analysis, task history, source references.
+Checks: upload progress, attachment removal, streaming, cancellation.
+This file contains synthetic test data only.

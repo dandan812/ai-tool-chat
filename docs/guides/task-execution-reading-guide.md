@@ -1,6 +1,6 @@
 # 任务执行链路：阅读与面试指南
 
-日期：2026-09-30。针对当前本地代码；不代表线上已经发布。
+更新：2026-10-16。针对当前源码；本轮整理不代表线上已经发布。
 
 ## 先掌握三个名词
 
@@ -30,7 +30,7 @@ Step 的 progress 展示，不是三个可以独立恢复的工作流节点。
 3. `packages/worker/src/skills/index.ts`
    读 `selectSkill()`，了解输入怎样选到文本、图片或文件处理。
 4. `packages/worker/src/skills/fileSkill.ts`
-   了解文件处理的分流，再按需要读文本或代码检索实现。
+   从 `answerFromFiles()` 进入统一文件问答，再按需要读文本或代码检索实现。
 5. `packages/worker/src/core/durableTask.ts`
    最后再读持久化、事件序号、预算和取消；它们不属于 Skill 的职责。
 6. `packages/frontend/src/api/requestManager.ts`
@@ -51,9 +51,10 @@ this.taskStore.setResult(task.id, content);
 - `executeSkill()` 真正执行，转发内容、证据来源、进度与用量。
 - `setResult()` 保存最终结果，不再制造一个没有实际生成工作的 respond 步骤。
 
-不是“先规划，再调用一次模型，最后再调用一次模型生成”。普通对话和当前
+不是“先规划，再调用一次模型，最后再调用一次模型生成”。普通对话和普通
 文件问答路径至多发起一次生成调用；依据不足时不调用模型，
-路由和构建文件上下文也不调用模型。
+路由和构建文件上下文也不调用模型。显式资料研究另有最多两轮工具决策加一次回答，
+实现在 `skills/fileAgentSkill.ts`，不使用外部 MCP 客户端。
 
 ## 看懂异步生成器
 
@@ -101,8 +102,8 @@ for await (const chunk of skillExecution) {
 
 `current/total` 只表示该处理阶段的计数，不表示整条任务或模型生成的精确百分比。
 
-目前持久任务的浏览器链路是 HTTP 事件轮询；模型 Provider 读取上游 SSE。
-不要把“模型流式响应”与“浏览器通过 SSE 接收持久任务”混为一谈。
+浏览器通过 SSE 读取持久任务事件，断线后按游标重连；旧客户端仍可读取 JSON 事件页。
+模型 Provider 读取另一条上游 SSE，两条连接的生命周期不同。
 
 ## 错误由哪层负责
 

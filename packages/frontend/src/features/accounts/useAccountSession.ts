@@ -1,5 +1,11 @@
 import { onMounted, onUnmounted, ref } from 'vue'
-import { apiJSON, getAccountRevision, notifyAccountChanged, setStorageAccount, type AccountUser } from '../../api/account'
+import {
+  apiJSON,
+  getAccountRevision,
+  notifyAccountChanged,
+  setStorageAccount,
+  type AccountUser
+} from '../../api/account'
 
 export function useAccountSession() {
   const ready = ref(false)
@@ -11,6 +17,7 @@ export function useAccountSession() {
   const guestEnabled = ref(false)
   const pending = ref(false)
   const error = ref('')
+  const loadFailed = ref(false)
   let disposed = false
   let loadGeneration = 0
 
@@ -32,8 +39,13 @@ export function useAccountSession() {
     const revision = getAccountRevision()
     ready.value = false
     error.value = ''
+    loadFailed.value = false
     try {
-      let result = await apiJSON<{ user: AccountUser | null; registrationEnabled?: boolean; guestEnabled?: boolean }>('/auth/me')
+      let result = await apiJSON<{
+        user: AccountUser | null
+        registrationEnabled?: boolean
+        guestEnabled?: boolean
+      }>('/auth/me')
       if (disposed || generation !== loadGeneration || getAccountRevision() !== revision) return
       registrationEnabled.value = result.registrationEnabled ?? false
       guestEnabled.value = result.guestEnabled ?? false
@@ -45,7 +57,13 @@ export function useAccountSession() {
       user.value = result.user
     } catch (caught) {
       if (!disposed && generation === loadGeneration && getAccountRevision() === revision) {
-        error.value = caught instanceof Error ? caught.message : '账户服务暂时不可用'
+        loadFailed.value = true
+        error.value =
+          caught instanceof TypeError
+            ? '无法连接账户服务，请确认服务可用后重试。'
+            : caught instanceof Error
+              ? caught.message
+              : '账户服务暂时不可用'
       }
     } finally {
       if (!disposed && generation === loadGeneration) ready.value = true
@@ -57,7 +75,8 @@ export function useAccountSession() {
     error.value = ''
     try {
       await apiJSON('/auth/' + (registering.value ? 'register' : 'login'), {
-        method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }),
+        method: 'POST',
+        body: JSON.stringify({ username: username.value, password: password.value })
       })
       password.value = ''
       notifyAccountChanged()
@@ -65,7 +84,9 @@ export function useAccountSession() {
       window.location.reload()
     } catch (caught) {
       error.value = caught instanceof Error ? caught.message : '登录失败'
-    } finally { pending.value = false }
+    } finally {
+      pending.value = false
+    }
   }
   onMounted(() => {
     window.addEventListener('account-expired', expired)
@@ -77,5 +98,18 @@ export function useAccountSession() {
     window.removeEventListener('account-expired', expired)
     window.removeEventListener('storage', changed)
   })
-  return { ready, user, username, password, registering, registrationEnabled, guestEnabled, pending, error, submit, retry: load }
+  return {
+    ready,
+    user,
+    username,
+    password,
+    registering,
+    registrationEnabled,
+    guestEnabled,
+    pending,
+    error,
+    loadFailed,
+    submit,
+    retry: load
+  }
 }

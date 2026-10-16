@@ -9,18 +9,20 @@
  * @package frontend/src/components
  */
 
-import { ref } from 'vue'
-import { FileText, Upload, X } from '@lucide/vue'
+import { onScopeDispose, ref } from 'vue'
+import { FileText, FileSpreadsheet, LoaderCircle, Upload, X } from '@lucide/vue'
 import type { UploadedFileRef, UploadProgress } from '../types/task'
-import { formatFileSize, isSupportedTextFile } from '../utils/file'
+import { formatFileSize, isSupportedUploadFile, SUPPORTED_UPLOAD_ACCEPT } from '../utils/file'
 import { uploadChunkedFile } from '../utils/chunk'
 
 interface Props {
   /** 已上传文件 */
   files: UploadedFileRef[]
+  compact?: boolean
+  disabled?: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   /** 添加文件 */
@@ -31,6 +33,7 @@ const emit = defineEmits<{
   uploadProgress: [progress: UploadProgress]
   /** 上传错误 */
   uploadError: [message: string]
+  busy: [value: boolean]
 }>()
 
 /** 拖拽状态 */
@@ -41,6 +44,10 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const uploadProgressMap = ref<Map<string, UploadProgress>>(new Map())
 const busy = ref(false)
 const error = ref('')
+let disposed = false
+onScopeDispose(() => {
+  disposed = true
+})
 
 /**
  * 选择文件后处理
@@ -63,34 +70,48 @@ async function handleFileSelect(event: Event) {
  * @param fileList 文件数组
  */
 async function processFiles(fileList: File[]) {
-  if (busy.value) return
+  if (disposed || busy.value || props.disabled || !fileList.length) return
   busy.value = true
+  emit('busy', true)
   error.value = ''
+  let uploadedAfterError = false
   try {
     for (const file of fileList) {
-      if (!isSupportedTextFile(file)) {
+      if (disposed || props.disabled) break
+      if (!isSupportedUploadFile(file)) {
         error.value = `不支持的文件类型：${file.name}`
         emit('uploadError', error.value)
+        uploadedAfterError = false
         continue
       }
 
       try {
         const uploadedFile = await uploadChunkedFile(file, {
           onProgress: (progress) => {
+            if (disposed) return
             uploadProgressMap.value.set(progress.fileId, progress)
             emit('uploadProgress', progress)
           }
         })
 
+        if (disposed) break
         emit('add', uploadedFile)
+        if (error.value) uploadedAfterError = true
         uploadProgressMap.value.delete(uploadedFile.fileId)
-      } catch (error) {
+      } catch (uploadFailure) {
+        if (disposed) break
         uploadProgressMap.value.clear()
-        emit('uploadError', error instanceof Error ? error.message : '文件上传失败')
+        error.value = uploadFailure instanceof Error ? uploadFailure.message : '文件上传失败'
+        emit('uploadError', error.value)
+        uploadedAfterError = false
       }
     }
   } finally {
     busy.value = false
+    if (!disposed) {
+      if (uploadedAfterError) emit('uploadError', error.value)
+      emit('busy', false)
+    }
   }
 }
 
@@ -124,6 +145,7 @@ async function handleDrop(event: DragEvent) {
 
 /** 打开文件选择器 */
 function handleClick() {
+  if (busy.value || props.disabled) return
   inputRef.value?.click()
 }
 
@@ -132,7 +154,22 @@ function handleClick() {
  * @param id 文件 ID
  */
 function removeFile(id: string) {
+  if (props.disabled) return
   emit('remove', id)
+}
+
+defineExpose({ open: handleClick, addFiles: processFiles })
+
+function fileType(name: string) {
+  return name.includes('.') ? name.split('.').pop()!.toUpperCase() : 'FILE'
+}
+
+function fileKind(name: string) {
+  const type = fileType(name)
+  if (['XLS', 'XLSX', 'CSV'].includes(type)) return 'sheet'
+  if (type === 'PDF') return 'pdf'
+  if (['DOC', 'DOCX'].includes(type)) return 'document'
+  return 'text'
 }
 
 /**
@@ -155,31 +192,61 @@ function formatTime(seconds: number): string {
 </script>
 
 <template>
-  <div class="file-uploader">
+  <div class="file-uploader" :class="{ compact }">
     <div v-if="files.length" class="file-list">
-      <div v-for="file in files" :key="file.fileId" class="file-chip">
-        <FileText />
-        <div class="file-copy">
-          <span class="file-name">{{ file.fileName }}</span>
-          <span class="file-meta">{{ formatFileSize(file.size) }} · 已上传</span>
+      <div
+        v-for="file in files"
+        :key="file.fileId"
+        class="file-chip attachment-card"
+        :data-kind="fileKind(file.fileName)"
+      >
+        <div class="file-preview" aria-hidden="true">
+          <FileSpreadsheet v-if="fileKind(file.fileName) === 'sheet'" />
+          <FileText v-else />
+          <span>{{ fileType(file.fileName) }}</span>
+        </div>
+        <div class="file-caption">
+          <FileSpreadsheet v-if="fileKind(file.fileName) === 'sheet'" aria-hidden="true" />
+          <FileText v-else aria-hidden="true" />
+          <div class="file-copy">
+            <span class="file-name" :title="file.fileName">{{ file.fileName }}</span>
+            <span class="file-meta"
+              >{{ fileType(file.fileName) }} · {{ formatFileSize(file.size) }}</span
+            >
+          </div>
         </div>
         <button
           class="icon-button remove-btn"
           type="button"
           title="移除附件"
           aria-label="移除附件"
+          :disabled="disabled"
           @click="removeFile(file.fileId)"
         >
           <X />
         </button>
       </div>
     </div>
-    <div v-for="[id, progress] in uploadProgressMap" :key="id" class="progress-card">
-      <div class="progress-head">
-        <span class="progress-name">{{ progress.fileName }}</span>
-        <span class="progress-percent"
-          >{{ progress.percentage.toFixed(0) }}% · {{ formatTime(progress.estimatedTime) }}</span
-        >
+    <div
+      v-for="[id, progress] in uploadProgressMap"
+      :key="id"
+      class="progress-card attachment-card"
+      aria-busy="true"
+    >
+      <div class="file-preview uploading-preview">
+        <LoaderCircle class="spin" aria-hidden="true" />
+        <span class="progress-percent">{{ progress.percentage.toFixed(0) }}%</span>
+      </div>
+      <div class="file-caption">
+        <FileText aria-hidden="true" />
+        <div class="file-copy">
+          <span class="file-name" :title="progress.fileName">{{ progress.fileName }}</span>
+          <span class="file-meta">{{
+            progress.percentage >= 100
+              ? '处理中…'
+              : `上传中 · ${formatTime(progress.estimatedTime)}`
+          }}</span>
+        </div>
       </div>
       <progress
         :value="progress.percentage"
@@ -188,10 +255,11 @@ function formatTime(seconds: number): string {
       />
     </div>
     <button
+      v-if="!compact"
       class="upload-zone"
       :class="{ dragging: isDragging }"
       type="button"
-      :disabled="busy"
+      :disabled="disabled || busy"
       @click="handleClick"
       @dragenter="handleDragEnter"
       @dragleave="handleDragLeave"
@@ -200,7 +268,15 @@ function formatTime(seconds: number): string {
     >
       <Upload /><span>{{ busy ? '上传中…' : '选择文件' }}</span>
     </button>
-    <input ref="inputRef" type="file" multiple class="file-input" @change="handleFileSelect" />
-    <p v-if="error" class="status-banner is-error" role="alert">{{ error }}</p>
+    <input
+      ref="inputRef"
+      type="file"
+      multiple
+      class="file-input"
+      :accept="SUPPORTED_UPLOAD_ACCEPT"
+      :disabled="disabled || busy"
+      @change="handleFileSelect"
+    />
+    <p v-if="error && !compact" class="status-banner is-error" role="alert">{{ error }}</p>
   </div>
 </template>

@@ -69,9 +69,83 @@ afterEach(async () => {
   for (const run of runs) run.finish()
   await Promise.resolve()
   vi.useRealTimers()
+  vi.unstubAllGlobals()
 })
 
 describe('per-session task observation', () => {
+  it('forwards explicitly selected file research to task creation', async () => {
+    const file = {
+      fileId: 'file',
+      fileHash: 'hash',
+      fileName: 'notes.txt',
+      mimeType: 'text/plain',
+      size: 10,
+      source: 'uploaded' as const
+    }
+    const pending = store.sendTaskMessage('Compare the documents', [], [file], true)
+    expect(runs[0]!.request).toMatchObject({ enableTools: true, files: [file] })
+    runs[0]!.finish()
+    await pending
+  })
+  it('flushes received SSE text before stopViewing invalidates the observation', async () => {
+    const { TaskRequestManager } = await import('../api/requestManager')
+    let producer!: ReadableStreamDefaultController<Uint8Array>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              producer = controller
+            }
+          }),
+          { headers: { 'Content-Type': 'text/event-stream' } }
+        )
+      )
+    )
+    mocks.sendTaskRequest.mockImplementation(
+      (_request: TaskRequest, callbacks: TaskCallbacks, signal: AbortSignal) =>
+        new TaskRequestManager(callbacks, signal).resume('task-1')
+    )
+    const observation = store.sendTaskMessage('question')
+    producer.enqueue(
+      new TextEncoder().encode(
+        'event: task-events\ndata: ' +
+          JSON.stringify({
+            events: [{ id: 1, type: 'content', data: { content: 'received before next frame' } }],
+            lastEventId: 1,
+            terminal: false
+          }) +
+          '\n\n'
+      )
+    )
+    await vi.advanceTimersByTimeAsync(0)
+    expect(store.messages[1]!.content).toBe('')
+    store.stopViewing()
+    expect(store.messages[1]!.content).toBe('received before next frame')
+    await observation
+    await vi.advanceTimersByTimeAsync(20)
+    expect(store.messages[1]!.content).toBe('received before next frame')
+  })
+
+  it('flushes buffered content before replacing it with a cancellation snapshot', async () => {
+    const observation = store.sendTaskMessage('question')
+    const run = runs[0]!
+    run.callbacks.onTaskStart?.(task())
+    let pending = 'tail'
+    run.callbacks.onObservationReady?.(() => {
+      if (pending) run.callbacks.onContent?.(pending)
+      pending = ''
+    })
+    mocks.apiJSON.mockResolvedValue({
+      task: { ...task('task-1', 'cancelled'), result: 'tail', error: 'cancelled' }
+    })
+    await store.stopGeneration()
+    expect(store.messages[1]!.content).toBe('tail\n\ncancelled')
+    run.finish()
+    await observation
+  })
+
   it('observes two sessions independently and finishes only its own session', async () => {
     const firstSession = store.currentSessionId
     const first = store.sendTaskMessage('first')
@@ -207,6 +281,62 @@ describe('per-session task observation', () => {
     runs[1]!.finish()
     await second
   })
+
+  it.each(['', '分析附件'])(
+    'persists only bounded attachment metadata for %s while sending original images',
+    async (content) => {
+      const image = {
+        id: 'image',
+        base64: 'original-image-content',
+        mimeType: 'image/png',
+        description: 'figure.png',
+        localAttachment: {
+          kind: 'image' as const,
+          name: 'figure.png',
+          mimeType: 'image/png',
+          size: 2048
+        }
+      }
+      const file = {
+        fileId: 'uploaded-file',
+        fileName: 'report.docx',
+        mimeType: 'application/msword',
+        size: 5120,
+        fileHash: 'hash',
+        source: 'uploaded' as const
+      }
+      Object.assign(image, { previewUrl: 'blob:revoked' })
+      const sending = store.sendTaskMessage(content, [image], [file])
+      await store.sendTaskMessage('duplicate', [image], [file])
+      expect(runs).toHaveLength(1)
+      expect(store.messages[0]).toMatchObject({
+        role: 'user',
+        content: content || '[图片]',
+        attachmentOnly: !content,
+        attachments: [
+          { kind: 'image', name: 'figure.png', mimeType: 'image/png', size: 2048 },
+          { kind: 'file', name: 'report.docx', mimeType: 'application/msword', size: 5120 }
+        ]
+      })
+      expect(runs[0]!.request?.messages).toEqual([{ role: 'user', content: content || '[图片]' }])
+      expect(runs[0]!.request?.images).toEqual([
+        {
+          id: image.id,
+          base64: image.base64,
+          mimeType: image.mimeType,
+          description: image.description
+        }
+      ])
+      expect(runs[0]!.request?.files).toEqual([file])
+      const stored = localStorage.getItem(accountStorageKey('chat_messages_map'))!
+      expect(stored).toContain('figure.png')
+      expect(stored).not.toContain(image.base64)
+      expect(stored).not.toContain('blob:revoked')
+      expect(stored).not.toContain('localAttachment')
+      runs[0]!.finish()
+      await sending
+    }
+  )
 
   it('keeps task steps and step presentation consistent through progress updates', async () => {
     const request = store.sendTaskMessage('question')

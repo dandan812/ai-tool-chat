@@ -1,0 +1,205 @@
+/* Element Plus consumes the same semantic tokens as the business components. */
+:root {
+  --el-font-family: var(--font-sans);
+  --el-font-size-extra-small: var(--text-xs);
+  --el-font-size-small: var(--text-sm);
+  --el-font-size-base: var(--text-base);
+  --el-font-size-medium: var(--text-lg);
+  --el-font-size-large: var(--text-lg);
+  --el-font-size-extra-large: var(--text-lg);
+  --el-color-primary: var(--accent-primary);
+  --el-color-primary-dark-2: var(--accent-primary-hover);
+  --el-color-primary-light-3: var(--accent-primary-hover);
+  --el-color-primary-light-5: var(--focus-ring-strong);
+  --el-color-primary-light-7: var(--focus-ring-strong);
+  --el-color-primary-light-8: var(--accent-soft);
+  --el-color-primary-light-9: var(--accent-soft);
+  --el-color-success: var(--success);
+  --el-color-success-light-9: var(--success-soft);
+  --el-color-warning: var(--warning);
+  --el-color-warning-light-9: var(--warning-soft);
+  --el-color-danger: var(--error);
+  --el-color-danger-dark-2: var(--error);
+  --el-color-danger-light-3: var(--error);
+  --el-color-danger-light-5: var(--danger-soft);
+  --el-color-danger-light-7: var(--danger-soft);
+  --el-color-danger-light-9: var(--danger-soft);
+  --el-color-info: var(--text-secondary);
+  --el-color-info-light-9: var(--bg-tertiary);
+  --el-color-error: var(--error);
+  --el-color-error-light-9: var(--danger-soft);
+  --el-bg-color: var(--bg-primary);
+  --el-bg-color-page: var(--bg-secondary);
+  --el-bg-color-overlay: var(--bg-elevated);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-tertiary);
+  --el-text-color-placeholder: var(--text-muted);
+  --el-text-color-disabled: var(--text-disabled);
+  --el-border-color: var(--border-default);
+  --el-border-color-light: var(--border-subtle);
+  --el-border-color-lighter: var(--border-subtle);
+  --el-border-color-extra-light: var(--border-subtle);
+  --el-border-color-dark: var(--border-strong);
+  --el-fill-color: var(--bg-tertiary);
+  --el-fill-color-light: var(--bg-secondary);
+  --el-fill-color-lighter: var(--bg-secondary);
+  --el-fill-color-extra-light: var(--bg-secondary);
+  --el-fill-color-blank: var(--bg-primary);
+  --el-fill-color-dark: var(--bg-tertiary);
+  --el-fill-color-darker: var(--bg-tertiary);
+  --el-disabled-bg-color: var(--bg-secondary);
+  --el-disabled-text-color: var(--text-disabled);
+  --el-disabled-border-color: var(--border-subtle);
+  --el-border-radius-base: var(--radius-sm);
+  --el-border-radius-small: var(--radius-sm);
+  --el-border-radius-round: var(--radius-pill);
+  --el-component-size-small: var(--control-height);
+  --el-component-size: var(--control-height);
+  --el-component-size-large: var(--control-height);
+  --el-box-shadow-light: var(--shadow-sm);
+  --el-box-shadow: var(--shadow-md);
+  --el-box-shadow-dark: var(--shadow-lg);
+  --el-mask-color: var(--overlay-bg);
+  --el-menu-bg-color: var(--sidebar-bg);
+  --el-menu-hover-bg-color: var(--sidebar-hover);
+  --el-menu-text-color: var(--text-secondary);
+  --el-menu-active-color: var(--accent-text);
+  --el-menu-item-height: var(--control-height);
+  --el-menu-base-level-padding: var(--space-2);
+  --el-dialog-padding-primary: var(--space-4);
+}
+.el-button,
+.el-input,
+.el-textarea,
+.el-menu,
+.el-tabs,
+.el-table,
+.el-form {
+  font-size: var(--text-sm);
+}
+.el-button.el-button--small {
+  border-radius: var(--radius-sm);
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+}
+.el-button > span {
+  gap: var(--space-2);
+}
+.el-button svg,
+.el-input svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+}
+.el-button.el-button--primary {
+  --el-button-text-color: var(--on-accent);
+  --el-button-hover-text-color: var(--on-accent);
+  --el-button-active-text-color: var(--on-accent);
+  --el-button-disabled-text-color: var(--text-disabled);
+  --el-button-disabled-bg-color: var(--bg-tertiary);
+  --el-button-disabled-border-color: var(--border-subtle);
+  font-weight: 600;
+}
+.el-button.el-button--danger {
+  --el-button-text-color: var(--error);
+  --el-button-bg-color: var(--danger-soft);
+  --el-button-border-color: var(--error);
+  --el-button-hover-text-color: var(--error);
+  --el-button-hover-bg-color: var(--danger-soft);
+  --el-button-hover-border-color: var(--error);
+  --el-button-active-text-color: var(--error);
+  --el-button-active-bg-color: var(--danger-soft);
+  --el-button-active-border-color: var(--error);
+}
+.el-input.el-input--small,
+.el-menu .el-menu-item {
+  font-size: var(--text-sm);
+}
+.el-menu .el-menu-item {
+  height: var(--control-height);
+  line-height: var(--control-height);
+}
+.el-input.el-input--small .el-input__inner {
+  height: var(--control-height);
+  font-size: var(--text-sm);
+}
+.el-input__wrapper {
+  min-height: var(--control-height);
+  padding: 0 var(--space-2);
+}
+.el-input__inner {
+  height: var(--control-height);
+  font-size: var(--text-sm);
+}
+.el-table .el-table__cell {
+  height: var(--table-row-height);
+  padding: var(--space-1) 0;
+}
+.el-table .cell {
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.el-table th.el-table__cell {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.el-tabs__item {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.el-tabs .el-tabs__item.is-active,
+.el-tabs .el-tabs__item:hover {
+  color: var(--accent-text);
+}
+.el-tabs .el-tabs__item.is-active:focus-visible {
+  outline: var(--focus-width) solid var(--accent-primary);
+}
+.el-tabs__nav-wrap::after {
+  height: var(--border-width);
+  background: var(--border-subtle);
+}
+.el-form-item {
+  margin-bottom: var(--space-4);
+}
+.el-form-item__label {
+  padding-bottom: var(--space-2) !important;
+  line-height: 1.5 !important;
+}
+.el-dialog {
+  width: min(calc(100% - var(--space-8)), var(--toast-max-width));
+  margin-top: var(--space-8);
+  border-radius: var(--radius-lg);
+}
+.el-dialog__header {
+  margin-right: var(--space-6);
+  padding-bottom: var(--space-3);
+}
+.el-dialog__title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.el-dialog__footer {
+  padding-top: var(--space-4);
+}
+.el-dialog__headerbtn {
+  width: var(--control-height);
+  height: var(--control-height);
+  top: var(--space-3);
+  right: var(--space-3);
+}
+.el-alert {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+.el-alert__title {
+  font-size: var(--text-xs);
+}
+.el-skeleton__item {
+  border-radius: var(--radius-sm);
+}
+.el-popper {
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+}

@@ -6,10 +6,11 @@ const STEP_TYPE_LABELS: Record<string, string> = {
   skill: '调用模型',
   mcp: '执行工具',
   think: '组织回答',
-  respond: '生成内容',
+  respond: '生成内容'
 }
 
 const MODEL_LABELS: Record<string, string> = {
+  'deepseek-flash': 'DeepSeek Flash',
   'qwen3.5-plus': 'Qwen 3.5 Plus',
   'qwen3.5-flash': 'Qwen 3.5 Flash',
   'qwen3.5-flash-2026-02-23': 'Qwen 3.5 Flash',
@@ -24,11 +25,11 @@ const MODEL_LABELS: Record<string, string> = {
   'qwen3-coder-next': 'Qwen 3 Coder Next',
   'qwen3.5-397b-a17b': 'Qwen 3.5 397B',
   'qwen-flash-character': 'Qwen Flash Character',
-  'qwen-flash-character-2026-01-22': 'Qwen Flash Character',
+  'qwen-flash-character-2026-01-22': 'Qwen Flash Character'
 }
 
 export function getStepTypeLabel(type: string, fallback: string): string {
-  if (type === 'skill' && fallback) return fallback
+  if ((type === 'skill' || type === 'mcp') && fallback) return fallback
   return STEP_TYPE_LABELS[type] || fallback
 }
 
@@ -50,7 +51,11 @@ export function getTaskModelLabel(task: Task | null, steps: Step[]): string {
 }
 
 export function getActiveStep(steps: Step[]): Step | null {
-  return steps.find((step) => step.status === 'running') ?? steps[steps.length - 1] ?? null
+  return (
+    [...steps].reverse().find((step) => step.status === 'running') ??
+    steps[steps.length - 1] ??
+    null
+  )
 }
 
 export function getTaskStatusText(task: Task | null, steps: Step[]): string {
@@ -83,9 +88,10 @@ export function getTaskDurationSeconds(steps: Step[]): number {
   if (!steps.length) return 0
 
   const firstStep = steps[0]
-  const lastStep = steps[steps.length - 1]
   const start = firstStep?.startedAt || 0
-  const end = lastStep?.completedAt || Date.now()
+  const end = steps.some((step) => step.status === 'running')
+    ? Date.now()
+    : Math.max(...steps.map((step) => step.completedAt || 0)) || Date.now()
 
   return Math.max(0, Math.round((end - start) / 1000))
 }

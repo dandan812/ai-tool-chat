@@ -80,26 +80,26 @@ defineExpose({ openSource })
 <style scoped>
 .evidence-sources {
   margin-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
+  border-top: var(--border-width) solid var(--border-subtle);
   padding-top: var(--space-3);
 }
 .sources-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 4px;
-  padding: 4px 0;
-  min-height: 34px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) 0;
+  min-height: var(--control-height);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 .sources-toggle svg {
-  width: 15px;
-  height: 15px;
+  width: var(--icon-size);
+  height: var(--icon-size);
 }
 .sources-body {
   margin-top: var(--space-3);
@@ -120,12 +120,12 @@ defineExpose({ openSource })
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.4rem;
+  gap: var(--space-2);
   text-align: left;
   max-width: 100%;
-  min-height: 40px;
-  padding: 0.4rem 0.65rem;
-  border: 1px solid var(--border-subtle);
+  min-height: var(--control-height);
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-width) solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: var(--surface-muted);
   color: var(--text-secondary);
@@ -135,7 +135,7 @@ defineExpose({ openSource })
 }
 .source-option.selected {
   border-color: var(--accent-primary);
-  color: var(--accent-primary);
+  color: var(--accent-text);
   background: var(--accent-soft);
 }
 .file-name,
@@ -144,7 +144,7 @@ defineExpose({ openSource })
   min-width: 0;
 }
 .source-excerpt {
-  border-left: 3px solid var(--accent-primary);
+  border-left: var(--focus-width) solid var(--accent-primary);
   padding: var(--space-3);
   background: var(--surface-muted);
   border-radius: var(--radius-sm);
@@ -152,14 +152,14 @@ defineExpose({ openSource })
 .source-heading {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 0.75rem;
+  gap: var(--space-1) var(--space-3);
   font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 .source-excerpt pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 24rem;
+  max-height: var(--excerpt-max-height);
   overflow-y: auto;
   font: inherit;
   font-size: var(--text-sm);
@@ -169,7 +169,7 @@ defineExpose({ openSource })
 }
 button:focus-visible,
 .source-excerpt:focus {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 3px;
+  outline: var(--focus-width) solid var(--accent-primary);
+  outline-offset: var(--space-1);
 }
 </style>

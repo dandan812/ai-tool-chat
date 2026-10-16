@@ -1,75 +1,85 @@
-import { describe, expect, it } from 'vitest';
-import { createMockEnv } from '../test/mocks';
-import { selectSkill } from './index';
+import { describe, expect, it } from 'vitest'
+import { createMockEnv } from '../test/mocks'
+import { selectSkill } from './index'
 
 describe('selectSkill', () => {
-  it.each(['glm-5', 'qwen-plus', 'unknown-text-model'])('图片请求不向上游传递文本模型 %s', (model) => {
-    const selected = selectSkill(
-      { model, images: [{}] },
-      createMockEnv({ DEFAULT_MULTIMODAL_MODEL: 'qwen-vl-plus' }),
-    );
-    expect(selected).toMatchObject({
-      skill: { name: 'multimodal-chat' }, model: 'qwen-vl-plus',
-    });
-  });
+  it.each(['glm-5', 'qwen-plus', 'unknown-text-model'])(
+    '图片请求不向上游传递文本模型 %s',
+    (model) => {
+      const selected = selectSkill(
+        { model, images: [{}] },
+        createMockEnv({ DEFAULT_MULTIMODAL_MODEL: 'qwen-vl-plus' })
+      )
+      expect(selected).toMatchObject({
+        skill: { name: 'multimodal-chat' },
+        model: 'qwen-vl-plus'
+      })
+    }
+  )
   it('保留部署明确配置的图片模型', () => {
-    expect(selectSkill(
-      { model: 'configured-vision-model', images: [{}] },
-      createMockEnv({ DEFAULT_MULTIMODAL_MODEL: 'configured-vision-model' }),
-    ).model).toBe('configured-vision-model');
-  });
+    expect(
+      selectSkill(
+        { model: 'configured-vision-model', images: [{}] },
+        createMockEnv({ DEFAULT_MULTIMODAL_MODEL: 'configured-vision-model' })
+      ).model
+    ).toBe('configured-vision-model')
+  })
   it('指定文本模型不能绕过文件或图片能力', () => {
-    const env = createMockEnv();
+    const env = createMockEnv()
     expect(selectSkill({ model: 'qwen-plus', files: [{}] }, env)).toMatchObject({
-      skill: { name: 'file-chat' }, model: 'qwen-plus',
-    });
+      skill: { name: 'file-chat' },
+      model: 'qwen-plus'
+    })
     expect(selectSkill({ model: 'qwen-vl-max', images: [{}] }, env)).toMatchObject({
-      skill: { name: 'multimodal-chat' }, model: 'qwen-vl-max',
-    });
-  });
+      skill: { name: 'multimodal-chat' },
+      model: 'qwen-vl-max'
+    })
+  })
   it('纯文本请求应选择文本技能和默认文本模型', () => {
     const selectedSkill = selectSkill(
       { messages: [{ role: 'user', content: '你好' }] },
-      createMockEnv({ DEFAULT_MODEL: 'qwen-plus' }),
-    );
+      createMockEnv({ DEFAULT_MODEL: 'qwen-plus' })
+    )
 
-    expect(selectedSkill.skill.name).toBe('text-chat');
-    expect(selectedSkill.model).toBe('qwen-plus');
-  });
+    expect(selectedSkill.skill.name).toBe('text-chat')
+    expect(selectedSkill.model).toBe('qwen-plus')
+  })
 
   it('带文件请求应选择文件技能并优先使用文件默认模型', () => {
     const selectedSkill = selectSkill(
       {
         messages: [{ role: 'user', content: '分析文件' }],
-        files: [{
-          fileId: 'f1',
-          fileName: 'demo.txt',
-          mimeType: 'text/plain',
-          size: 1,
-          fileHash: 'hash',
-          source: 'uploaded',
-        }],
+        files: [
+          {
+            fileId: 'f1',
+            fileName: 'demo.txt',
+            mimeType: 'text/plain',
+            size: 1,
+            fileHash: 'hash',
+            source: 'uploaded'
+          }
+        ]
       },
       createMockEnv({
         DEFAULT_MODEL: 'qwen-plus',
-        DEFAULT_FILE_MODEL: 'qwen-long',
-      }),
-    );
+        DEFAULT_FILE_MODEL: 'qwen-long'
+      })
+    )
 
-    expect(selectedSkill.skill.name).toBe('file-chat');
-    expect(selectedSkill.model).toBe('qwen-long');
-  });
+    expect(selectedSkill.skill.name).toBe('file-chat')
+    expect(selectedSkill.model).toBe('qwen-long')
+  })
 
   it('带图片请求应选择多模态技能和默认图片模型', () => {
     const selectedSkill = selectSkill(
       {
         messages: [{ role: 'user', content: '看看图片' }],
-        images: [{ id: 'img-1', base64: 'abc', mimeType: 'image/png' }],
+        images: [{ id: 'img-1', base64: 'abc', mimeType: 'image/png' }]
       },
-      createMockEnv({ DEFAULT_MULTIMODAL_MODEL: 'qwen-vl-max' }),
-    );
+      createMockEnv({ DEFAULT_MULTIMODAL_MODEL: 'qwen-vl-max' })
+    )
 
-    expect(selectedSkill.skill.name).toBe('multimodal-chat');
-    expect(selectedSkill.model).toBe('qwen-vl-max');
-  });
-});
+    expect(selectedSkill.skill.name).toBe('multimodal-chat')
+    expect(selectedSkill.model).toBe('qwen-vl-max')
+  })
+})

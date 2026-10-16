@@ -5,7 +5,7 @@
  * 这个组件负责中间“消息流”区域的展示层逻辑。
  * 它不直接请求后端，也不负责维护聊天主状态，而是专门做这几件事：
  *
- * 1. 没有消息时显示欢迎页，有消息时显示消息列表
+ * 1. 展示当前会话的消息列表；新对话布局由页面负责
  * 2. 根据当前会话的流式状态，拼出“当前屏幕真正应该显示的消息内容”
  * 3. 管理滚动体验：自动滚到底、回到底部按钮、长列表虚拟滚动
  *
@@ -21,8 +21,8 @@ import { useChatStore } from '../stores/chat'
 import { useScroll } from '../composables/useScroll'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import ChatMessage from './ChatMessage.vue'
-import ChatWelcome from './ChatWelcome.vue'
 import { ArrowDown } from '@lucide/vue'
+import { designPixels } from '../utils/designTokens'
 
 // 当消息条数超过这个阈值后，启用虚拟滚动。
 // 目的不是“提前优化一切”，而是只在长对话场景下减少 DOM 压力。
@@ -34,11 +34,6 @@ const ESTIMATED_MESSAGE_HEIGHT = 220
 // 在可见区上下额外多渲染几条消息，避免快速滚动时出现明显白屏。
 const VIRTUAL_OVERSCAN = 8
 
-const emit = defineEmits<{
-  /** 发送消息 */
-  send: [content: string]
-}>()
-
 // 全局聊天状态都来自 Pinia。
 const store = useChatStore()
 
@@ -49,37 +44,8 @@ const store = useChatStore()
 // - 判断当前是否适合自动滚动
 const { container, isAtBottom, scrollToBottom, scrollToTop, shouldAutoScroll } = useScroll()
 
-/**
- * 展示中的消息列表
- *
- * 这里要区分两个概念：
- * 1. `store.messages`：会话里保存的原始消息数组
- * 2. `displayMessages`：当前页面真正要拿来渲染的消息数组
- *
- * 为什么不能直接渲染 `store.messages`？
- * 因为流式输出时，某一条 assistant 消息会不断被追加内容。
- * 当前屏幕应该优先显示最新的 `streamingContent`，而不是只看原始数组。
- */
-const displayMessages = computed(() => {
-  const sessionId = store.currentSessionId
-  if (!sessionId) return []
-
-  return store.messages.map((message, index) => {
-    // 如果这条消息正好是“当前正在流式生成的消息”，
-    // 就用 streamingContent 覆盖它的显示内容。
-    if (
-      store.streamingContent?.sessionId === sessionId &&
-      store.streamingContent?.index === index
-    ) {
-      return {
-        ...message,
-        content: store.streamingContent.content
-      }
-    }
-
-    return message
-  })
-})
+// Task observation already appends to these reactive messages; keep array identity stable.
+const displayMessages = computed(() => store.messages)
 
 // 是否启用虚拟滚动。
 const shouldUseVirtualScroll = computed(() => {
@@ -95,9 +61,9 @@ const virtualizer = useVirtualizer(
       `${store.currentSessionId}:${displayMessages.value[index]?.id ?? index}`,
     estimateSize: () => ESTIMATED_MESSAGE_HEIGHT,
     overscan: VIRTUAL_OVERSCAN,
-    gap: 28,
-    paddingStart: 24,
-    paddingEnd: 24
+    gap: designPixels('--space-6'),
+    paddingStart: designPixels('--space-6'),
+    paddingEnd: designPixels('--space-6')
   }))
 )
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
@@ -107,7 +73,13 @@ function measureMessage(element: Element | import('vue').ComponentPublicInstance
 }
 
 // Width changes invalidate measurements for offscreen Markdown too.
-const resizeObserver = new ResizeObserver(() => virtualizer.value.measure())
+let measuredWidth = 0
+const resizeObserver = new ResizeObserver(([entry]) => {
+  const width = entry?.contentRect.width
+  if (width === undefined || width === measuredWidth) return
+  measuredWidth = width
+  if (shouldUseVirtualScroll.value) virtualizer.value.measure()
+})
 watch(container, (element, previous) => {
   if (previous) resizeObserver.unobserve(previous)
   if (element) resizeObserver.observe(element)
@@ -133,8 +105,9 @@ watch(
       return
     }
 
-    scrollToBottom()
-  }
+    void scrollToBottom(true)
+  },
+  { flush: 'post' }
 )
 
 // 切换会话时，如果目标会话为空，说明当前应该展示欢迎页。
@@ -158,20 +131,11 @@ watch(
   () => displayMessages.value[displayMessages.value.length - 1]?.content,
   () => {
     if (shouldAutoScroll()) {
-      scrollToBottom()
+      void scrollToBottom(true)
     }
-  }
+  },
+  { flush: 'post' }
 )
-
-/**
- * 处理欢迎页建议点击
- *
- * 欢迎页里的建议文案，本质上也是“发送一条消息”。
- * 所以这里不自己处理业务，只是向父组件抛出 send 事件。
- */
-function handleSuggestion(suggestion: string) {
-  emit('send', suggestion)
-}
 
 /**
  * 绑定消息滚动容器
@@ -185,16 +149,15 @@ function setMessageContainer(element: Element | import('vue').ComponentPublicIns
 </script>
 
 <template>
-  <main
+  <section
     :ref="setMessageContainer"
     class="messages"
     :class="{ virtual: shouldUseVirtualScroll }"
     aria-label="对话消息"
   >
     <div class="messages-shell">
-      <ChatWelcome v-if="!displayMessages.length" @select="handleSuggestion" />
       <div
-        v-else-if="shouldUseVirtualScroll"
+        v-if="shouldUseVirtualScroll"
         class="virtual-message-list"
         :style="{ height: `${virtualizer.getTotalSize()}px` }"
       >
@@ -212,6 +175,8 @@ function setMessageContainer(element: Element | import('vue').ComponentPublicIns
             :content="displayMessages[item.index]!.content"
             :sources="displayMessages[item.index]!.sources"
             :metrics="displayMessages[item.index]!.metrics"
+            :attachments="displayMessages[item.index]!.attachments"
+            :attachment-only="displayMessages[item.index]!.attachmentOnly"
             @delete="store.deleteMessage"
           />
         </div>
@@ -225,6 +190,8 @@ function setMessageContainer(element: Element | import('vue').ComponentPublicIns
           :content="message.content"
           :sources="message.sources"
           :metrics="message.metrics"
+          :attachments="message.attachments"
+          :attachment-only="message.attachmentOnly"
           @delete="store.deleteMessage"
         />
       </div>
@@ -239,5 +206,5 @@ function setMessageContainer(element: Element | import('vue').ComponentPublicIns
     >
       <ArrowDown />
     </button>
-  </main>
+  </section>
 </template>

@@ -29,9 +29,14 @@ interface EvidenceRenderEnvironment {
 }
 
 // Text tokens only: never transform a fenced/inline code example, HTML, or a link target.
-messageMarkdown.renderer.rules.text = (tokens, index, _options, environment: EvidenceRenderEnvironment) => {
+messageMarkdown.renderer.rules.text = (
+  tokens,
+  index,
+  _options,
+  environment: EvidenceRenderEnvironment
+) => {
   const text = tokens[index]?.content ?? ''
-  if (!environment.enableCitations) return escapeHtml(text)
+  if (!environment.enableCitations || !text.includes('[S:')) return escapeHtml(text)
   let linkDepth = 0
   for (let i = 0; i < index; i++) {
     if (tokens[i]?.type === 'link_open') linkDepth++
@@ -48,21 +53,26 @@ messageMarkdown.renderer.rules.text = (tokens, index, _options, environment: Evi
       const number = [...environment.evidence.keys()].indexOf(id) + 1
       html += `<button type="button" class="evidence-citation" data-evidence-source="${escapeHtmlAttr(id)}" aria-label="查看原文来源 ${number}">来源 ${number}</button>`
     } else {
-      html += '<span class="evidence-invalid" title="此引用不在当前回答的来源列表中，无法核对">[无效引用]</span>'
+      html +=
+        '<span class="evidence-invalid" title="此引用不在当前回答的来源列表中，无法核对">[无效引用]</span>'
     }
     cursor = (match.index ?? 0) + match[0].length
   }
   return html + escapeHtml(text.slice(cursor))
 }
 
-export function renderMessageMarkdown(content: string, sources: EvidenceSource[] = [], enableCitations = true): string {
+export function renderMessageMarkdown(
+  content: string,
+  sources: EvidenceSource[] = [],
+  enableCitations = true
+): string {
   // Fresh per-render environment: no global allowlist that could leak across messages/accounts.
   return messageMarkdown.render(content, { evidence: evidenceAllowlist(sources), enableCitations })
 }
 
 export function handleMessageMarkdownClick(
   event: MouseEvent,
-  options: { sources?: EvidenceSource[]; onEvidence?: (sourceId: string) => void } = {},
+  options: { sources?: EvidenceSource[]; onEvidence?: (sourceId: string) => void } = {}
 ): void {
   if (!(event.target instanceof Element)) return
   const target = event.target
@@ -86,23 +96,26 @@ export function handleMessageMarkdownClick(
     button.setAttribute('title', '当前浏览器不支持自动复制，请手动选择代码')
     return
   }
-  navigator.clipboard.writeText(code).then(() => {
-    const buttonText = button.querySelector('.btn-text')
-    const originalText = buttonText?.textContent ?? '复制'
+  navigator.clipboard
+    .writeText(code)
+    .then(() => {
+      const buttonText = button.querySelector('.btn-text')
+      const originalText = buttonText?.textContent ?? '复制'
 
-    if (buttonText) {
-      buttonText.textContent = '已复制'
-    }
-
-    button.classList.add('copied')
-
-    setTimeout(() => {
       if (buttonText) {
-        buttonText.textContent = originalText
+        buttonText.textContent = '已复制'
       }
-      button.classList.remove('copied')
-    }, 1800)
-  }).catch(() => {
-    button.setAttribute('title', '复制失败，请手动选择代码或允许剪贴板权限')
-  })
+
+      button.classList.add('copied')
+
+      setTimeout(() => {
+        if (buttonText) {
+          buttonText.textContent = originalText
+        }
+        button.classList.remove('copied')
+      }, 1800)
+    })
+    .catch(() => {
+      button.setAttribute('title', '复制失败，请手动选择代码或允许剪贴板权限')
+    })
 }

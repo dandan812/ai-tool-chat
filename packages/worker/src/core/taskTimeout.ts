@@ -1,7 +1,7 @@
-import { logger } from '../infrastructure/logger';
-import { TaskStore } from './taskStore';
+import { logger } from '../infrastructure/logger'
+import { TaskStore } from './taskStore'
 
-export const TASK_TIMEOUT_MS = 5 * 60 * 1000;
+export const TASK_TIMEOUT_MS = 5 * 60 * 1000
 
 /**
  * 超时控制独立出来，是为了让 TaskManager 主流程只关注“正常路径”，
@@ -10,12 +10,12 @@ export const TASK_TIMEOUT_MS = 5 * 60 * 1000;
 export function startTaskTimeout(
   taskStore: TaskStore,
   taskId: string,
-  timeoutMs: number = TASK_TIMEOUT_MS,
+  timeoutMs: number = TASK_TIMEOUT_MS
 ): ReturnType<typeof setTimeout> {
   return setTimeout(() => {
-    const didTimeout = taskStore.markFailed(taskId, 'Task execution timeout');
+    const didTimeout = taskStore.markFailed(taskId, 'Task execution timeout')
     if (didTimeout) {
-      logger.error('Task timeout', { taskId, timeoutMs });
+      logger.error('Task timeout', { taskId, timeoutMs })
     }
-  }, timeoutMs);
+  }, timeoutMs)
 }

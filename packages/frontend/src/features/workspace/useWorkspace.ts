@@ -2,8 +2,17 @@ import { onMounted, onScopeDispose, ref } from 'vue'
 import { apiJSON, notifyAccountChanged } from '../../api/account'
 import type { Task } from '../../types/task'
 
-interface UserFile { fileId: string; fileName?: string; bytes: number; status: string }
-interface Usage { chargedTokens: number; dailyTokenBudget: number; activeTasks: number }
+interface UserFile {
+  fileId: string
+  fileName?: string
+  bytes: number
+  status: string
+}
+interface Usage {
+  chargedTokens: number
+  dailyTokenBudget: number
+  activeTasks: number
+}
 
 export function useWorkspace() {
   const tasks = ref<Task[]>([])
@@ -43,7 +52,7 @@ export function useWorkspace() {
           apiJSON<{ tasks: Task[] }>('/tasks', init),
           apiJSON<{ files: UserFile[] }>('/auth/files', init),
           apiJSON<Usage>('/auth/usage', init),
-          apiJSON<{ user: { username: string; guest?: boolean } }>('/auth/me', init),
+          apiJSON<{ user: { username: string; guest?: boolean } }>('/auth/me', init)
         ])
         if (controller.signal.aborted) return
         if (refreshQueued) continue
@@ -53,7 +62,8 @@ export function useWorkspace() {
         guest.value = me.user.guest ?? false
         username.value = guest.value ? '访客' : me.user.username
       } catch (caught) {
-        if (!controller.signal.aborted && !refreshQueued) error.value = caught instanceof Error ? caught.message : '加载失败'
+        if (!controller.signal.aborted && !refreshQueued)
+          error.value = caught instanceof Error ? caught.message : '加载失败'
       }
     } while (refreshQueued && !controller.signal.aborted)
   }
@@ -61,10 +71,14 @@ export function useWorkspace() {
     if (operations.value.has(key) || controller.signal.aborted) return
     operations.value.add(key)
     error.value = ''
-    try { await action() }
-    catch (caught) {
-      if (!controller.signal.aborted) error.value = caught instanceof Error ? caught.message : '操作失败'
-    } finally { operations.value.delete(key) }
+    try {
+      await action()
+    } catch (caught) {
+      if (!controller.signal.aborted)
+        error.value = caught instanceof Error ? caught.message : '操作失败'
+    } finally {
+      operations.value.delete(key)
+    }
   }
   async function logout() {
     await mutate('logout', async () => {
@@ -75,19 +89,46 @@ export function useWorkspace() {
   }
   async function cancel(id: string) {
     await mutate('task:' + id, async () => {
-      await apiJSON('/tasks/' + encodeURIComponent(id) + '/cancel', { method: 'POST', body: '{}', signal: controller.signal })
+      await apiJSON('/tasks/' + encodeURIComponent(id) + '/cancel', {
+        method: 'POST',
+        body: '{}',
+        signal: controller.signal
+      })
       await refresh()
     })
   }
   async function removeFile(id: string) {
-    if (confirmDelete.value !== id) { confirmDelete.value = id; return }
+    if (confirmDelete.value !== id) {
+      confirmDelete.value = id
+      return
+    }
     await mutate('file:' + id, async () => {
-      await apiJSON('/upload/delete?fileId=' + encodeURIComponent(id), { method: 'POST', body: '{}', signal: controller.signal })
+      await apiJSON('/upload/delete?fileId=' + encodeURIComponent(id), {
+        method: 'POST',
+        body: '{}',
+        signal: controller.signal
+      })
       confirmDelete.value = ''
       await refresh()
     })
   }
-  onMounted(() => { void refresh() })
+  onMounted(() => {
+    void refresh()
+  })
   onScopeDispose(() => controller.abort())
-  return { tasks, files, usage, username, guest, pending, error, confirmDelete, operations, refresh, logout, cancel, removeFile }
+  return {
+    tasks,
+    files,
+    usage,
+    username,
+    guest,
+    pending,
+    error,
+    confirmDelete,
+    operations,
+    refresh,
+    logout,
+    cancel,
+    removeFile
+  }
 }

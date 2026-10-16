@@ -8,7 +8,7 @@ import {
   writeStoredTheme,
   type Theme,
   type ThemeOptions,
-  type ThemePreference,
+  type ThemePreference
 } from '../utils/themeCore'
 
 /**
@@ -21,11 +21,11 @@ import {
  */
 export function useTheme(options: ThemeOptions = {}) {
   const opts = resolveThemeOptions(options)
-  
+
   const theme = ref<Theme>(opts.defaultTheme)
   const systemTheme = ref<Theme>('light')
   const isFollowingSystem = ref(false)
-  
+
   let mediaQuery: MediaQueryList | null = null
   let unsubscribe: (() => void) | null = null
 
@@ -75,13 +75,13 @@ export function useTheme(options: ThemeOptions = {}) {
    */
   function setupSystemListener(): void {
     if (!opts.followSystem || typeof window === 'undefined') return
-    
+
     mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    
+
     const handler = (e: MediaQueryListEvent) => {
       const newTheme = e.matches ? 'dark' : 'light'
       systemTheme.value = newTheme
-      
+
       // 只在跟随系统模式时自动切换
       if (isFollowingSystem.value) {
         theme.value = newTheme
@@ -91,7 +91,7 @@ export function useTheme(options: ThemeOptions = {}) {
 
     // 保存取消订阅函数
     unsubscribe = () => mediaQuery?.removeEventListener('change', handler)
-    
+
     mediaQuery.addEventListener('change', handler)
   }
 
@@ -103,7 +103,7 @@ export function useTheme(options: ThemeOptions = {}) {
     const initialState = resolveInitialThemeState(opts, systemTheme.value)
     theme.value = initialState.theme
     isFollowingSystem.value = initialState.followsSystem
-    
+
     applyTheme(theme.value)
     setupSystemListener()
   })
@@ -117,12 +117,12 @@ export function useTheme(options: ThemeOptions = {}) {
     theme: readonly(theme),
     systemTheme: readonly(systemTheme),
     isFollowingSystem: readonly(isFollowingSystem),
-    
+
     // 方法
     setTheme,
     toggleTheme,
     followSystem,
-    
+
     // 工具
     isDark: () => theme.value === 'dark'
   }
@@ -133,14 +133,11 @@ export function useTheme(options: ThemeOptions = {}) {
  */
 export function initTheme(options: ThemeOptions = {}): void {
   const opts = resolveThemeOptions(options)
-  
+
   if (typeof document === 'undefined') return
 
   const saved = readStoredTheme(opts.storageKey)
-  const initialTheme =
-    saved && saved !== 'system'
-      ? saved
-      : getSystemTheme()
+  const initialTheme = saved && saved !== 'system' ? saved : getSystemTheme()
 
   applyThemeAttribute(opts.attribute, initialTheme, false)
 }

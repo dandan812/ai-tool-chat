@@ -6,6 +6,22 @@
 
 ## 1. 概览
 
+### 当前持久任务入口（2026-10-13）
+
+新工作台使用 `POST /tasks` 创建任务，必须携带账户凭据与稳定的
+`Idempotency-Key`；使用 `GET /tasks/:id/events?after=N`、
+`Accept: text/event-stream` 接收持久事件。SSE 名称为 `task-events`，
+`id` 为最后一个事件序号，`data` 为 `{ events, lastEventId, terminal }`。
+断线后以最后已消费序号重连，不能重新创建任务。
+
+文件任务可传 `enableTools: true` 开启本次附件内的资料研究。
+仅支持 `search_files`、`read_file`，最多两轮工具决策加一次回答。
+工具步骤复用 `step` 事件，工具原文通过 `sources` 事件提供。
+默认模式允许 `images` 与 `files` 同时输入；资料研究模式暂不接受图片。
+调用次数与 token 额度仍由服务端确定，客户端不能提高预算。
+
+下文 `/chat` 等说明保留为旧接口参考，不能代替当前 `/tasks` 验收。
+
 当前 Worker 对外暴露的接口主要分 3 类：
 
 - 聊天主链路
@@ -249,7 +265,7 @@ Content-Type: application/json
 - `temperature`: 可选，采样温度
 - `maxTokens`: 可选，最大输出 token 数
 - `stream`: 可选，默认 `true`
-- `enableTools`: 可选，当前为实验能力标记
+- `enableTools`: 可选；当前工作台通过 `/tasks` 在文件附件任务中开启资料研究
 - `model`: 可选，指定模型
 
 ### 成功响应

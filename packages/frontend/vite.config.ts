@@ -12,8 +12,16 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router')) {
+          const moduleId = id.replaceAll('\\', '/')
+          if (moduleId.includes('/node_modules/')) {
+            if (moduleId.includes('/node_modules/element-plus/')) {
+              return 'element'
+            }
+            if (
+              ['@vue/', 'vue/', 'pinia/', 'vue-router/'].some((name) =>
+                moduleId.includes('/node_modules/' + name)
+              )
+            ) {
               return 'framework'
             }
 
@@ -29,17 +37,21 @@ export default defineConfig({
           if (id.includes('/src/api/') || id.includes('\\src\\api\\')) {
             return 'network'
           }
-        },
-      },
-    },
+        }
+      }
+    }
   },
 
   server: {
-    // 代理上传端点到 Worker（开发环境）
+    // Keep account cookies and API requests on the frontend origin.
     proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:3201',
+        changeOrigin: true
+      },
       '/upload': {
         target: 'http://127.0.0.1:8787',
-        changeOrigin: true,
+        changeOrigin: true
       }
     }
   },
@@ -49,6 +61,6 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.ts'],
     clearMocks: true,
-    restoreMocks: true,
-  },
+    restoreMocks: true
+  }
 })

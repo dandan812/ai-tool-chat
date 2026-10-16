@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, readonly } from 'vue'
+import { ref, watch, onUnmounted, readonly } from 'vue'
 
 /**
  * 滚动管理 Composable - 优化版
@@ -43,6 +43,8 @@ export function useScroll(options: UseScrollOptions = {}) {
 
   let scrollTimeout: ReturnType<typeof setTimeout> | null = null
   let rafId: number | null = null
+  let completionTimer: ReturnType<typeof setTimeout> | null = null
+  let finishScroll: (() => void) | null = null
 
   /**
    * 获取滚动信息
@@ -81,62 +83,43 @@ export function useScroll(options: UseScrollOptions = {}) {
    * 滚动到底部
    */
   function scrollToBottom(immediate = false): Promise<void> {
+    // Replace stale targets and keep only one scheduled frame and completion timer.
+    stopScroll()
     return new Promise((resolve) => {
-      if (isScrolling.value || !container.value) {
+      if (!container.value) {
         resolve()
         return
       }
 
       isScrolling.value = true
-
-      const doScroll = () => {
+      finishScroll = resolve
+      rafId = requestAnimationFrame(() => {
+        rafId = null
         const el = container.value
         if (!el) {
-          isScrolling.value = false
-          resolve()
+          stopScroll()
           return
         }
 
         const targetScroll = el.scrollHeight - el.clientHeight
 
-        if (immediate) {
+        const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        if (immediate || opts.behavior === 'auto' || reducedMotion) {
           el.scrollTop = targetScroll
           updateScrollState()
-          isScrolling.value = false
-          resolve()
+          stopScroll()
         } else {
           el.scrollTo({
             top: targetScroll,
             behavior: opts.behavior
           })
 
-          // 等待滚动完成
-          const checkScroll = () => {
-            const info = getScrollInfo()
-            if (info && info.distanceToBottom <= 1) {
-              updateScrollState()
-              isScrolling.value = false
-              resolve()
-            } else {
-              rafId = requestAnimationFrame(checkScroll)
-            }
-          }
-
-          // 设置超时防止卡住
-          setTimeout(() => {
-            if (isScrolling.value) {
-              if (rafId) cancelAnimationFrame(rafId)
-              isScrolling.value = false
-              updateScrollState()
-              resolve()
-            }
+          completionTimer = setTimeout(() => {
+            updateScrollState()
+            stopScroll()
           }, 500)
-
-          rafId = requestAnimationFrame(checkScroll)
         }
-      }
-
-      requestAnimationFrame(doScroll)
+      })
     })
   }
 
@@ -144,6 +127,7 @@ export function useScroll(options: UseScrollOptions = {}) {
    * 滚动到顶部
    */
   function scrollToTop(immediate = false): void {
+    stopScroll()
     if (!container.value) return
     container.value.scrollTo({
       top: 0,
@@ -195,21 +179,31 @@ export function useScroll(options: UseScrollOptions = {}) {
    * 停止滚动
    */
   function stopScroll(): void {
-    if (rafId) {
+    if (rafId !== null) {
       cancelAnimationFrame(rafId)
       rafId = null
     }
+    if (completionTimer !== null) clearTimeout(completionTimer)
+    completionTimer = null
     isScrolling.value = false
+    finishScroll?.()
+    finishScroll = null
   }
 
   // ==================== 生命周期 ====================
 
-  onMounted(() => {
-    if (opts.watchScroll && container.value) {
-      container.value.addEventListener('scroll', handleScroll, { passive: true })
-      updateScrollState()
-    }
-  })
+  watch(
+    container,
+    (element, previous) => {
+      previous?.removeEventListener('scroll', handleScroll)
+      stopScroll()
+      if (opts.watchScroll && element) {
+        element.addEventListener('scroll', handleScroll, { passive: true })
+        updateScrollState()
+      }
+    },
+    { flush: 'post' }
+  )
 
   onUnmounted(() => {
     stopScroll()

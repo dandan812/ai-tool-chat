@@ -1,4 +1,7 @@
-# 前端代码学习指南
+# 前端代码学习指南（早期设计记录）
+
+> 本文部分章节描述早期 Store 和流式接口。当前实现请先读
+> [平台代码阅读指南](guides/platform-reading-guide.md)，以功能模块和持久 SSE 任务链路为准。
 
 > 这份文档按当前仓库的真实实现重写，适合“前端基础还不稳，但愿意顺着项目主链路学”的你。  
 > 目标不是背概念，而是让你能顺着代码，真正看懂这个前端为什么这样组织。
@@ -249,7 +252,7 @@ flowchart TD
 | --- | --- |
 | [`chat.ts`](../packages/frontend/src/stores/chat.ts) | 主 Store，对外暴露状态和行为 |
 | [`chatStorage.ts`](../packages/frontend/src/stores/chatStorage.ts) | localStorage、体积估算、标题生成、旧消息清理 |
-| [`chatRuntime.ts`](../packages/frontend/src/stores/chatRuntime.ts) | 运行态 map 的增删改辅助 |
+| [`sessionTasks.ts`](../packages/frontend/src/features/tasks/sessionTasks.ts) | 当前任务观察、步骤与会话运行态 |
 | [`chatRequest.ts`](../packages/frontend/src/stores/chatRequest.ts) | 请求前整理历史消息 |
 
 这说明当前项目在刻意做一件事：
@@ -590,7 +593,7 @@ flowchart LR
 
 - [`stores/chat.ts`](../packages/frontend/src/stores/chat.ts)
 - [`stores/chatStorage.ts`](../packages/frontend/src/stores/chatStorage.ts)
-- [`stores/chatRuntime.ts`](../packages/frontend/src/stores/chatRuntime.ts)
+- [`features/tasks/sessionTasks.ts`](../packages/frontend/src/features/tasks/sessionTasks.ts)
 - [`stores/chatRequest.ts`](../packages/frontend/src/stores/chatRequest.ts)
 - [`types/task.ts`](../packages/frontend/src/types/task.ts)
 

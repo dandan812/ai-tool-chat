@@ -52,7 +52,7 @@ function openDatabase(): Promise<IDBDatabase | null> {
 
 async function withStore<T>(
   mode: IDBTransactionMode,
-  handler: (store: IDBObjectStore) => Promise<T>,
+  handler: (store: IDBObjectStore) => Promise<T>
 ): Promise<T> {
   const database = await openDatabase()
   if (!database) {
@@ -88,6 +88,12 @@ async function blobToImageData(record: DraftImageRecord): Promise<ImageData> {
     base64,
     mimeType: record.mimeType,
     description: record.description,
+    localAttachment: {
+      kind: 'image',
+      name: record.description || '图片',
+      mimeType: record.mimeType,
+      size: record.blob.size
+    }
   }
 }
 
@@ -161,7 +167,7 @@ export async function saveDraftImage(file: File): Promise<DraftImage> {
     blob: file,
     mimeType: file.type,
     description: file.name,
-    createdAt: Date.now(),
+    createdAt: Date.now()
   }
 
   await putRecord(record)
@@ -171,7 +177,7 @@ export async function saveDraftImage(file: File): Promise<DraftImage> {
     draftKey: id,
     previewUrl: URL.createObjectURL(file),
     mimeType: file.type,
-    description: file.name,
+    description: file.name
   }
 }
 
@@ -198,7 +204,7 @@ function toStoredDraft(image: DraftImage): StoredDraftImageRef {
     id: image.id,
     draftKey: image.draftKey,
     mimeType: image.mimeType,
-    description: image.description,
+    description: image.description
   }
 }
 
@@ -243,9 +249,9 @@ export async function loadDraftImages(sessionId: string): Promise<DraftImage[]> 
 
       return {
         ...draftRef,
-        previewUrl: URL.createObjectURL(record.blob),
+        previewUrl: URL.createObjectURL(record.blob)
       } satisfies DraftImage
-    }),
+    })
   )
 
   return results.filter((item): item is DraftImage => !!item)

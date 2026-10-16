@@ -1,4 +1,4 @@
-import { WorkerError } from '../types';
+import { WorkerError } from '../types'
 
 export const ERROR_CODES = {
   REQUEST_METHOD_NOT_ALLOWED: 'REQUEST_METHOD_NOT_ALLOWED',
@@ -18,71 +18,71 @@ export const ERROR_CODES = {
   UPLOADED_FILE_NOT_FOUND: 'UPLOADED_FILE_NOT_FOUND',
   UPLOADED_FILE_READ_FAILED: 'UPLOADED_FILE_READ_FAILED',
   FILE_RETRIEVAL_SCOPE_LIMIT: 'FILE_RETRIEVAL_SCOPE_LIMIT',
-  FILE_ANALYSIS_EXECUTION_FAILED: 'FILE_ANALYSIS_EXECUTION_FAILED',
-} as const;
+  FILE_ANALYSIS_EXECUTION_FAILED: 'FILE_ANALYSIS_EXECUTION_FAILED'
+} as const
 
-export type DomainErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES];
+export type DomainErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
 
 export interface LogContext {
-  route?: string;
-  requestType?: string;
-  method?: string;
-  status?: number;
-  taskId?: string;
-  fileId?: string;
-  skill?: string;
-  model?: string;
-  durationMs?: number;
-  errorCode?: string;
-  [key: string]: unknown;
+  route?: string
+  requestType?: string
+  method?: string
+  status?: number
+  taskId?: string
+  fileId?: string
+  skill?: string
+  model?: string
+  durationMs?: number
+  errorCode?: string
+  [key: string]: unknown
 }
 
 export function getRequestType(pathname: string): string {
   switch (pathname) {
     case '/':
     case '/chat':
-      return 'chat';
+      return 'chat'
     case '/upload/chunk':
-      return 'upload_chunk';
+      return 'upload_chunk'
     case '/upload/complete':
-      return 'upload_complete';
+      return 'upload_complete'
     case '/upload/status':
-      return 'upload_status';
+      return 'upload_status'
     case '/health':
-      return 'health';
+      return 'health'
     case '/stats':
-      return 'stats';
+      return 'stats'
     default:
-      return 'unknown';
+      return 'unknown'
   }
 }
 
 export function createErrorDetails(
   errorCode: DomainErrorCode,
-  details?: Record<string, unknown>,
+  details?: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     errorCode,
-    ...(details || {}),
-  };
+    ...(details || {})
+  }
 }
 
 export function getErrorCode(error: unknown): string | undefined {
   if (error instanceof WorkerError) {
-    const details = error.details;
+    const details = error.details
     if (details && typeof details.errorCode === 'string') {
-      return details.errorCode;
+      return details.errorCode
     }
-    return error.code;
+    return error.code
   }
 
   if (isRecord(error) && typeof error.errorCode === 'string') {
-    return error.errorCode;
+    return error.errorCode
   }
 
-  return undefined;
+  return undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

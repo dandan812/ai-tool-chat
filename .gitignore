@@ -17,4 +17,4 @@ packages/server/.env
 packages/server/.env.*
 !packages/server/.env.example
 packages/server/owner-credentials.txt
-generated/node-server-deployment/
+generated/

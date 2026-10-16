@@ -16,7 +16,7 @@ export const DEFAULT_THEME_OPTIONS: Required<ThemeOptions> = {
   defaultTheme: 'light',
   storageKey: 'chat_theme',
   attribute: 'data-theme',
-  followSystem: true,
+  followSystem: true
 }
 
 /**
@@ -55,27 +55,27 @@ export function writeStoredTheme(storageKey: string, value: ThemePreference): vo
  */
 export function resolveInitialThemeState(
   options: Required<ThemeOptions>,
-  systemTheme: Theme,
+  systemTheme: Theme
 ): { theme: Theme; followsSystem: boolean } {
   const savedTheme = readStoredTheme(options.storageKey)
 
   if (savedTheme === 'system') {
     return {
       theme: systemTheme,
-      followsSystem: true,
+      followsSystem: true
     }
   }
 
   if (savedTheme) {
     return {
       theme: savedTheme,
-      followsSystem: false,
+      followsSystem: false
     }
   }
 
   return {
     theme: options.followSystem ? systemTheme : options.defaultTheme,
-    followsSystem: false,
+    followsSystem: false
   }
 }
 
@@ -85,16 +85,17 @@ export function resolveInitialThemeState(
 export function applyThemeAttribute(
   attribute: string,
   value: Theme,
-  withTransition: boolean = true,
+  withTransition: boolean = true
 ): void {
   if (typeof document === 'undefined') return
 
-  document.documentElement.setAttribute(attribute, value)
+  const root = document.documentElement
+  root.setAttribute(attribute, value)
 
   if (!withTransition) return
 
-  document.documentElement.classList.add('theme-transition')
+  root.classList.add('theme-transition')
   setTimeout(() => {
-    document.documentElement.classList.remove('theme-transition')
+    root.classList.remove('theme-transition')
   }, 300)
 }

@@ -1,18 +1,18 @@
-import type { Env } from "../types";
+import type { Env } from '../types'
 
-export const DEFAULT_QWEN_TEXT_MODEL = "glm-5";
-export const DEFAULT_QWEN_MULTIMODAL_MODEL = "qwen-vl-plus";
-export const DEFAULT_QWEN_FILE_MODEL = DEFAULT_QWEN_TEXT_MODEL;
+export const DEFAULT_QWEN_TEXT_MODEL = 'glm-5'
+export const DEFAULT_QWEN_MULTIMODAL_MODEL = 'qwen-vl-plus'
+export const DEFAULT_QWEN_FILE_MODEL = DEFAULT_QWEN_TEXT_MODEL
 
 type DefaultModelEnv = Pick<
   Env,
-  "DEFAULT_MODEL" | "DEFAULT_FILE_MODEL" | "DEFAULT_MULTIMODAL_MODEL" | "QWEN_API_KEY"
->;
+  'DEFAULT_MODEL' | 'DEFAULT_FILE_MODEL' | 'DEFAULT_MULTIMODAL_MODEL' | 'QWEN_API_KEY'
+>
 
 export interface DefaultModelConfig {
-  text: string;
-  file: string;
-  multimodal: string;
+  text: string
+  file: string
+  multimodal: string
 }
 
 /**
@@ -22,13 +22,13 @@ export interface DefaultModelConfig {
  * text / file / multimodal 三类明确的默认模型，避免各处各写一套判断。
  */
 export function resolveDefaultModelConfig(env?: Partial<DefaultModelEnv>): DefaultModelConfig {
-  const text = resolveDefaultTextModel(env);
+  const text = resolveDefaultTextModel(env)
 
   return {
     text,
     file: resolveDefaultFileModel(env, text),
-    multimodal: resolveDefaultMultimodalModel(env),
-  };
+    multimodal: resolveDefaultMultimodalModel(env)
+  }
 }
 
 /**
@@ -37,14 +37,14 @@ export function resolveDefaultModelConfig(env?: Partial<DefaultModelEnv>): Defau
  */
 export function resolveDefaultTextModel(env?: Partial<DefaultModelEnv>): string {
   if (env?.DEFAULT_MODEL?.trim()) {
-    return env.DEFAULT_MODEL.trim();
+    return env.DEFAULT_MODEL.trim()
   }
 
   if (env?.QWEN_API_KEY) {
-    return DEFAULT_QWEN_TEXT_MODEL;
+    return DEFAULT_QWEN_TEXT_MODEL
   }
 
-  return DEFAULT_QWEN_TEXT_MODEL;
+  return DEFAULT_QWEN_TEXT_MODEL
 }
 
 /**
@@ -53,13 +53,13 @@ export function resolveDefaultTextModel(env?: Partial<DefaultModelEnv>): string 
  */
 export function resolveDefaultFileModel(
   env?: Partial<DefaultModelEnv>,
-  resolvedTextModel?: string,
+  resolvedTextModel?: string
 ): string {
   if (env?.DEFAULT_FILE_MODEL?.trim()) {
-    return env.DEFAULT_FILE_MODEL.trim();
+    return env.DEFAULT_FILE_MODEL.trim()
   }
 
-  return resolvedTextModel ?? resolveDefaultTextModel(env);
+  return resolvedTextModel ?? resolveDefaultTextModel(env)
 }
 
 /**
@@ -67,21 +67,21 @@ export function resolveDefaultFileModel(
  */
 export function resolveDefaultMultimodalModel(env?: Partial<DefaultModelEnv>): string {
   if (env?.DEFAULT_MULTIMODAL_MODEL?.trim()) {
-    return env.DEFAULT_MULTIMODAL_MODEL.trim();
+    return env.DEFAULT_MULTIMODAL_MODEL.trim()
   }
 
-  return DEFAULT_QWEN_MULTIMODAL_MODEL;
+  return DEFAULT_QWEN_MULTIMODAL_MODEL
 }
 
 export function resolveMultimodalModel(
   requestedModel: string | undefined,
-  env?: Partial<DefaultModelEnv>,
+  env?: Partial<DefaultModelEnv>
 ): string {
-  const fallback = resolveDefaultMultimodalModel(env);
-  const requested = requestedModel?.trim();
+  const fallback = resolveDefaultMultimodalModel(env)
+  const requested = requestedModel?.trim()
   // 只接受已接入的视觉系列或部署配置的图片模型，不把文本模型直接传给图片接口。
   if (requested && (requested === fallback || /^qwen(?:3)?-vl(?:-|$)/i.test(requested))) {
-    return requested;
+    return requested
   }
-  return fallback;
+  return fallback
 }

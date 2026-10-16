@@ -10,6 +10,7 @@
  */
 
 import { ref } from 'vue'
+import { MAX_IMAGES } from '../config'
 import { ImagePlus, X } from '@lucide/vue'
 import type { DraftImage } from '../types/task'
 
@@ -18,10 +19,12 @@ interface Props {
   images: DraftImage[]
   /** 最大数量 */
   maxImages?: number
+  compact?: boolean
+  disabled?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  maxImages: 4
+  maxImages: MAX_IMAGES
 })
 
 const emit = defineEmits<{
@@ -29,6 +32,7 @@ const emit = defineEmits<{
   add: [file: File]
   /** 移除图片 */
   remove: [id: string]
+  error: [message: string]
 }>()
 
 /** 文件输入框引用 */
@@ -66,6 +70,7 @@ function handleDrop(event: DragEvent) {
  * @param files 文件列表
  */
 function processFiles(files: File[]) {
+  if (props.disabled || !files.length) return
   error.value = ''
   const imageFiles = files.filter((file) => file.type.startsWith('image/'))
   const available = Math.max(0, props.maxImages - props.images.length)
@@ -74,10 +79,12 @@ function processFiles(files: File[]) {
   for (const file of imageFiles.slice(0, available)) {
     emit('add', file)
   }
+  if (error.value) emit('error', error.value)
 }
 
 /** 打开文件选择器 */
 function triggerFileSelect() {
+  if (props.disabled || props.images.length >= props.maxImages) return
   fileInput.value?.click()
 }
 
@@ -86,21 +93,30 @@ function triggerFileSelect() {
  * @param id 图片 ID
  */
 function removeImage(id: string) {
+  if (props.disabled) return
   emit('remove', id)
 }
+
+defineExpose({ open: triggerFileSelect, addFiles: processFiles })
 </script>
 
 <template>
-  <div class="image-uploader">
+  <div class="image-uploader" :class="{ compact }">
     <div v-if="images.length" class="image-strip">
-      <div v-for="image in images" :key="image.id" class="image-card">
+      <div
+        v-for="image in images"
+        :key="image.id"
+        class="image-card"
+        :title="image.description || '图片'"
+      >
         <img :src="image.previewUrl" :alt="image.description || '待发送图片'" />
-        <span class="image-name">{{ image.description || '图片' }}</span>
+        <span v-if="!compact" class="image-name">{{ image.description || '图片' }}</span>
         <button
           class="icon-button remove-btn"
           type="button"
           title="移除图片"
           aria-label="移除图片"
+          :disabled="disabled"
           @click="removeImage(image.id)"
         >
           <X />
@@ -108,10 +124,11 @@ function removeImage(id: string) {
       </div>
     </div>
     <button
+      v-if="!compact"
       type="button"
       class="upload-zone"
       :class="{ dragging: isDragging }"
-      :disabled="images.length >= maxImages"
+      :disabled="disabled || images.length >= maxImages"
       @click="triggerFileSelect"
       @dragover.prevent="isDragging = true"
       @dragleave="isDragging = false"
@@ -125,8 +142,9 @@ function removeImage(id: string) {
       accept="image/*"
       multiple
       class="hidden-input"
+      :disabled="disabled"
       @change="handleFileSelect"
     />
-    <p v-if="error" class="status-banner is-error" role="alert">{{ error }}</p>
+    <p v-if="error && !compact" class="status-banner is-error" role="alert">{{ error }}</p>
   </div>
 </template>

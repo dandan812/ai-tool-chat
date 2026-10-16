@@ -1,92 +1,121 @@
-import type { Message, SkillContext, SkillInput, SkillStreamChunk } from '../types';
-import {
-  DEFAULT_QWEN_TEXT_MODEL,
-  resolveDefaultTextModel,
-} from '../model/defaultModels';
-import { isBailianTextModel } from '../model/textModel';
-import { executeChatCompletionStream } from './chatCompletionStream';
+import type { Env, Message, SkillContext, SkillInput, SkillStreamChunk } from '../types'
+import { WorkerError } from '../types'
+import { DEFAULT_QWEN_TEXT_MODEL, resolveDefaultTextModel } from '../model/defaultModels'
+import { isBailianTextModel } from '../model/textModel'
+import { executeChatCompletionStream } from './chatCompletionStream'
 
-export type TextProviderName = 'bailian';
+export type TextProviderName = 'bailian' | 'compatible'
 
 export interface TextProviderConfig {
-  runtime?: SkillContext["env"]["RUNTIME_CONTROL"];
-  mock?: boolean;
-  maxOutputTokens?: number;
-  provider: TextProviderName;
-  model: string;
-  url: string;
-  apiKey: string;
+  disableThinking?: boolean
+  runtime?: SkillContext['env']['RUNTIME_CONTROL']
+  mock?: boolean
+  maxOutputTokens?: number
+  provider: TextProviderName
+  model: string
+  url: string
+  apiKey: string
 }
 
-const TEXT_PROVIDER_ENDPOINTS: Record<TextProviderName, string> = {
-  bailian: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-};
+const TEXT_PROVIDER_ENDPOINTS = {
+  bailian: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+}
 
-/**
- * 解析当前请求最终应走哪个文本模型。
- *
- * 当前项目统一只走百炼兼容接口，因此这里不再区分 OpenAI / DeepSeek / GLM。
- * 只要模型名属于百炼支持范围，并且存在 QWEN_API_KEY，就统一落到同一个 provider。
- */
+export function hasTextProviderCredentials(
+  env: Pick<Env, 'TEXT_API_KEY' | 'TEXT_API_BASE_URL' | 'QWEN_API_KEY'>
+): boolean {
+  if (env.TEXT_API_KEY || env.TEXT_API_BASE_URL) {
+    return !!(env.TEXT_API_KEY?.trim() && env.TEXT_API_BASE_URL?.trim())
+  }
+  return !!env.QWEN_API_KEY
+}
+
+function compatibleEndpoint(baseURL: string): string {
+  try {
+    const url = new URL(baseURL)
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+      throw new Error('Invalid endpoint')
+    }
+    url.pathname = url.pathname.replace(/\/+$/, '') + '/chat/completions'
+    return url.href
+  } catch {
+    throw new WorkerError('文本模型接口配置无效，请检查服务地址。', 'MODEL_CONFIG_INVALID', 503)
+  }
+}
+
+/** Explicit compatible configuration takes precedence and never silently switches providers. */
 export function resolveTextProvider(
   input: SkillInput,
-  context: SkillContext,
+  context: SkillContext
 ): TextProviderConfig | null {
-  const requestedModel = typeof input.model === 'string' ? input.model : '';
-  const defaultModel = resolveDefaultTextModel(context.env);
+  const requestedModel = typeof input.model === 'string' ? input.model.trim() : ''
+  const defaultModel = resolveDefaultTextModel(context.env)
 
-  if (context.env.ENVIRONMENT === "development" && context.env.MOCK_MODEL === "true") return { provider: "bailian", model: requestedModel || defaultModel, url: "https://mock.invalid", apiKey: "local-mock", mock: true, runtime: context.env.RUNTIME_CONTROL, maxOutputTokens: input.maxTokens };
-  const config = (
+  if (context.env.ENVIRONMENT === 'development' && context.env.MOCK_MODEL === 'true')
+    return {
+      provider: 'bailian',
+      model: requestedModel || defaultModel,
+      url: 'https://mock.invalid',
+      apiKey: 'local-mock',
+      mock: true,
+      runtime: context.env.RUNTIME_CONTROL,
+      maxOutputTokens: input.maxTokens
+    }
+  if (context.env.TEXT_API_KEY || context.env.TEXT_API_BASE_URL) {
+    if (!hasTextProviderCredentials(context.env)) return null
+    return {
+      provider: 'compatible',
+      model: requestedModel || defaultModel,
+      url: compatibleEndpoint(context.env.TEXT_API_BASE_URL!.trim()),
+      apiKey: context.env.TEXT_API_KEY!.trim(),
+      runtime: context.env.RUNTIME_CONTROL,
+      maxOutputTokens: input.maxTokens
+    }
+  }
+  const config =
     resolveRequestedProvider(requestedModel, context) ??
     resolveDefaultProvider(defaultModel, context) ??
     resolveAvailableProviderFallback(context)
-  );
-  return config ? { ...config, runtime: context.env.RUNTIME_CONTROL, maxOutputTokens: input.maxTokens } : null;
+  return config
+    ? { ...config, runtime: context.env.RUNTIME_CONTROL, maxOutputTokens: input.maxTokens }
+    : null
 }
 
-function resolveRequestedProvider(
-  model: string,
-  context: SkillContext,
-): TextProviderConfig | null {
+function resolveRequestedProvider(model: string, context: SkillContext): TextProviderConfig | null {
   if (isBailianTextModel(model) && context.env.QWEN_API_KEY) {
-    return createProviderConfig('bailian', model, context.env.QWEN_API_KEY);
+    return createProviderConfig('bailian', model, context.env.QWEN_API_KEY)
   }
 
-  return null;
+  return null
 }
 
-function resolveDefaultProvider(
-  model: string,
-  context: SkillContext,
-): TextProviderConfig | null {
+function resolveDefaultProvider(model: string, context: SkillContext): TextProviderConfig | null {
   if (isBailianTextModel(model) && context.env.QWEN_API_KEY) {
-    return createProviderConfig('bailian', model, context.env.QWEN_API_KEY);
+    return createProviderConfig('bailian', model, context.env.QWEN_API_KEY)
   }
 
-  return null;
+  return null
 }
 
-function resolveAvailableProviderFallback(
-  context: SkillContext,
-): TextProviderConfig | null {
+function resolveAvailableProviderFallback(context: SkillContext): TextProviderConfig | null {
   if (context.env.QWEN_API_KEY) {
-    return createProviderConfig('bailian', DEFAULT_QWEN_TEXT_MODEL, context.env.QWEN_API_KEY);
+    return createProviderConfig('bailian', DEFAULT_QWEN_TEXT_MODEL, context.env.QWEN_API_KEY)
   }
 
-  return null;
+  return null
 }
 
 function createProviderConfig(
-  provider: TextProviderName,
+  provider: 'bailian',
   model: string,
-  apiKey: string,
+  apiKey: string
 ): TextProviderConfig {
   return {
     provider,
     model,
     url: TEXT_PROVIDER_ENDPOINTS[provider],
-    apiKey,
-  };
+    apiKey
+  }
 }
 
 /**
@@ -97,7 +126,7 @@ function createProviderConfig(
 export async function* executeTextProviderStream(
   providerConfig: TextProviderConfig,
   messages: Message[],
-  temperature: number,
+  temperature: number
 ): AsyncIterable<SkillStreamChunk> {
   yield* executeChatCompletionStream({
     provider: providerConfig.provider,
@@ -113,6 +142,7 @@ export async function* executeTextProviderStream(
       max_tokens: providerConfig.maxOutputTokens ?? 2048,
       stream_options: { include_usage: true },
       temperature,
-    },
-  });
+      ...(providerConfig.disableThinking ? { thinking: { type: 'disabled' } } : {})
+    }
+  })
 }
